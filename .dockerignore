@@ -1,0 +1,11 @@
+.git
+.gitignore
+node_modules
+**/node_modules
+backups
+uploads
+backend/uploads
+backend/prisma/dev.db*
+webapp/dist
+webapp/dist-ssr
+*.log

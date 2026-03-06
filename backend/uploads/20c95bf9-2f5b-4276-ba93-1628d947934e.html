@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><title>Kaufvertrag</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 12pt; color: #222; line-height: 1.5; }
+      .page { width: 210mm; min-height: 297mm; padding: 20mm; margin: 0 auto; background: white; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+      .header h1 { font-size: 22pt; color: #333; }
+      .header .date { font-size: 10pt; color: #666; }
+      .section { margin-bottom: 20px; }
+      .section h2 { font-size: 14pt; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; margin-bottom: 10px; }
+      table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+      table th, table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #eee; }
+      table th { background: #f5f5f5; font-weight: 600; width: 40%; }
+      .total-row { font-weight: bold; font-size: 14pt; border-top: 2px solid #333; }
+      .total-row td { padding-top: 12px; }
+      .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 9pt; color: #888; text-align: center; }
+      .margin-tax-note { font-size: 9pt; color: #666; font-style: italic; margin-top: 5px; }
+      .signature-area { margin-top: 60px; display: flex; justify-content: space-between; }
+      .signature-line { width: 45%; border-top: 1px solid #333; padding-top: 5px; font-size: 10pt; color: #666; }
+      @media print { body { margin: 0; } .page { padding: 15mm; } }
+    </style>
+  </head>
+<body>
+<div class="page">
+  <div class="header">
+    <div>
+      <h1>Kaufvertrag</h1>
+      <p>Gebrauchtfahrzeug</p>
+    </div>
+    <div class="date">Datum: 02.03.2026</div>
+  </div>
+
+  <div class="section">
+    <h2>K&auml;ufer</h2>
+    <table>
+      <tr><th>Name</th><td>João Silva</td></tr>
+      <tr><th>Adresse</th><td>Rua Augusta 88, 1100-048 Lisboa</td></tr>
+      <tr><th>E-Mail</th><td>joao.silva@example.pt</td></tr>
+      <tr><th>Telefon</th><td>+351 21 9876543</td></tr>
+      
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Fahrzeug</h2>
+    <table>
+      <tr><th>Fahrzeug</th><td>Audi A4 Avant</td></tr>
+      <tr><th>Baujahr</th><td>2020</td></tr>
+      <tr><th>Kilometerstand</th><td>78.000 km</td></tr>
+      
+      <tr><th>Farbe</th><td>Navarra Blau</td></tr>
+      <tr><th>Kraftstoff</th><td>Diesel</td></tr>
+      <tr><th>Getriebe</th><td>Automatik</td></tr>
+      <tr><th>Leistung</th><td>150</td></tr>
+    </table>
+  </div>
+
+  <div class="section">
+    <h2>Kaufpreis</h2>
+    <table>
+      
+      <tr class="total-row"><th>Kaufpreis</th><td>23.900,00 €</td></tr>
+      
+    </table>
+    <p class="margin-tax-note">Differenzbesteuerung gem. &sect; 25a UStG. Mehrwertsteuer wird nicht ausgewiesen.</p>
+  </div>
+
+  <div class="section">
+    <h2>Vertragsbedingungen</h2>
+    <ol style="padding-left: 20px; font-size: 10pt; line-height: 1.8;">
+      <li>Der Verk&auml;ufer &uuml;bergibt dem K&auml;ufer das oben beschriebene Fahrzeug.</li>
+      <li>Das Fahrzeug wird verkauft wie besichtigt und probegefahren.</li>
+      <li>Der Verk&auml;ufer haftet nicht f&uuml;r Sachmangel des Fahrzeugs, soweit gesetzlich zul&auml;ssig.</li>
+      <li>Der Kaufpreis ist bei &Uuml;bergabe des Fahrzeugs f&auml;llig.</li>
+      <li>Das Eigentum am Fahrzeug geht erst mit vollst&auml;ndiger Bezahlung des Kaufpreises auf den K&auml;ufer &uuml;ber.</li>
+      <li>Der K&auml;ufer best&auml;tigt, das Fahrzeug besichtigt und probegefahren zu haben.</li>
+    </ol>
+  </div>
+
+  <div class="signature-area">
+    <div class="signature-line">Ort, Datum / Verk&auml;ufer</div>
+    <div class="signature-line">Ort, Datum / K&auml;ufer</div>
+  </div>
+
+  <div class="footer">
+    <p>Dieser Vertrag wurde in zweifacher Ausfertigung erstellt. Jede Partei erh&auml;lt eine Ausfertigung.</p>
+  </div>
+</div>
+</body>
+</html>

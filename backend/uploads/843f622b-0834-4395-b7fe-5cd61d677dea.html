@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Verbindliche Bestellung</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.45; background: #fff; }
+  .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
+
+  /* Top system line - removed */
+
+  /* Dealer header */
+  .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
+  .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
+  .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
+
+  /* Document title */
+  .doc-title { font-size: 13pt; font-weight: bold; text-align: center; margin: 10px 0 4px; text-decoration: underline; }
+  .doc-internalref { font-size: 8.5pt; text-align: right; margin-bottom: 8px; }
+
+  /* Party blocks */
+  .parties { display: flex; gap: 16px; margin-bottom: 10px; }
+  .party-block { flex: 1; border: 1px solid #bbb; padding: 7px 9px; font-size: 8.5pt; }
+  .party-block-title { font-weight: bold; font-size: 9pt; border-bottom: 1px solid #bbb; margin-bottom: 5px; padding-bottom: 3px; }
+
+  /* Intro sentence */
+  .intro-text { font-size: 8.5pt; margin-bottom: 8px; line-height: 1.5; }
+
+  /* Vehicle heading */
+  .vehicle-title { font-size: 12pt; font-weight: bold; margin-bottom: 6px; }
+
+  /* Vehicle data table */
+  .vd-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+  .vd-table tr { border-bottom: 1px solid #e0e0e0; }
+  .vd-label { width: 42%; font-weight: normal; color: #333; padding: 2.5px 4px 2.5px 0; font-size: 9pt; vertical-align: top; }
+  .vd-value { width: 58%; padding: 2.5px 4px; font-size: 9pt; font-weight: bold; vertical-align: top; }
+
+  /* Features */
+  .features-block { margin: 8px 0; }
+  .features-title { font-size: 8.5pt; font-weight: bold; margin-bottom: 3px; }
+  .features-text { font-size: 8pt; color: #222; line-height: 1.5; }
+  .features-text p { margin: 0 0 3px 0; }
+  .features-text ul { margin: 0 0 3px 0; padding-left: 16px; }
+  .features-text li { margin: 0; }
+  .features-text strong { font-weight: bold; }
+
+  /* Ausstattung section divider - removed */
+
+  /* Price */
+  .price-block { margin: 8px 0 4px; }
+  .price-line { font-size: 13pt; font-weight: bold; margin-bottom: 2px; }
+  .price-words { font-size: 9pt; margin-bottom: 2px; }
+  .margin-note { font-size: 9pt; font-style: italic; color: #444; }
+  .co2-line { font-size: 8.5pt; margin-top: 4px; color: #333; }
+
+  /* Legal text */
+  .legal-divider { border-top: 1px solid #bbb; margin: 10px 0 6px; }
+  .legal-section-title { font-weight: bold; font-size: 8.5pt; margin-bottom: 5px; }
+  .legal-text { font-size: 8pt; line-height: 1.55; color: #222; margin-bottom: 6px; }
+  .notes-text { font-size: 8.5pt; color: #333; margin-bottom: 4px; font-style: italic; }
+
+  /* Signature */
+  .sig-row { display: flex; gap: 20px; margin-top: 22px; margin-bottom: 10px; }
+  .sig-block { flex: 1; }
+  .sig-label { font-size: 8pt; color: #555; margin-bottom: 18px; }
+  .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8pt; color: #333; }
+  .sig-city { font-size: 8.5pt; margin-top: 4px; }
+
+  /* Footer */
+  .doc-footer { border-top: 1.5px solid #000; margin-top: 18px; padding-top: 6px; font-size: 7.5pt; color: #333; text-align: center; line-height: 1.7; }
+
+  @media print {
+    body { margin: 0; }
+    .page { padding: 12mm 14mm; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="dealer-header">
+    <div class="dealer-name">MainAuto Miltenberg Manuel Rui Fernandes</div>
+    <div class="dealer-sub">Mainzer Str. 10 + 37 &bull; 63897 Miltenberg &bull; Tel. +49(0)9371-5054245 &bull; Fax: &bull; Web: www.mainauto.eu &bull; Mail: mainauto@gmail.com &bull; USt-IdNr. DE196691148</div>
+  </div>
+
+  <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
+  <div class="doc-internalref">Interne Nr. FZ-2026-00010&nbsp;&nbsp;&nbsp;Export</div>
+
+  <div class="parties">
+    <div class="party-block">
+      <div class="party-block-title">Verk&auml;ufer</div>
+      <div>MainAuto Miltenberg Manuel Rui Fernandes</div>
+      <div>Mainzer Str. 10 + 37</div>
+      <div>63897 Miltenberg</div>
+      <div>Tel. +49(0)9371-5054245, Fax: , Web: www.mainauto.eu</div>
+      <div>Mail: mainauto@gmail.com, USt-IdNr. DE196691148</div>
+    </div>
+    <div class="party-block">
+      <div class="party-block-title">K&auml;ufer</div>
+      
+      <div>Fatima Al-Rashid</div>
+      <div>Unter den Linden 42</div>
+      <div>10117 Berlin / Deutschland</div>
+      <div>Tel. +49 30 987654</div>
+      <div>E-Mail: f.alrashid@example.de</div>
+      
+    </div>
+  </div>
+
+  <p class="intro-text">Der oben genannte K&auml;ufer kauft nach Ma&szlig;gabe und Kenntnisnahme der ausgeh&auml;ndigten Allgemeinen Gesch&auml;ftsbedingungen vom oben genannten Verk&auml;ufer folgendes Fahrzeug:</p>
+
+  <div class="vehicle-title">Audi A4 Avant</div>
+
+  <table class="vd-table">
+    <tbody>
+      
+        <tr>
+          <td class="vd-label">Leistung</td>
+          <td class="vd-value">150 PS  (110 kW)</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Fahrzeugbrief-Nr.</td>
+          <td class="vd-value"></td>
+        </tr>
+        <tr>
+          <td class="vd-label">Farbe</td>
+          <td class="vd-value">Navarra Blau</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Getriebe</td>
+          <td class="vd-value">Automatik</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Hubraum</td>
+          <td class="vd-value">1968 ccm</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Kraftstoff</td>
+          <td class="vd-value">Diesel</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Anhängerkupplung</td>
+          <td class="vd-value">ja</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Km-Stand</td>
+          <td class="vd-value">78.000 km</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Taxi-/Miet-/Fahrschule</td>
+          <td class="vd-value">nein</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Unfallfrei (lt. Vorbesitzer)</td>
+          <td class="vd-value">nein</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Fahrzeug fahrbereit</td>
+          <td class="vd-value">ja</td>
+        </tr>
+        <tr>
+          <td class="vd-label">Lieferdatum / verbindlich</td>
+          <td class="vd-value">02.03.2026 / ja</td>
+        </tr>
+    </tbody>
+  </table>
+
+  <div class="features-block">
+        <div class="features-text">Zusätzliche Ausstattung:
+
+Lederlenkrad
+Sitzheizung
+Bla
+Inklusive 4 Winterreifen</div>
+      </div>
+
+  <div class="price-block">
+    <div class="price-line">Kaufpreis: 23.900 €</div>
+    <div class="price-words">In Worten: Dreiundzwanzigtausend neunhundert Euro</div>
+    <p class="margin-note">netto Export</p>
+  </div>
+
+  <p class="co2-line">Komb. CO2-Emission (gewichtet): 126 g/km</p>
+
+  <div class="legal-divider"></div>
+
+  <div class="legal-section-title">Zahlungsweise + sonstige Vereinbarungen mit Vorrang auf die ausgeh&auml;ndigten Gesch&auml;ftsbedingungen:</div>
+
+  <p class="legal-text">Der K&auml;ufer erkl&auml;rt ausdr&uuml;cklich, dass er Unternehmer im Sinne des &sect;2 UStG ist und das erworbene Fahrzeug in seiner Firma als Gesch&auml;ftsfahrzeug &uuml;berwiegend unternehmerisch nutzt oder aber gewerblich weiter ver&auml;u&szlig;ert. Der K&auml;ufer verzichtet ausdr&uuml;cklich auf eine Gew&auml;hrleistung durch den Verk&auml;ufer. Das Fahrzeug wird verkauft unter Ausschluss jeglicher Gew&auml;hrleistung. Ausgenommen hiervon sind Sch&auml;den wegen Verletzung von K&ouml;rper, Leben, Gesundheit sowie F&auml;lle vors&auml;tzlicher oder grob fahrl&auml;ssiger Sch&auml;digung des Vertragspartners.</p>
+
+  <p class="legal-text">Der Verk&auml;ufer versichert die Richtigkeit der in diesem Vertrag niedergelegten Angaben &uuml;ber das Fahrzeug. Der Lieferzeitpunkt ist, wenn keine anderen Vereinbarungen getroffen wurden, das Datum des Ankaufs. Bei Minderj&auml;hrigen muss der Kaufvertrag durch den gesetzlichen Vertreter unterschrieben werden. Mit seiner Unterschrift best&auml;tigt der Verk&auml;ufer die Annahme der Bestellung.</p>
+
+  <div class="sig-row">
+    <div class="sig-block">
+      <div class="sig-label">Ort, Datum</div>
+      <div class="sig-line">Unterschrift K&auml;ufer</div>
+    </div>
+    <div class="sig-block">
+      <div class="sig-label">&nbsp;</div>
+      <div class="sig-line">Unterschrift Verk&auml;ufer</div>
+    </div>
+  </div>
+  <div class="sig-city">Miltenberg, 02.03.2026</div>
+
+  <div class="doc-footer">
+    MainAuto Miltenberg Manuel Rui Fernandes &bull; Mainzer Str. 10 + 37 &bull; 63897 Miltenberg<br>
+    E-Mail: mainauto@gmail.com &bull; Tel. +49(0)9371-5054245 &bull; Fax:<br>
+    Sparkasse Odenwaldkreis &bull; Kto.-Inhaber: Manuel Fernandes &bull; IBAN: DE 59 5085 1952 0000 1147 77 &bull; BIC: HELADEF1ERB<br>
+    USt-IdNr. DE196691148 &bull; Vertretungsberechtigt: Manuel Rui Fernandes
+  </div>
+
+</div>
+</body>
+</html>

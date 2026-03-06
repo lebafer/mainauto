@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth Models ───────────────────────────────────────────────
+
+model User {
+  id              String    @id
+  name            String
+  email           String    @unique
+  emailVerified   Boolean   @default(false)
+  image           String?
+  username        String?   @unique
+  displayUsername String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// ─── Counter for sequential vehicle numbers ────────────────────
+
+model Counter {
+  id    String @id  // e.g. "vehicle"
+  value Int    @default(0)
+}
+
+model Supplier {
+  id              String    @id @default(cuid())
+  name            String
+  supplierType    String    @default("gewerblich") // "privat" | "gewerblich"
+  address         String?
+  country         String?
+  contactPerson   String?   // Ansprechpartner
+  phone           String?
+  phone2          String?
+  website         String?
+  iban            String?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  vehicles        Vehicle[]
+}
+
+model Vehicle {
+  id              String   @id @default(cuid())
+  vehicleNumber   String   @unique  // Auto-generated e.g. FZ-2026-00001
+  brand           String
+  model           String
+  year            Int?
+  mileage         Int
+  vin             String?
+  color           String?
+  fuelType        String?
+  transmission    String?
+  power           String?
+  features        String?   // JSON string of features array
+  purchasePrice   Float     // Net purchase price in EUR
+  sellingPrice    Float     // Net selling price in EUR
+  taxRate         Float     @default(19.0) // German VAT rate
+  marginTaxed     Boolean   @default(false) // Differenzbesteuerung
+  status          String    @default("available") // available, reserved, sold
+  notes           String?
+  customerId      String?   // Linked customer (buyer)
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  supplierId      String?   // Linked supplier (Lieferant, DB relation)
+  supplierRel     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  images          VehicleImage[]
+  documents       VehicleDocument[]
+  sales           Sale[]
+  costs           VehicleCost[]
+  workLog         WorkLogItem[]
+  // Technical details
+  co2Emission     Float?    // CO2 Ausstoß g/km
+  displacement    Int?      // Hubraum cm³
+  powerKw         Float?    // Leistung in kW
+  // Damage / Vorschäden
+  hasDamage       Boolean   @default(false)
+  damageDescription String?
+  damageAmount    Float?    // Schadenshöhe EUR
+  // Hybrid/Elektro
+  batteryCapacity Float?    // Batteriegröße kWh
+  electricRange   Int?      // Elektrische Reichweite WLTP km
+  batterySoh      Float?    // SOH % State of Health
+  batteryType     String?   // Batterietyp z.B. Lithium-Ionen
+  // Export / Portugal
+  exportEnabled   Boolean   @default(false)
+  transportCostDomestic Float?   // Transportkosten Inland EUR
+  transportCostAbroad   Float?   // Transportkosten Ausland EUR
+  customsDuties   Float?    // Zollgebühren EUR
+  registrationFees Float?   // Zulassungsgebühren EUR
+  repairCostsAbroad Float?  // Reparaturkosten im Ausland EUR
+  // Additional fields
+  firstRegistration DateTime? // Erstzulassung
+  supplier        String?   // Lieferant (free-text, legacy)
+  chargingTime    Int?      // Ladezeit 20-80% in Minuten
+  connectorType   String?   // Stecker-Typ
+  // Inspection / Service
+  huDue           DateTime? // Nächste HU (Hauptuntersuchung)
+  previousOwners  Int?      // Anzahl der Vorbesitzer
+  serviceDueKm    Int?      // Service fällig bei km
+  serviceDueDate  DateTime? // Service fällig am Datum
+  // Body / Configuration
+  bodyType        String?   // Karosserieform z.B. Limousine, Kombi, SUV
+  doors           Int?      // Anzahl Türen
+  seats           Int?      // Anzahl Sitze
+  driveType       String?   // Antriebsart z.B. FWD, RWD, AWD, 4x4
+  emissionClass   String?   // Schadstoffklasse z.B. Euro 6
+  dealerPrice     Float?    // Händlerpreis EUR (für Händlerverkauf ohne Aufbereitung)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model VehicleCost {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  costType    String   // e.g., "Lackierung", "Reifen", "Sonstiges"
+  amount      Float
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model VehicleImage {
+  id        String   @id @default(cuid())
+  url       String
+  fileName  String
+  isPrimary Boolean  @default(false)
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model VehicleDocument {
+  id        String   @id @default(cuid())
+  name      String
+  url       String
+  fileName  String
+  fileType  String?
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Customer {
+  id          String   @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  phone2      String?  // Zweite Telefonnummer
+  address     String?
+  city        String?
+  zip         String?
+  country     String?  // Land
+  company     String?
+  taxId       String?   // Steuernummer / USt-IdNr.
+  notes       String?
+  customerType String   @default("privat") // privat | gewerblich
+  vehicles    Vehicle[]
+  documents   CustomerDocument[]
+  sales       Sale[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model CustomerDocument {
+  id         String   @id @default(cuid())
+  name       String
+  url        String
+  fileName   String
+  fileType   String?
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+}
+
+model Sale {
+  id          String   @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salePrice   Float    // Net sale price
+  taxRate     Float    @default(19.0)
+  saleDate    DateTime @default(now())
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model WorkLogItem {
+  id          String    @id @default(cuid())
+  vehicleId   String
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  description String
+  status      String    @default("open")  // open | in_progress | done
+  assignee    String?
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CustomBrand {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model CustomColor {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model CustomSupplier {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
+
+model CustomConnectorType {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}

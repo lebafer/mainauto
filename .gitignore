@@ -1,0 +1,8 @@
+# Root-level runtime and secrets
+.env
+.env.production
+.env.local
+
+# Local deployment artifacts
+backups/
+deploy/.env.compose
