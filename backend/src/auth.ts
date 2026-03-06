@@ -31,7 +31,8 @@ export const auth = betterAuth({
   basePath: "/api/auth",
   emailAndPassword: {
     enabled: true,
-    disableSignUp: true,
+    // Allow one-time bootstrap via auth API when explicitly requested.
+    disableSignUp: !env.BOOTSTRAP_ADMIN,
   },
   trustedOrigins,
   advanced: {
