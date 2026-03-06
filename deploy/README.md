@@ -5,7 +5,8 @@
 2. Copy `deploy/.env.compose.example` to `.env` in project root and set real secrets.
 3. (Optional but recommended) Copy `deploy/.env.staging.example` to `.env.staging` for a separate staging stack.
 4. Replace placeholder values (`POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `INITIAL_ADMIN_PASSWORD`) before first start.
-5. Make sure Cloudflare + Nginx Proxy Manager route `mainauto.rabauke.uk` to host port `8080`.
+5. Keep `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` for reliable PDF generation in Docker.
+6. Make sure Cloudflare + Nginx Proxy Manager route `mainauto.rabauke.uk` to host port `8080`.
 
 ## 2) First start
 Create persistent host folders first:
@@ -98,3 +99,13 @@ cat backups/mainauto_uploads_YYYYMMDD_HHMMSS.tar.gz | docker compose --env-file 
 3. Confirm `BOOTSTRAP_ADMIN=false` after initial admin is created.
 4. Verify login, vehicle CRUD, upload, and document PDF generation.
 5. Run one backup and one restore test before productive usage.
+
+## 9) PDF troubleshooting
+If document generation returns HTTP 500:
+```bash
+docker compose --env-file .env -p mainauto-prod logs backend --tail=200 | grep -i documents
+```
+You should see one of these startup hints in logs:
+- `using_browser_executable=...`
+- `using_system_browser=...`
+- `using_sparticuz_browser=...`

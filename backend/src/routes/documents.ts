@@ -2,25 +2,81 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
 import { DocumentGenerateSchema } from "../types";
-import puppeteer from "puppeteer";
+import { access } from "node:fs/promises";
+import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 
-// Launch browser compatible with both dev (puppeteer) and production (serverless chromium)
-async function launchBrowser() {
-  const isProduction = process.env.NODE_ENV === "production" || process.env.VIBECODE_PRODUCTION === "true";
-  if (isProduction) {
-    const executablePath = await chromium.executablePath();
-    return puppeteerCore.launch({
-      args: [...chromium.args, "--disable-dev-shm-usage"],
-      executablePath,
-      headless: true,
-    });
-  }
+const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
+const SYSTEM_BROWSER_PATHS = [
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+];
+
+async function launchWithPuppeteer(): Promise<Browser> {
   return puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    args: BROWSER_ARGS,
     headless: true,
   });
+}
+
+async function canAccessPath(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function launchWithPuppeteerCore(executablePath: string, args: string[]): Promise<Browser> {
+  return puppeteerCore.launch({
+    executablePath,
+    args,
+    headless: true,
+  });
+}
+
+// Launch browser compatible with both dev (puppeteer) and production (serverless chromium)
+async function launchBrowser(): Promise<Browser> {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.VIBECODE_PRODUCTION === "true";
+  if (!isProduction) {
+    return launchWithPuppeteer();
+  }
+
+  const preferredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (preferredPath) {
+    try {
+      console.info(`[documents] using_browser_executable=${preferredPath}`);
+      return await launchWithPuppeteerCore(preferredPath, BROWSER_ARGS);
+    } catch (error) {
+      console.warn("[documents] preferred_browser_launch_failed", error);
+    }
+  }
+
+  for (const candidatePath of SYSTEM_BROWSER_PATHS) {
+    if (!(await canAccessPath(candidatePath))) {
+      continue;
+    }
+
+    try {
+      console.info(`[documents] using_system_browser=${candidatePath}`);
+      return await launchWithPuppeteerCore(candidatePath, BROWSER_ARGS);
+    } catch (error) {
+      console.warn(`[documents] system_browser_launch_failed path=${candidatePath}`, error);
+    }
+  }
+
+  try {
+    const executablePath = await chromium.executablePath();
+    console.info(`[documents] using_sparticuz_browser=${executablePath}`);
+    return await launchWithPuppeteerCore(executablePath, [...chromium.args, ...BROWSER_ARGS]);
+  } catch (error) {
+    console.warn("[documents] sparticuz_browser_launch_failed_fallback_to_puppeteer", error);
+    return launchWithPuppeteer();
+  }
 }
 
 async function htmlToPdf(html: string): Promise<Uint8Array> {
@@ -716,12 +772,16 @@ documentsRouter.post(
 
     const html = generateContract(vehicle, customer);
 
-    const pdfBuffer = await htmlToPdf(html);
-
-    c.header("Content-Type", "application/pdf");
-    c.header("Content-Disposition", `attachment; filename="Kaufvertrag_${vehicle.vehicleNumber}.pdf"`);
-    c.header("X-Vehicle-Number", vehicle.vehicleNumber);
-    return c.body(pdfBuffer as unknown as ReadableStream);
+    try {
+      const pdfBuffer = await htmlToPdf(html);
+      c.header("Content-Type", "application/pdf");
+      c.header("Content-Disposition", `attachment; filename="Kaufvertrag_${vehicle.vehicleNumber}.pdf"`);
+      c.header("X-Vehicle-Number", vehicle.vehicleNumber);
+      return c.body(pdfBuffer as unknown as ReadableStream);
+    } catch (error) {
+      console.error("[documents] contract_pdf_generation_failed", { vehicleId, customerId, error });
+      return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
+    }
   }
 );
 
@@ -935,11 +995,15 @@ documentsRouter.post(
       passportNumber: passportNumber ?? "",
     });
 
-    const pdfBuffer = await htmlToPdf(html);
-
-    c.header("Content-Type", "application/pdf");
-    c.header("Content-Disposition", `attachment; filename="Gelangensbestaetigung_${vehicle.vehicleNumber}.pdf"`);
-    return c.body(pdfBuffer as unknown as ReadableStream);
+    try {
+      const pdfBuffer = await htmlToPdf(html);
+      c.header("Content-Type", "application/pdf");
+      c.header("Content-Disposition", `attachment; filename="Gelangensbestaetigung_${vehicle.vehicleNumber}.pdf"`);
+      return c.body(pdfBuffer as unknown as ReadableStream);
+    } catch (error) {
+      console.error("[documents] gelangensbestaetigung_pdf_generation_failed", { vehicleId, customerId, error });
+      return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
+    }
   }
 );
 
@@ -1308,12 +1372,24 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
   }
 
   const html = generateVermittlungsvertrag(vehicle, buyer, seller);
-  const pdfBuffer = await htmlToPdf(html);
 
-  c.header("Content-Type", "application/pdf");
-  c.header("Content-Disposition", `attachment; filename="Vermittlungsvertrag_${vehicle.vehicleNumber}.pdf"`);
-  c.header("X-Vehicle-Number", vehicle.vehicleNumber);
-  return c.body(pdfBuffer as unknown as ReadableStream);
+  try {
+    const pdfBuffer = await htmlToPdf(html);
+    c.header("Content-Type", "application/pdf");
+    c.header("Content-Disposition", `attachment; filename="Vermittlungsvertrag_${vehicle.vehicleNumber}.pdf"`);
+    c.header("X-Vehicle-Number", vehicle.vehicleNumber);
+    return c.body(pdfBuffer as unknown as ReadableStream);
+  } catch (error) {
+    console.error("[documents] vermittlung_pdf_generation_failed", {
+      vehicleId,
+      buyerId,
+      buyerType,
+      sellerId,
+      sellerType,
+      error,
+    });
+    return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
+  }
 });
 
 // POST /api/documents/generate-vermittlung-html (for saving)
