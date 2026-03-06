@@ -56,6 +56,7 @@ export const auth = betterAuth({
       httpOnly: true,
     },
     useSecureCookies: isProduction,
+    disableCSRFCheck: env.AUTH_DISABLE_CSRF_CHECK,
   },
   trustedProxyHeaders: true,
   plugins: [username(), bearer()],

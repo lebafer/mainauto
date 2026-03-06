@@ -109,3 +109,9 @@ You should see one of these startup hints in logs:
 - `using_browser_executable=...`
 - `using_system_browser=...`
 - `using_sparticuz_browser=...`
+
+## 10) Auth troubleshooting (Safari 403)
+If Safari login gets `403` on `/api/auth/sign-in/username` while Chrome works:
+1. Ensure `BACKEND_URL` and `CORS_ALLOWED_ORIGINS` exactly match the public staging domain.
+2. As staging-only fallback, set `AUTH_DISABLE_CSRF_CHECK=true` and recreate backend.
+3. Keep production at `AUTH_DISABLE_CSRF_CHECK=false`.

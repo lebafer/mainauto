@@ -16,6 +16,11 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   BACKEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().optional(),
+  AUTH_DISABLE_CSRF_CHECK: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((value) => value.toLowerCase() === "true"),
   BOOTSTRAP_ADMIN: z
     .string()
     .optional()
