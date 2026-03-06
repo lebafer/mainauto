@@ -3,7 +3,9 @@
 node_modules
 **/node_modules
 backups
+backups-staging
 data
+data-staging
 uploads
 backend/uploads
 backend/prisma/dev.db*

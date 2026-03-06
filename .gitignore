@@ -5,5 +5,8 @@
 
 # Local deployment artifacts
 backups/
+backups-staging/
 data/
+data-staging/
 deploy/.env.compose
+.env.staging
