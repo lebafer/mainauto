@@ -14,14 +14,20 @@ function getCookieDomain(configuredDomain?: string): string | undefined {
 const cookieDomain = getCookieDomain(env.COOKIE_DOMAIN);
 const isProduction = env.NODE_ENV === "production";
 
-const trustedOrigins = (env.CORS_ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const trustedOriginsSet = new Set<string>([
+  new URL(env.BACKEND_URL).origin,
+  "http://localhost:8000",
+  "http://127.0.0.1:8000",
+]);
 
-if (trustedOrigins.length === 0) {
-  trustedOrigins.push(new URL(env.BACKEND_URL).origin, "http://localhost:8000", "http://127.0.0.1:8000");
+for (const origin of (env.CORS_ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((value) => value.trim())
+  .filter(Boolean)) {
+  trustedOriginsSet.add(origin);
 }
+
+const trustedOrigins = Array.from(trustedOriginsSet);
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
