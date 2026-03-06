@@ -7,6 +7,12 @@
 4. Make sure Cloudflare + Nginx Proxy Manager route `mainauto.rabauke.uk` to host port `8080`.
 
 ## 2) First start
+Create persistent host folders first:
+```bash
+mkdir -p data/postgres data/uploads backups
+```
+
+Then start containers:
 ```bash
 docker compose up -d --build
 ```
