@@ -2,12 +2,16 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
+import { env } from "../env";
 import {
   VehicleCreateSchema,
   VehicleUpdateSchema,
   VehicleCostCreateSchema,
   WorkLogItemCreateSchema,
   WorkLogItemUpdateSchema,
+  VehicleBriefExtractFieldsSchema,
+  VehicleBriefExtractResponseSchema,
+  type VehicleBriefExtractFields,
 } from "../types";
 import { join } from "path";
 import { mkdir, unlink } from "fs/promises";
@@ -22,6 +26,15 @@ if (!existsSync(UPLOADS_DIR)) {
 }
 
 const vehiclesRouter = new Hono();
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const BRIEF_MAX_FILES = 4;
+const BRIEF_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const BRIEF_ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 function isVehicleNumberConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -36,6 +49,329 @@ function isVehicleNumberConflict(error: unknown): boolean {
   }
   return typeof target === "string" && target.includes("vehicleNumber");
 }
+
+function normalizeString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const cleaned = value.replace(/\s+/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+  if (!cleaned) return undefined;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeVin(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+  const normalized = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalized.length === 17 ? normalized : undefined;
+}
+
+function normalizeDate(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const dotMatch = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotMatch) {
+    const [, day, month, year] = dotMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const slashMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const monthYearMatch = raw.match(/^(\d{2})[./](\d{4})$/);
+  if (monthYearMatch) {
+    const [, month, year] = monthYearMatch;
+    return `${year}-${month}-01`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return undefined;
+}
+
+function stripMarkdownCodeBlock(value: string): string {
+  const fenced = value.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+  return value.trim();
+}
+
+function extractOutputText(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+
+  const direct = (payload as { output_text?: unknown }).output_text;
+  if (typeof direct === "string" && direct.trim() !== "") {
+    return direct;
+  }
+
+  const output = (payload as { output?: unknown }).output;
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  for (const item of output) {
+    if (typeof item !== "object" || item === null) continue;
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const fragment of content) {
+      if (typeof fragment !== "object" || fragment === null) continue;
+      const text = (fragment as { text?: unknown }).text;
+      if (typeof text === "string" && text.trim() !== "") {
+        parts.push(text);
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+function normalizeExtractedFields(raw: unknown): { fields: VehicleBriefExtractFields; warnings: string[] } {
+  const warnings: string[] = [];
+  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+
+  const normalized: VehicleBriefExtractFields = {
+    vin: normalizeVin(input.vin),
+    firstRegistration: normalizeDate(input.firstRegistration),
+    color: normalizeString(input.color),
+    brand: normalizeString(input.brand),
+    model: normalizeString(input.model),
+    hsn: normalizeString(input.hsn)?.toUpperCase(),
+    tsn: normalizeString(input.tsn)?.toUpperCase(),
+    registrationDocNumber: normalizeString(input.registrationDocNumber),
+    co2Emission: normalizeNumber(input.co2Emission),
+    displacement: (() => {
+      const value = normalizeNumber(input.displacement);
+      return value === undefined ? undefined : Math.round(value);
+    })(),
+    power: normalizeNumber(input.power),
+    powerKw: normalizeNumber(input.powerKw),
+  };
+
+  if (input.vin && !normalized.vin) {
+    warnings.push("VIN konnte nicht eindeutig validiert werden.");
+  }
+
+  if (input.firstRegistration && !normalized.firstRegistration) {
+    warnings.push("Erstzulassung konnte nicht sicher als Datum erkannt werden.");
+  }
+
+  if (normalized.power !== undefined && normalized.powerKw === undefined) {
+    normalized.powerKw = Math.round(normalized.power / 1.35962);
+  } else if (normalized.powerKw !== undefined && normalized.power === undefined) {
+    normalized.power = Math.round(normalized.powerKw * 1.35962);
+  }
+
+  const fields = VehicleBriefExtractFieldsSchema.parse(normalized);
+  return { fields, warnings };
+}
+
+async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefExtractFields; warnings: string[] }> {
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: "input_text",
+      text: [
+        "Extrahiere Fahrzeugdaten aus den hochgeladenen deutschen Fahrzeugpapieren.",
+        "Liefere ausschließlich JSON gemäß Schema.",
+        "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
+        "Nutze für firstRegistration das Format YYYY-MM-DD.",
+      ].join(" "),
+    },
+  ];
+
+  for (const file of files) {
+    const bytes = await file.arrayBuffer();
+    const base64 = Buffer.from(bytes).toString("base64");
+    const dataUrl = `data:${file.type};base64,${base64}`;
+
+    if (file.type === "application/pdf") {
+      content.push({
+        type: "input_file",
+        filename: file.name || "fahrzeugbrief.pdf",
+        file_data: dataUrl,
+      });
+      continue;
+    }
+
+    content.push({
+      type: "input_image",
+      image_url: dataUrl,
+    });
+  }
+
+  const response = await fetch(OPENAI_RESPONSES_URL, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: env.OPENAI_MODEL,
+      input: [
+        {
+          role: "user",
+          content,
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "vehicle_brief_extract",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              fields: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  vin: { type: "string" },
+                  firstRegistration: { type: "string" },
+                  color: { type: "string" },
+                  brand: { type: "string" },
+                  model: { type: "string" },
+                  hsn: { type: "string" },
+                  tsn: { type: "string" },
+                  registrationDocNumber: { type: "string" },
+                  co2Emission: { type: "number" },
+                  displacement: { type: "number" },
+                  power: { type: "number" },
+                  powerKw: { type: "number" },
+                },
+                required: [],
+              },
+              warnings: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+            required: ["fields", "warnings"],
+          },
+        },
+      },
+      max_output_tokens: 700,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`OpenAI error (${response.status}): ${errorBody.slice(0, 500)}`);
+  }
+
+  const payload = await response.json();
+  const rawText = extractOutputText(payload);
+  if (!rawText) {
+    throw new Error("No extractable output returned by OpenAI.");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripMarkdownCodeBlock(rawText));
+  } catch {
+    throw new Error("OpenAI response is not valid JSON.");
+  }
+
+  const root = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  const modelWarnings = Array.isArray(root.warnings)
+    ? root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    : [];
+  const modelFields = "fields" in root ? root.fields : root;
+  const normalized = normalizeExtractedFields(modelFields);
+
+  return {
+    fields: normalized.fields,
+    warnings: [...modelWarnings, ...normalized.warnings],
+  };
+}
+
+// POST /api/vehicles/extract-brief - extract vehicle fields from uploaded brief
+vehiclesRouter.post("/extract-brief", async (c) => {
+  if (!env.OPENAI_API_KEY) {
+    return c.json(
+      { error: { message: "OpenAI API key fehlt auf dem Server", code: "OPENAI_NOT_CONFIGURED" } },
+      503
+    );
+  }
+
+  const formData = await c.req.formData();
+  const uploaded = [...formData.getAll("files"), ...formData.getAll("files[]")];
+  const files = uploaded.filter((item): item is File => item instanceof File);
+
+  if (files.length === 0) {
+    return c.json({ error: { message: "Keine Datei hochgeladen", code: "NO_FILE" } }, 400);
+  }
+
+  if (files.length > BRIEF_MAX_FILES) {
+    return c.json(
+      { error: { message: `Maximal ${BRIEF_MAX_FILES} Dateien erlaubt`, code: "TOO_MANY_FILES" } },
+      400
+    );
+  }
+
+  for (const file of files) {
+    if (!BRIEF_ALLOWED_MIME_TYPES.has(file.type)) {
+      return c.json(
+        { error: { message: `Dateityp nicht unterstützt: ${file.type || "unknown"}`, code: "UNSUPPORTED_FILE_TYPE" } },
+        400
+      );
+    }
+    if (file.size > BRIEF_MAX_FILE_SIZE_BYTES) {
+      return c.json(
+        { error: { message: `Datei zu groß: ${file.name}`, code: "FILE_TOO_LARGE" } },
+        400
+      );
+    }
+  }
+
+  try {
+    const extracted = await extractWithOpenAi(files);
+    const detectedFieldCount = Object.values(extracted.fields).filter((value) => value !== undefined).length;
+    const response = VehicleBriefExtractResponseSchema.parse({
+      fields: extracted.fields,
+      warnings: extracted.warnings,
+      detectedFieldCount,
+    });
+
+    return c.json({ data: response });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown extraction error";
+    console.error("[vehicles] brief_extraction_failed", { message });
+    return c.json(
+      {
+        error: {
+          message: "Fahrzeugbrief konnte nicht ausgewertet werden",
+          code: "EXTRACTION_FAILED",
+        },
+      },
+      502
+    );
+  }
+});
 
 // GET /api/vehicles - list all vehicles with optional filters
 vehiclesRouter.get("/", async (c) => {

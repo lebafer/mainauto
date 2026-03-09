@@ -36,6 +36,8 @@ services:
       INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-mainauto@admin.local}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
     volumes:
       - ${UPLOADS_PATH:-./data/uploads}:/app/uploads
     healthcheck:

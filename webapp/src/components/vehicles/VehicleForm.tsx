@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ChangeEvent } from "react";
 import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link } from "react-router-dom";
-import { Loader2, PlusCircle, X, Check, ChevronsUpDown } from "lucide-react";
+import { Loader2, PlusCircle, X, Check, ChevronsUpDown, FileSearch } from "lucide-react";
 import { QuickAddSupplierDialog } from "@/components/suppliers/QuickAddSupplierDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import {
+  VehicleBriefExtractResponseSchema,
+  type VehicleBriefExtractFields,
+} from "../../../../backend/src/types";
 import {
   type Vehicle,
   FUEL_TYPES,
@@ -129,6 +133,23 @@ const REQUIRED_VEHICLE_FIELD_LABELS: Record<(typeof REQUIRED_VEHICLE_FIELDS)[num
   sellingPrice: "Verkaufspreis",
 };
 
+const BRIEF_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
+const BRIEF_MAX_FILES = 4;
+const BRIEF_PREFILL_FIELDS: Array<keyof VehicleBriefExtractFields> = [
+  "vin",
+  "firstRegistration",
+  "color",
+  "brand",
+  "model",
+  "hsn",
+  "tsn",
+  "registrationDocNumber",
+  "co2Emission",
+  "displacement",
+  "power",
+  "powerKw",
+];
+
 function RequiredMark() {
   return <span className="ml-1 text-destructive">*</span>;
 }
@@ -156,6 +177,13 @@ function requiredNonNegativeNumber(label: string) {
       })
       .min(0, `${label} muss positiv sein`)
   );
+}
+
+function isFormFieldEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === "string") return value.trim() === "";
+  if (typeof value === "number") return Number.isNaN(value);
+  return false;
 }
 
 const vehicleFormSchema = z.object({
@@ -257,6 +285,7 @@ interface VehicleFormProps {
   onSubmit: (values: VehicleFormSubmitValues) => void;
   isSubmitting: boolean;
   submitLabel: string;
+  onExtractedBriefFiles?: (files: File[]) => void;
 }
 
 export function VehicleForm({
@@ -265,6 +294,7 @@ export function VehicleForm({
   onSubmit,
   isSubmitting,
   submitLabel,
+  onExtractedBriefFiles,
 }: VehicleFormProps) {
   const [priceInputMode, setPriceInputMode] = useState<"netto" | "brutto">("netto");
   const [grossDisplay, setGrossDisplay] = useState("");
@@ -279,6 +309,14 @@ export function VehicleForm({
   const [supplierDbOpen, setSupplierDbOpen] = useState(false);
   const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
+  const [briefFiles, setBriefFiles] = useState<File[]>([]);
+  const [briefResult, setBriefResult] = useState<{
+    detectedFieldCount: number;
+    applied: number;
+    skipped: number;
+    savedDocuments: number;
+    warnings: string[];
+  } | null>(null);
 
   const initialValues: Partial<VehicleFormValues> = {
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
@@ -447,6 +485,107 @@ export function VehicleForm({
     }
   }
 
+  function applyExtractedFields(fields: VehicleBriefExtractFields) {
+    let applied = 0;
+    let skipped = 0;
+
+    for (const field of BRIEF_PREFILL_FIELDS) {
+      const nextValue = fields[field];
+      if (nextValue === undefined || nextValue === null) continue;
+
+      const currentValue = form.getValues(field as keyof VehicleFormValues);
+      if (isFormFieldEmpty(currentValue)) {
+        form.setValue(field as Path<VehicleFormValues>, nextValue as never, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+        applied += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    return { applied, skipped };
+  }
+
+  async function uploadBriefDocuments(vehicleId: string, files: File[]): Promise<number> {
+    let uploaded = 0;
+
+    for (const [index, file] of files.entries()) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", files.length === 1 ? "Fahrzeugbrief" : `Fahrzeugbrief ${index + 1}`);
+
+      const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error?.message || "Dokument konnte nicht gespeichert werden");
+      }
+
+      uploaded += 1;
+    }
+
+    return uploaded;
+  }
+
+  const extractBriefMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+
+      const response = await api.raw("/api/vehicles/extract-brief", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error?.message || "Extraktion fehlgeschlagen");
+      }
+
+      const json = await response.json();
+      return VehicleBriefExtractResponseSchema.parse(json.data);
+    },
+    onSuccess: async (result, files) => {
+      const warnings = [...result.warnings];
+      const { applied, skipped } = applyExtractedFields(result.fields);
+      let savedDocuments = 0;
+
+      if (vehicle?.id) {
+        try {
+          savedDocuments = await uploadBriefDocuments(vehicle.id, files);
+          queryClient.invalidateQueries({ queryKey: ["vehicle", vehicle.id] });
+        } catch (error) {
+          warnings.push(error instanceof Error ? error.message : "Fahrzeugbrief konnte nicht gespeichert werden");
+        }
+      } else {
+        onExtractedBriefFiles?.(files);
+      }
+
+      setBriefResult({
+        detectedFieldCount: result.detectedFieldCount,
+        applied,
+        skipped,
+        savedDocuments,
+        warnings,
+      });
+    },
+    onError: (error: unknown) => {
+      onExtractedBriefFiles?.([]);
+      setBriefResult({
+        detectedFieldCount: 0,
+        applied: 0,
+        skipped: 0,
+        savedDocuments: 0,
+        warnings: [error instanceof Error ? error.message : "Extraktion fehlgeschlagen"],
+      });
+    },
+  });
+
   const watchedSellingPrice = form.watch("sellingPrice") ?? 0;
   const watchedTaxRate = form.watch("taxRate") ?? 19;
   const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
@@ -528,6 +667,18 @@ export function VehicleForm({
     form.setValue("power", Math.round(kw * 1.35962));
   }
 
+  function handleBriefFilesChange(event: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(event.target.files ?? []).slice(0, BRIEF_MAX_FILES);
+    setBriefFiles(selected);
+    setBriefResult(null);
+  }
+
+  function handleBriefExtraction() {
+    if (briefFiles.length === 0 || extractBriefMutation.isPending) return;
+    setBriefResult(null);
+    extractBriefMutation.mutate(briefFiles);
+  }
+
   function handleSubmit(values: VehicleFormValues) {
     const processed: VehicleFormSubmitValues = {
       ...values,
@@ -597,6 +748,64 @@ export function VehicleForm({
             {requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}
           </div>
         ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Fahrzeugbrief analysieren (PDF/Bild)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="vehicle-brief-upload">Dateien hochladen (max. 4)</Label>
+                <Input
+                  id="vehicle-brief-upload"
+                  type="file"
+                  accept={BRIEF_ACCEPT}
+                  multiple
+                  onChange={handleBriefFilesChange}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Unterstützt: PDF, JPG, PNG, WEBP. Bereits ausgefüllte Felder werden nicht überschrieben.
+                </p>
+                {briefFiles.length > 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Ausgewählt: {briefFiles.map((file) => file.name).join(", ")}
+                  </p>
+                ) : null}
+              </div>
+
+              <Button
+                type="button"
+                onClick={handleBriefExtraction}
+                disabled={briefFiles.length === 0 || extractBriefMutation.isPending}
+              >
+                {extractBriefMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <FileSearch className="mr-2 h-4 w-4" />
+                )}
+                Daten extrahieren
+              </Button>
+            </div>
+
+            {briefResult ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm space-y-1">
+                <p>
+                  Erkannt: {briefResult.detectedFieldCount} · Übernommen: {briefResult.applied} · Übersprungen: {briefResult.skipped}
+                </p>
+                {briefResult.savedDocuments > 0 ? (
+                  <p>Als Dokument gespeichert: {briefResult.savedDocuments}</p>
+                ) : null}
+                {briefResult.warnings.length > 0 ? (
+                  <p className="text-destructive">
+                    {briefResult.warnings.join(" ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
         {/* Section 1: Fahrzeugdaten */}
         <Card>
           <CardHeader>

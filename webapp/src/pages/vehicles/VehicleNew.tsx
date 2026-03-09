@@ -16,12 +16,50 @@ export default function VehicleNew() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createdVehicle, setCreatedVehicle] = useState<Vehicle | null>(null);
+  const [pendingBriefFiles, setPendingBriefFiles] = useState<File[]>([]);
+
+  async function uploadBriefDocuments(vehicleId: string, files: File[]): Promise<number> {
+    let uploaded = 0;
+
+    for (const [index, file] of files.entries()) {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", files.length === 1 ? "Fahrzeugbrief" : `Fahrzeugbrief ${index + 1}`);
+
+      const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error?.message || "Fahrzeugbrief konnte nicht gespeichert werden");
+      }
+
+      uploaded += 1;
+    }
+
+    return uploaded;
+  }
 
   const createMutation = useMutation({
     mutationFn: (values: VehicleFormSubmitValues) =>
       api.post<Vehicle>("/api/vehicles", values),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      if (pendingBriefFiles.length > 0) {
+        try {
+          const uploaded = await uploadBriefDocuments(data.id, pendingBriefFiles);
+          if (uploaded > 0) {
+            toast.success(`Fahrzeugbrief gespeichert (${uploaded})`);
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Fahrzeugbrief konnte nicht gespeichert werden");
+        }
+      }
+
+      setPendingBriefFiles([]);
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["vehicle", data.id] });
       setCreatedVehicle(data);
       toast.success("Fahrzeug angelegt!");
     },
@@ -112,6 +150,7 @@ export default function VehicleNew() {
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
         submitLabel="Fahrzeug anlegen"
+        onExtractedBriefFiles={(files) => setPendingBriefFiles(files)}
       />
     </div>
   );
