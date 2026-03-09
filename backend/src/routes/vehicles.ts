@@ -14,9 +14,12 @@ import {
   type VehicleBriefExtractFields,
 } from "../types";
 import { join } from "path";
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
+import { tmpdir } from "os";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -36,6 +39,7 @@ const BRIEF_ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
 ]);
+const execFileAsync = promisify(execFile);
 
 function isVehicleNumberConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -248,67 +252,103 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
     });
   }
 
-  const response = await fetch(OPENAI_RESPONSES_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: [
-        {
-          role: "user",
-          content,
-        },
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "vehicle_brief_extract",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              fields: {
-                type: "object",
-                additionalProperties: false,
-                properties: {
-                  vin: { type: "string" },
-                  firstRegistration: { type: "string" },
-                  color: { type: "string" },
-                  brand: { type: "string" },
-                  model: { type: "string" },
-                  hsn: { type: "string" },
-                  tsn: { type: "string" },
-                  registrationDocNumber: { type: "string" },
-                  co2Emission: { type: "number" },
-                  displacement: { type: "number" },
-                  power: { type: "number" },
-                  powerKw: { type: "number" },
-                },
-                required: [],
+  const requestBody = {
+    model,
+    input: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "vehicle_brief_extract",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            fields: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                vin: { type: "string" },
+                firstRegistration: { type: "string" },
+                color: { type: "string" },
+                brand: { type: "string" },
+                model: { type: "string" },
+                hsn: { type: "string" },
+                tsn: { type: "string" },
+                registrationDocNumber: { type: "string" },
+                co2Emission: { type: "number" },
+                displacement: { type: "number" },
+                power: { type: "number" },
+                powerKw: { type: "number" },
               },
-              warnings: {
-                type: "array",
-                items: { type: "string" },
-              },
+              required: [],
             },
-            required: ["fields", "warnings"],
+            warnings: {
+              type: "array",
+              items: { type: "string" },
+            },
           },
+          required: ["fields", "warnings"],
         },
       },
-      max_output_tokens: 700,
-    }),
-  });
+    },
+    max_output_tokens: 700,
+  };
 
-  if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI error (${response.status}) [model=${model}]: ${errorBody.slice(0, 500)}`);
+  const tempDir = await mkdtemp(join(tmpdir(), "mainauto-openai-"));
+  const payloadPath = join(tempDir, "request.json");
+
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    await writeFile(payloadPath, JSON.stringify(requestBody), "utf8");
+    ({ stdout, stderr } = await execFileAsync("curl", [
+      "-sS",
+      "-X",
+      "POST",
+      OPENAI_RESPONSES_URL,
+      "-H",
+      `Authorization: Bearer ${env.OPENAI_API_KEY}`,
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      `@${payloadPath}`,
+      "-w",
+      "\n%{http_code}",
+    ]));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   }
 
-  const payload = await response.json();
+  const lastNewline = stdout.lastIndexOf("\n");
+  if (lastNewline === -1) {
+    throw new Error(`OpenAI transport error [model=${model}]: malformed curl response ${stderr.slice(0, 300)}`);
+  }
+
+  const responseBody = stdout.slice(0, lastNewline);
+  const status = Number(stdout.slice(lastNewline + 1).trim());
+
+  if (!Number.isFinite(status)) {
+    throw new Error(`OpenAI transport error [model=${model}]: invalid status code ${stderr.slice(0, 300)}`);
+  }
+
+  if (status < 200 || status >= 300) {
+    throw new Error(`OpenAI error (${status}) [model=${model}]: ${responseBody.slice(0, 500)}`);
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(responseBody);
+  } catch {
+    throw new Error(`OpenAI transport error [model=${model}]: response is not valid JSON`);
+  }
+
   const rawText = extractOutputText(payload);
   if (!rawText) {
     throw new Error("No extractable output returned by OpenAI.");
