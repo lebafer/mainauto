@@ -38,8 +38,8 @@ const envSchema = z.object({
   OPENAI_MODEL: z
     .string()
     .optional()
-    .default("gpt-4.1-mini")
-    .transform((value) => value.trim() || "gpt-4.1-mini"),
+    .default("gpt-4o-mini")
+    .transform((value) => value.trim() || "gpt-4o-mini"),
 });
 
 /**

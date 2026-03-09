@@ -29,6 +29,7 @@ const vehiclesRouter = new Hono();
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const BRIEF_MAX_FILES = 4;
 const BRIEF_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const OPENAI_PDF_FALLBACK_MODEL = "gpt-4o-mini";
 const BRIEF_ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -190,7 +191,31 @@ function normalizeExtractedFields(raw: unknown): { fields: VehicleBriefExtractFi
   return { fields, warnings };
 }
 
+function modelSupportsPdfInput(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized === "gpt-4o" ||
+    normalized.startsWith("gpt-4o-") ||
+    normalized === "gpt-4o-mini" ||
+    normalized.startsWith("gpt-4o-mini-") ||
+    normalized === "o1" ||
+    normalized.startsWith("o1-")
+  );
+}
+
+function resolveExtractionModel(files: File[]): string {
+  const preferredModel = env.OPENAI_MODEL;
+  const hasPdf = files.some((file) => file.type === "application/pdf");
+
+  if (!hasPdf || modelSupportsPdfInput(preferredModel)) {
+    return preferredModel;
+  }
+
+  return OPENAI_PDF_FALLBACK_MODEL;
+}
+
 async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefExtractFields; warnings: string[] }> {
+  const model = resolveExtractionModel(files);
   const content: Array<Record<string, unknown>> = [
     {
       type: "input_text",
@@ -230,7 +255,7 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: env.OPENAI_MODEL,
+      model,
       input: [
         {
           role: "user",
@@ -280,7 +305,7 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
 
   if (!response.ok) {
     const errorBody = await response.text().catch(() => "");
-    throw new Error(`OpenAI error (${response.status}): ${errorBody.slice(0, 500)}`);
+    throw new Error(`OpenAI error (${response.status}) [model=${model}]: ${errorBody.slice(0, 500)}`);
   }
 
   const payload = await response.json();
