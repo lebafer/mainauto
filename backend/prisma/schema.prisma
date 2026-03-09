@@ -77,6 +77,7 @@ model Supplier {
   contactPerson   String?   // Ansprechpartner
   phone           String?
   phone2          String?
+  email           String?
   website         String?
   iban            String?
   notes           String?

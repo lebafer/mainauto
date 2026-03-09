@@ -32,7 +32,11 @@ export default function VehicleEdit() {
     },
     onError: (error: unknown) => {
       console.error("Vehicle update error:", error);
-      toast.error("Fehler beim Aktualisieren des Fahrzeugs. Bitte alle Pflichtfelder prüfen.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Fehler beim Aktualisieren des Fahrzeugs. Bitte alle Pflichtfelder prüfen."
+      );
     },
   });
 

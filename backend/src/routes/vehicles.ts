@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import {
   VehicleCreateSchema,
@@ -22,6 +23,20 @@ if (!existsSync(UPLOADS_DIR)) {
 
 const vehiclesRouter = new Hono();
 
+function isVehicleNumberConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+  if (error.code !== "P2002") {
+    return false;
+  }
+  const target = error.meta?.target;
+  if (Array.isArray(target)) {
+    return target.includes("vehicleNumber");
+  }
+  return typeof target === "string" && target.includes("vehicleNumber");
+}
+
 // GET /api/vehicles - list all vehicles with optional filters
 vehiclesRouter.get("/", async (c) => {
   const status = c.req.query("status");
@@ -35,6 +50,7 @@ vehiclesRouter.get("/", async (c) => {
 
   if (search) {
     where.OR = [
+      { vehicleNumber: { contains: search } },
       { brand: { contains: search } },
       { model: { contains: search } },
       { vin: { contains: search } },
@@ -85,19 +101,6 @@ vehiclesRouter.get("/:id", async (c) => {
   return c.json({ data: vehicle });
 });
 
-// Generate a unique sequential vehicle number: FZ-YYYY-NNNNN
-async function generateVehicleNumber(): Promise<string> {
-  const year = new Date().getFullYear();
-  // Atomically increment counter
-  const counter = await prisma.counter.upsert({
-    where: { id: "vehicle" },
-    update: { value: { increment: 1 } },
-    create: { id: "vehicle", value: 1 },
-  });
-  const seq = String(counter.value).padStart(5, "0");
-  return `FZ-${year}-${seq}`;
-}
-
 // POST /api/vehicles - create vehicle
 vehiclesRouter.post(
   "/",
@@ -105,13 +108,11 @@ vehiclesRouter.post(
   async (c) => {
     const data = c.req.valid("json");
 
-    const vehicleNumber = await generateVehicleNumber();
-
     // Convert power (number) to string for Prisma, strip empty strings
     const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
     const vehicleData = {
       ...data,
-      vehicleNumber,
+      vehicleNumber: data.vehicleNumber.trim(),
       year: data.year ?? (firstReg ? firstReg.getFullYear() : new Date().getFullYear()),
       power: data.power !== undefined ? String(data.power) : undefined,
       vin: data.vin || null,
@@ -157,15 +158,25 @@ vehiclesRouter.post(
       dealerPrice: data.dealerPrice ?? null,
     };
 
-    const vehicle = await prisma.vehicle.create({
-      data: vehicleData,
-      include: {
-        images: true,
-        customer: true,
-      },
-    });
+    try {
+      const vehicle = await prisma.vehicle.create({
+        data: vehicleData,
+        include: {
+          images: true,
+          customer: true,
+        },
+      });
 
-    return c.json({ data: vehicle }, 201);
+      return c.json({ data: vehicle }, 201);
+    } catch (error) {
+      if (isVehicleNumberConflict(error)) {
+        return c.json(
+          { error: { message: "Fahrzeugnummer existiert bereits", code: "VEHICLE_NUMBER_CONFLICT" } },
+          409
+        );
+      }
+      throw error;
+    }
   }
 );
 
@@ -185,6 +196,7 @@ vehiclesRouter.put(
     // Handle nullable customerId: convert null to disconnect
     const updateData: Record<string, unknown> = {
       ...data,
+      vehicleNumber: data.vehicleNumber !== undefined ? data.vehicleNumber.trim() : undefined,
       power: data.power !== undefined ? String(data.power) : undefined,
       vin: data.vin !== undefined ? (data.vin || null) : undefined,
       color: data.color !== undefined ? (data.color || null) : undefined,
@@ -215,19 +227,29 @@ vehiclesRouter.put(
       dealerPrice: data.dealerPrice !== undefined ? (data.dealerPrice ?? null) : undefined,
     };
 
-    const vehicle = await prisma.vehicle.update({
-      where: { id },
-      data: updateData,
-      include: {
-        images: true,
-        documents: true,
-        customer: true,
-        supplierRel: true,
-        workLog: { orderBy: { createdAt: "asc" } },
-      },
-    });
+    try {
+      const vehicle = await prisma.vehicle.update({
+        where: { id },
+        data: updateData,
+        include: {
+          images: true,
+          documents: true,
+          customer: true,
+          supplierRel: true,
+          workLog: { orderBy: { createdAt: "asc" } },
+        },
+      });
 
-    return c.json({ data: vehicle });
+      return c.json({ data: vehicle });
+    } catch (error) {
+      if (isVehicleNumberConflict(error)) {
+        return c.json(
+          { error: { message: "Fahrzeugnummer existiert bereits", code: "VEHICLE_NUMBER_CONFLICT" } },
+          409
+        );
+      }
+      throw error;
+    }
   }
 );
 

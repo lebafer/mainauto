@@ -119,8 +119,9 @@ const DEFAULT_CONNECTOR_TYPES = [
   "Tesla Supercharger",
 ];
 
-const REQUIRED_VEHICLE_FIELDS = ["brand", "model", "mileage", "purchasePrice", "sellingPrice"] as const;
+const REQUIRED_VEHICLE_FIELDS = ["vehicleNumber", "brand", "model", "mileage", "purchasePrice", "sellingPrice"] as const;
 const REQUIRED_VEHICLE_FIELD_LABELS: Record<(typeof REQUIRED_VEHICLE_FIELDS)[number], string> = {
+  vehicleNumber: "Interne Nummer",
   brand: "Hersteller / Marke",
   model: "Modell",
   mileage: "Kilometerstand",
@@ -158,6 +159,7 @@ function requiredNonNegativeNumber(label: string) {
 }
 
 const vehicleFormSchema = z.object({
+  vehicleNumber: z.string().trim().min(1, "Interne Nummer ist erforderlich"),
   brand: z.string().min(1, "Marke ist erforderlich"),
   model: z.string().min(1, "Modell ist erforderlich"),
   firstRegistration: z.string().optional().default(""),
@@ -273,6 +275,7 @@ export function VehicleForm({
   const [connectorOpen, setConnectorOpen] = useState(false);
 
   const initialValues: Partial<VehicleFormValues> = {
+    vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
     brand: vehicle?.brand ?? defaultValues?.brand ?? "",
     model: vehicle?.model ?? defaultValues?.model ?? "",
     firstRegistration: vehicle?.firstRegistration
@@ -683,6 +686,22 @@ export function VehicleForm({
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <FormField
+                control={form.control}
+                name="vehicleNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Interne Nummer
+                      <RequiredMark />
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="z.B. FZ-2026-00001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="model"

@@ -29,6 +29,7 @@ interface Supplier {
   contactPerson?: string | null;
   phone?: string | null;
   phone2?: string | null;
+  email?: string | null;
   website?: string | null;
   iban?: string | null;
   notes?: string | null;
@@ -61,7 +62,8 @@ export default function SupplierList() {
       s.name.toLowerCase().includes(q) ||
       (s.contactPerson ?? "").toLowerCase().includes(q) ||
       (s.country ?? "").toLowerCase().includes(q) ||
-      (s.phone ?? "").toLowerCase().includes(q)
+      (s.phone ?? "").toLowerCase().includes(q) ||
+      (s.email ?? "").toLowerCase().includes(q)
     );
   });
 

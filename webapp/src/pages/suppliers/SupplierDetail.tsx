@@ -6,6 +6,7 @@ import {
   Building2,
   User,
   Phone,
+  Mail,
   Globe,
   MapPin,
   CreditCard,
@@ -52,6 +53,7 @@ interface Supplier {
   contactPerson?: string | null;
   phone?: string | null;
   phone2?: string | null;
+  email?: string | null;
   website?: string | null;
   iban?: string | null;
   notes?: string | null;
@@ -184,6 +186,9 @@ export default function SupplierDetail() {
             {supplier.phone2 ? (
               <InfoRow icon={Phone} label="Zweite Telefonnummer" value={supplier.phone2} />
             ) : null}
+            {supplier.email ? (
+              <InfoRow icon={Mail} label="E-Mail" value={supplier.email} />
+            ) : null}
             {supplier.website ? (
               <div className="flex items-start gap-3">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
@@ -205,7 +210,7 @@ export default function SupplierDetail() {
             {supplier.contactPerson ? (
               <InfoRow icon={User} label="Ansprechpartner" value={supplier.contactPerson} />
             ) : null}
-            {!supplier.address && !supplier.phone && !supplier.website && !supplier.contactPerson ? (
+            {!supplier.address && !supplier.phone && !supplier.email && !supplier.website && !supplier.contactPerson ? (
               <p className="text-sm text-muted-foreground">Keine Kontaktdaten hinterlegt</p>
             ) : null}
           </CardContent>
