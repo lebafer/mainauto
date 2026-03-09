@@ -50,6 +50,7 @@ interface SupplierFormData {
   country: string;
   phone: string;
   phone2: string;
+  email: string;
   website: string;
   iban: string;
   notes: string;
@@ -76,6 +77,7 @@ export default function SupplierNew() {
       country: "",
       phone: "",
       phone2: "",
+      email: "",
       website: "",
       iban: "",
       notes: "",
@@ -221,6 +223,15 @@ export default function SupplierNew() {
                   />
                 </div>
                 <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="email">E-Mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="kontakt@beispiel.de"
+                    {...register("email")}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="website">Webseite</Label>
                   <Input
                     id="website"
@@ -305,6 +316,15 @@ export default function SupplierNew() {
                     type="tel"
                     placeholder="+49 123 456789"
                     {...register("phone2")}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="email">E-Mail</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="max.mustermann@example.com"
+                    {...register("email")}
                   />
                 </div>
               </CardContent>

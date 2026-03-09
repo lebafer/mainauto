@@ -36,6 +36,11 @@ const QuickSupplierSchema = z.object({
   supplierType: z.enum(["privat", "gewerblich"]).default("gewerblich"),
   contactPerson: z.string().optional(),
   phone: z.string().optional(),
+  email: z
+    .string()
+    .email("Ungültige E-Mail-Adresse")
+    .optional()
+    .or(z.literal("")),
 });
 
 type QuickSupplierValues = z.infer<typeof QuickSupplierSchema>;
@@ -45,6 +50,7 @@ interface Supplier {
   name: string;
   supplierType: string;
   contactPerson?: string | null;
+  email?: string | null;
 }
 
 interface QuickAddSupplierDialogProps {
@@ -67,6 +73,7 @@ export function QuickAddSupplierDialog({
       supplierType: "gewerblich",
       contactPerson: "",
       phone: "",
+      email: "",
     },
   });
 
@@ -155,6 +162,20 @@ export function QuickAddSupplierDialog({
                   <FormLabel>Telefon</FormLabel>
                   <FormControl>
                     <Input placeholder="z.B. +49 89 123456" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>E-Mail</FormLabel>
+                  <FormControl>
+                    <Input type="email" placeholder="z.B. kontakt@beispiel.de" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

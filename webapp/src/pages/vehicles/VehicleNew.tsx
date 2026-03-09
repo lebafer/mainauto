@@ -27,7 +27,11 @@ export default function VehicleNew() {
     },
     onError: (error: unknown) => {
       console.error("Vehicle creation error:", error);
-      toast.error("Fehler beim Anlegen des Fahrzeugs. Bitte alle Pflichtfelder prüfen.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Fehler beim Anlegen des Fahrzeugs. Bitte alle Pflichtfelder prüfen."
+      );
     },
   });
 

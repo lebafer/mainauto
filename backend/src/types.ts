@@ -3,6 +3,7 @@ import { z } from "zod";
 // ─── Vehicle Schemas ─────────────────────────────────────────
 
 export const VehicleCreateSchema = z.object({
+  vehicleNumber: z.string().trim().min(1, "Vehicle number is required"),
   brand: z.string().min(1, "Brand is required"),
   model: z.string().min(1, "Model is required"),
   year: z.number().int().min(1900).max(2100).optional(),
@@ -62,6 +63,7 @@ export const VehicleCreateSchema = z.object({
 });
 
 export const VehicleUpdateSchema = z.object({
+  vehicleNumber: z.string().trim().min(1).optional(),
   brand: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
   year: z.number().int().min(1900).max(2100).optional(),
@@ -222,6 +224,7 @@ export const SupplierCreateSchema = z.object({
   contactPerson: z.string().optional(),
   phone: z.string().optional(),
   phone2: z.string().optional(),
+  email: z.string().email("Ungültige E-Mail-Adresse").optional().or(z.literal("")),
   website: z.string().optional(),
   iban: z.string().optional(),
   notes: z.string().optional(),
