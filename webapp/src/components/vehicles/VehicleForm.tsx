@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link } from "react-router-dom";
@@ -118,6 +118,19 @@ const DEFAULT_CONNECTOR_TYPES = [
   "GB/T",
   "Tesla Supercharger",
 ];
+
+const REQUIRED_VEHICLE_FIELDS = ["brand", "model", "mileage", "purchasePrice", "sellingPrice"] as const;
+const REQUIRED_VEHICLE_FIELD_LABELS: Record<(typeof REQUIRED_VEHICLE_FIELDS)[number], string> = {
+  brand: "Hersteller / Marke",
+  model: "Modell",
+  mileage: "Kilometerstand",
+  purchasePrice: "Einkaufspreis",
+  sellingPrice: "Verkaufspreis",
+};
+
+function RequiredMark() {
+  return <span className="ml-1 text-destructive">*</span>;
+}
 
 const vehicleFormSchema = z.object({
   brand: z.string().min(1, "Marke ist erforderlich"),
@@ -504,12 +517,28 @@ export function VehicleForm({
     onSubmit(processed);
   }
 
+  function handleInvalidSubmit(errors: FieldErrors<VehicleFormValues>) {
+    const firstErrorField = Object.keys(errors)[0] as Path<VehicleFormValues> | undefined;
+    if (firstErrorField) {
+      form.setFocus(firstErrorField);
+    }
+  }
+
   const margin = watchedSellingPrice - watchedPurchasePrice;
   const grossPrice = calculateGrossPrice(watchedSellingPrice, watchedTaxRate, watchedMarginTaxed);
+  const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS.filter((field) => Boolean(form.formState.errors[field]));
+  const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)} className="space-y-6">
+        <p className="text-xs text-muted-foreground">* Pflichtfeld</p>
+        {form.formState.submitCount > 0 && requiredFieldErrors.length > 0 ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            Bitte Pflichtfelder ausfüllen:{" "}
+            {requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}
+          </div>
+        ) : null}
         {/* Section 1: Fahrzeugdaten */}
         <Card>
           <CardHeader>
@@ -523,7 +552,10 @@ export function VehicleForm({
                 name="brand"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Hersteller / Marke</FormLabel>
+                    <FormLabel>
+                      Hersteller / Marke
+                      <RequiredMark />
+                    </FormLabel>
                     <Popover open={brandOpen} onOpenChange={setBrandOpen}>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -613,7 +645,10 @@ export function VehicleForm({
                 name="model"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Modell</FormLabel>
+                    <FormLabel>
+                      Modell
+                      <RequiredMark />
+                    </FormLabel>
                     <FormControl>
                       <Input placeholder="z.B. 320d" {...field} />
                     </FormControl>
@@ -639,7 +674,10 @@ export function VehicleForm({
                 name="mileage"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Kilometerstand</FormLabel>
+                    <FormLabel>
+                      Kilometerstand
+                      <RequiredMark />
+                    </FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0" {...field} />
                     </FormControl>
@@ -1506,6 +1544,7 @@ export function VehicleForm({
                   <FormItem>
                     <FormLabel>
                       {watchedMarginTaxed ? "Einkaufspreis" : "Einkaufspreis (Netto)"}
+                      <RequiredMark />
                     </FormLabel>
                     <FormControl>
                       <Input type="number" step="0.01" placeholder="0.00" {...field} />
@@ -1536,7 +1575,10 @@ export function VehicleForm({
             {/* Selling price with netto/brutto toggle */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">Verkaufspreis</Label>
+                <Label className="text-sm font-medium">
+                  Verkaufspreis
+                  <RequiredMark />
+                </Label>
                 {!watchedMarginTaxed ? (
                   <Tabs
                     value={priceInputMode}
@@ -1561,7 +1603,10 @@ export function VehicleForm({
                     name="sellingPrice"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Verkaufspreis (Endpreis)</FormLabel>
+                        <FormLabel>
+                          Verkaufspreis (Endpreis)
+                          <RequiredMark />
+                        </FormLabel>
                         <FormControl>
                           <Input type="number" step="0.01" placeholder="0.00" {...field} />
                         </FormControl>
@@ -1580,7 +1625,10 @@ export function VehicleForm({
                     name="sellingPrice"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Netto</FormLabel>
+                        <FormLabel>
+                          Netto
+                          <RequiredMark />
+                        </FormLabel>
                         <FormControl>
                           <Input
                             type="number"
@@ -1604,14 +1652,23 @@ export function VehicleForm({
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Brutto</Label>
+                    <Label>
+                      Brutto
+                      <RequiredMark />
+                    </Label>
                     <Input
                       type="number"
                       step="0.01"
                       placeholder="0.00"
                       value={grossDisplay}
                       onChange={(e) => handleGrossChange(e.target.value)}
+                      className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
                     />
+                    {sellingPriceHasError ? (
+                      <p className="text-sm font-medium text-destructive">
+                        {form.formState.errors.sellingPrice?.message as string}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm text-muted-foreground">Netto (berechnet)</Label>
