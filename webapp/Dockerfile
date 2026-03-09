@@ -7,7 +7,8 @@ RUN bun install
 
 COPY webapp ./
 # Keep shared API contracts available for imports like ../../../../backend/src/types
-COPY backend/src/types.ts /backend/src/types.ts
+RUN mkdir -p /app/backend/src
+COPY backend/src/types.ts /app/backend/src/types.ts
 
 ARG VITE_BACKEND_URL=
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
