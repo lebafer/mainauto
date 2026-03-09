@@ -64,7 +64,7 @@ import { VehicleImagesTab } from "@/components/vehicles/VehicleImagesTab";
 import { VehicleDocumentsTab } from "@/components/vehicles/VehicleDocumentsTab";
 import { AddCostDialog } from "@/components/vehicles/AddCostDialog";
 import { WorkLogTab } from "@/components/vehicles/WorkLogTab";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -92,6 +92,9 @@ interface Customer {
   firstName: string;
   lastName: string;
   company: string | null;
+  idDocumentType?: string | null;
+  idDocumentNumber?: string | null;
+  idDocumentValidUntil?: string | null;
 }
 
 // ─── Supplier type (from /api/suppliers-db) ──────────────────────
@@ -153,6 +156,7 @@ export default function VehicleDetail() {
   const [gbDateOfReceipt, setGbDateOfReceipt] = useState("");
   const [gbPassportType, setGbPassportType] = useState("");
   const [gbPassportNumber, setGbPassportNumber] = useState("");
+  const [gbPassportValidUntil, setGbPassportValidUntil] = useState("");
   const [gbLoading, setGbLoading] = useState(false);
 
   // Vermittlungsvertrag dialog state
@@ -284,6 +288,19 @@ export default function VehicleDetail() {
     queryFn: () => api.get<Supplier[]>("/api/suppliers-db"),
     enabled: vermDialogOpen,
   });
+
+  const selectedGbCustomer = contractCustomers?.find((c) => c.id === gbCustomerId);
+
+  useEffect(() => {
+    if (!selectedGbCustomer) return;
+    setGbPassportType(selectedGbCustomer.idDocumentType ?? "");
+    setGbPassportNumber(selectedGbCustomer.idDocumentNumber ?? "");
+    setGbPassportValidUntil(
+      selectedGbCustomer.idDocumentValidUntil
+        ? new Date(selectedGbCustomer.idDocumentValidUntil).toISOString().split("T")[0]
+        : ""
+    );
+  }, [selectedGbCustomer]);
 
   if (isLoading) {
     return (
@@ -592,6 +609,15 @@ export default function VehicleDetail() {
                 onChange={(e) => setGbPassportNumber(e.target.value)}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>Valid until / Gültig bis</Label>
+              <input
+                type="date"
+                className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={gbPassportValidUntil}
+                onChange={(e) => setGbPassportValidUntil(e.target.value)}
+              />
+            </div>
           </div>
 
           <DialogFooter>
@@ -615,6 +641,7 @@ export default function VehicleDetail() {
                       dateOfReceipt: gbDateOfReceipt,
                       passportType: gbPassportType,
                       passportNumber: gbPassportNumber,
+                      passportValidUntil: gbPassportValidUntil,
                     }),
                   });
                   if (!res.ok) throw new Error("Fehler");
@@ -635,7 +662,14 @@ export default function VehicleDetail() {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
                       credentials: "include",
-                      body: JSON.stringify({ vehicleId: id, customerId: gbCustomerId, dateOfReceipt: gbDateOfReceipt, passportType: gbPassportType, passportNumber: gbPassportNumber }),
+                      body: JSON.stringify({
+                        vehicleId: id,
+                        customerId: gbCustomerId,
+                        dateOfReceipt: gbDateOfReceipt,
+                        passportType: gbPassportType,
+                        passportNumber: gbPassportNumber,
+                        passportValidUntil: gbPassportValidUntil,
+                      }),
                     });
                     if (htmlRes.ok) {
                       const { data } = await htmlRes.json();

@@ -46,7 +46,9 @@ interface SupplierFormData {
   name: string;
   supplierType: "privat" | "gewerblich";
   contactPerson: string;
-  address: string;
+  street: string;
+  zip: string;
+  city: string;
   country: string;
   phone: string;
   phone2: string;
@@ -73,7 +75,9 @@ export default function SupplierNew() {
       name: "",
       supplierType: "gewerblich",
       contactPerson: "",
-      address: "",
+      street: "",
+      zip: "",
+      city: "",
       country: "",
       phone: "",
       phone2: "",
@@ -235,8 +239,8 @@ export default function SupplierNew() {
                   <Label htmlFor="website">Webseite</Label>
                   <Input
                     id="website"
-                    type="url"
-                    placeholder="https://www.beispiel.de"
+                    type="text"
+                    placeholder="www.beispiel.de"
                     {...register("website")}
                   />
                 </div>
@@ -251,12 +255,22 @@ export default function SupplierNew() {
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="address">Strasse, PLZ, Ort</Label>
+                  <Label htmlFor="street">Strasse und Hausnummer</Label>
                   <Input
-                    id="address"
-                    placeholder="Musterstrasse 1, 12345 Musterstadt"
-                    {...register("address")}
+                    id="street"
+                    placeholder="Musterstrasse 1"
+                    {...register("street")}
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">PLZ</Label>
+                    <Input id="zip" placeholder="12345" {...register("zip")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">Ort</Label>
+                    <Input id="city" placeholder="Musterstadt" {...register("city")} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="country">Land</Label>
@@ -338,12 +352,22 @@ export default function SupplierNew() {
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="address">Strasse, PLZ, Ort</Label>
+                  <Label htmlFor="street">Strasse und Hausnummer</Label>
                   <Input
-                    id="address"
-                    placeholder="Musterstrasse 1, 12345 Musterstadt"
-                    {...register("address")}
+                    id="street"
+                    placeholder="Musterstrasse 1"
+                    {...register("street")}
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">PLZ</Label>
+                    <Input id="zip" placeholder="12345" {...register("zip")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">Ort</Label>
+                    <Input id="city" placeholder="Musterstadt" {...register("city")} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="country">Land</Label>

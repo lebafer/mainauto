@@ -63,6 +63,9 @@ export interface Vehicle {
   firstRegistration?: string | null;
   mileage: number;
   vin: string;
+  hsn?: string | null;
+  tsn?: string | null;
+  registrationDocNumber?: string | null;
   color: string;
   fuelType: string;
   transmission: string;

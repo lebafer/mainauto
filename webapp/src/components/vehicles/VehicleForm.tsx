@@ -171,6 +171,9 @@ const vehicleFormSchema = z.object({
     })
     .optional()
     .default(""),
+  hsn: z.string().optional().default(""),
+  tsn: z.string().optional().default(""),
+  registrationDocNumber: z.string().optional().default(""),
   color: z.string().optional().default(""),
   fuelType: z.string().optional().default(""),
   transmission: z.string().optional().default(""),
@@ -225,10 +228,13 @@ export type VehicleFormValues = z.infer<typeof vehicleFormSchema>;
 
 export type VehicleFormSubmitValues = Omit<
   VehicleFormValues,
-  "power" | "vin" | "color" | "fuelType" | "transmission" | "notes" | "customerId" | "damageDescription" | "batteryType" | "connectorType" | "supplierId" | "huDue" | "previousOwners" | "serviceDueKm" | "serviceDueDate"
+  "power" | "vin" | "hsn" | "tsn" | "registrationDocNumber" | "color" | "fuelType" | "transmission" | "notes" | "customerId" | "damageDescription" | "batteryType" | "connectorType" | "supplierId" | "huDue" | "previousOwners" | "serviceDueKm" | "serviceDueDate"
 > & {
   power?: number;
   vin?: string;
+  hsn?: string;
+  tsn?: string;
+  registrationDocNumber?: string;
   color?: string;
   fuelType?: string;
   transmission?: string;
@@ -283,6 +289,9 @@ export function VehicleForm({
       : defaultValues?.firstRegistration ?? "",
     mileage: vehicle?.mileage ?? defaultValues?.mileage,
     vin: vehicle?.vin ?? defaultValues?.vin ?? "",
+    hsn: vehicle?.hsn ?? defaultValues?.hsn ?? "",
+    tsn: vehicle?.tsn ?? defaultValues?.tsn ?? "",
+    registrationDocNumber: vehicle?.registrationDocNumber ?? defaultValues?.registrationDocNumber ?? "",
     color: vehicle?.color ?? defaultValues?.color ?? "",
     fuelType: vehicle?.fuelType ?? defaultValues?.fuelType ?? "",
     transmission: vehicle?.transmission ?? defaultValues?.transmission ?? "",
@@ -526,6 +535,9 @@ export function VehicleForm({
       customerId: undefined,
       power: values.power || undefined,
       vin: values.vin || undefined,
+      hsn: values.hsn || undefined,
+      tsn: values.tsn || undefined,
+      registrationDocNumber: values.registrationDocNumber || undefined,
       color: values.color || undefined,
       fuelType: values.fuelType || undefined,
       transmission: values.transmission || undefined,
@@ -777,6 +789,45 @@ export function VehicleForm({
                     ) : field.value && field.value.length === 17 ? (
                       <p className="text-xs text-emerald-500">✓ 17/17 Zeichen</p>
                     ) : null}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="hsn"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Herstellerschlüsselnummer (HSN)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z.B. 0005" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="tsn"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Typschlüsselnummer (TSN)</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z.B. ABC123" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="registrationDocNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fahrzeugbrief-Nr.</FormLabel>
+                    <FormControl>
+                      <Input placeholder="z.B. BRIEF-123456" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

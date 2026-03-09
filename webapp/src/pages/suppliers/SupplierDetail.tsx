@@ -49,6 +49,9 @@ interface Supplier {
   name: string;
   supplierType: "privat" | "gewerblich";
   address?: string | null;
+  street?: string | null;
+  zip?: string | null;
+  city?: string | null;
   country?: string | null;
   contactPerson?: string | null;
   phone?: string | null;
@@ -127,6 +130,15 @@ export default function SupplierDetail() {
     (sum, v) => sum + (v.purchasePrice ?? 0),
     0
   );
+  const displayAddress =
+    supplier.street || supplier.zip || supplier.city
+      ? [supplier.street, [supplier.zip, supplier.city].filter(Boolean).join(" ")].filter(Boolean).join(", ")
+      : (supplier.address ?? "");
+  const websiteHref = supplier.website
+    ? (supplier.website.startsWith("http://") || supplier.website.startsWith("https://")
+      ? supplier.website
+      : `https://${supplier.website}`)
+    : "";
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -174,8 +186,8 @@ export default function SupplierDetail() {
             <CardTitle className="text-lg">Kontaktdaten</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {supplier.address ? (
-              <InfoRow icon={MapPin} label="Adresse" value={supplier.address} />
+            {displayAddress ? (
+              <InfoRow icon={MapPin} label="Adresse" value={displayAddress} />
             ) : null}
             {supplier.country ? (
               <InfoRow icon={MapPin} label="Land" value={supplier.country} />
@@ -197,7 +209,7 @@ export default function SupplierDetail() {
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Webseite</p>
                   <a
-                    href={supplier.website}
+                    href={websiteHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-medium text-amber-600 hover:underline break-all"
@@ -210,7 +222,7 @@ export default function SupplierDetail() {
             {supplier.contactPerson ? (
               <InfoRow icon={User} label="Ansprechpartner" value={supplier.contactPerson} />
             ) : null}
-            {!supplier.address && !supplier.phone && !supplier.email && !supplier.website && !supplier.contactPerson ? (
+            {!displayAddress && !supplier.phone && !supplier.email && !supplier.website && !supplier.contactPerson ? (
               <p className="text-sm text-muted-foreground">Keine Kontaktdaten hinterlegt</p>
             ) : null}
           </CardContent>
