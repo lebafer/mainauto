@@ -218,6 +218,39 @@ function resolveExtractionModel(files: File[]): string {
   return OPENAI_PDF_FALLBACK_MODEL;
 }
 
+const VEHICLE_BRIEF_FIELD_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    vin: { type: ["string", "null"] },
+    firstRegistration: { type: ["string", "null"] },
+    color: { type: ["string", "null"] },
+    brand: { type: ["string", "null"] },
+    model: { type: ["string", "null"] },
+    hsn: { type: ["string", "null"] },
+    tsn: { type: ["string", "null"] },
+    registrationDocNumber: { type: ["string", "null"] },
+    co2Emission: { type: ["number", "null"] },
+    displacement: { type: ["number", "null"] },
+    power: { type: ["number", "null"] },
+    powerKw: { type: ["number", "null"] },
+  },
+  required: [
+    "vin",
+    "firstRegistration",
+    "color",
+    "brand",
+    "model",
+    "hsn",
+    "tsn",
+    "registrationDocNumber",
+    "co2Emission",
+    "displacement",
+    "power",
+    "powerKw",
+  ],
+} as const;
+
 async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefExtractFields; warnings: string[] }> {
   const model = resolveExtractionModel(files);
   const content: Array<Record<string, unknown>> = [
@@ -269,25 +302,7 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
           type: "object",
           additionalProperties: false,
           properties: {
-            fields: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                vin: { type: "string" },
-                firstRegistration: { type: "string" },
-                color: { type: "string" },
-                brand: { type: "string" },
-                model: { type: "string" },
-                hsn: { type: "string" },
-                tsn: { type: "string" },
-                registrationDocNumber: { type: "string" },
-                co2Emission: { type: "number" },
-                displacement: { type: "number" },
-                power: { type: "number" },
-                powerKw: { type: "number" },
-              },
-              required: [],
-            },
+            fields: VEHICLE_BRIEF_FIELD_SCHEMA,
             warnings: {
               type: "array",
               items: { type: "string" },

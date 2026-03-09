@@ -16,12 +16,6 @@ if [[ -f "prisma/schema.prisma" ]]; then
   bunx prisma generate
   echo "Applying migrations..."
   bunx prisma migrate deploy
-
-  # Enable DB viewer (idempotent, safe to call multiple times)
-  if [[ -n "${VIBECODE_PROJECT_ID:-}" ]]; then
-    echo "Enabling database viewer..."
-    curl -s -X POST "https://api.vibecodeapp.com/api/projects/${VIBECODE_PROJECT_ID}/cloud/db/enable" || true
-  fi
 fi
 
 # Start server based on environment
