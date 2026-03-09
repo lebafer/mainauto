@@ -132,11 +132,36 @@ function RequiredMark() {
   return <span className="ml-1 text-destructive">*</span>;
 }
 
+function requiredNonNegativeNumber(label: string) {
+  return z.preprocess(
+    (value) => {
+      if (value === "" || value === null || value === undefined) {
+        return undefined;
+      }
+      if (typeof value === "number") {
+        return Number.isNaN(value) ? undefined : value;
+      }
+      if (typeof value === "string") {
+        const normalized = value.replace(",", ".");
+        const parsed = Number(normalized);
+        return Number.isNaN(parsed) ? undefined : parsed;
+      }
+      return value;
+    },
+    z
+      .number({
+        required_error: `${label} ist erforderlich`,
+        invalid_type_error: `${label} ist erforderlich`,
+      })
+      .min(0, `${label} muss positiv sein`)
+  );
+}
+
 const vehicleFormSchema = z.object({
   brand: z.string().min(1, "Marke ist erforderlich"),
   model: z.string().min(1, "Modell ist erforderlich"),
   firstRegistration: z.string().optional().default(""),
-  mileage: z.coerce.number().min(0, "Kilometerstand muss positiv sein"),
+  mileage: requiredNonNegativeNumber("Kilometerstand"),
   vin: z.string()
     .transform((v) => v.toUpperCase())
     .refine((v) => v === "" || (v.length === 17 && /^[A-Z0-9]{17}$/.test(v)), {
@@ -149,8 +174,8 @@ const vehicleFormSchema = z.object({
   transmission: z.string().optional().default(""),
   power: z.coerce.number().min(0).optional(),
   features: z.string().optional().default(""),
-  purchasePrice: z.coerce.number().min(0, "Einkaufspreis muss positiv sein"),
-  sellingPrice: z.coerce.number().min(0, "Verkaufspreis muss positiv sein"),
+  purchasePrice: requiredNonNegativeNumber("Einkaufspreis"),
+  sellingPrice: requiredNonNegativeNumber("Verkaufspreis"),
   taxRate: z.coerce.number().min(0).max(100).default(19),
   marginTaxed: z.boolean().default(false),
   status: z.string().default("available"),
@@ -247,23 +272,23 @@ export function VehicleForm({
   const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
 
-  const initialValues: VehicleFormValues = {
+  const initialValues: Partial<VehicleFormValues> = {
     brand: vehicle?.brand ?? defaultValues?.brand ?? "",
     model: vehicle?.model ?? defaultValues?.model ?? "",
     firstRegistration: vehicle?.firstRegistration
       ? new Date(vehicle.firstRegistration).toISOString().split("T")[0]
       : defaultValues?.firstRegistration ?? "",
-    mileage: vehicle?.mileage ?? defaultValues?.mileage ?? 0,
+    mileage: vehicle?.mileage ?? defaultValues?.mileage,
     vin: vehicle?.vin ?? defaultValues?.vin ?? "",
     color: vehicle?.color ?? defaultValues?.color ?? "",
     fuelType: vehicle?.fuelType ?? defaultValues?.fuelType ?? "",
     transmission: vehicle?.transmission ?? defaultValues?.transmission ?? "",
-    power: vehicle?.power ?? defaultValues?.power ?? 0,
+    power: vehicle?.power ?? defaultValues?.power,
     features: vehicle
       ? parseFeatures(vehicle.features).join(", ")
       : defaultValues?.features ?? "",
-    purchasePrice: vehicle?.purchasePrice ?? defaultValues?.purchasePrice ?? 0,
-    sellingPrice: vehicle?.sellingPrice ?? defaultValues?.sellingPrice ?? 0,
+    purchasePrice: vehicle?.purchasePrice ?? defaultValues?.purchasePrice,
+    sellingPrice: vehicle?.sellingPrice ?? defaultValues?.sellingPrice,
     taxRate: vehicle?.taxRate ?? defaultValues?.taxRate ?? 19,
     marginTaxed: vehicle?.marginTaxed ?? defaultValues?.marginTaxed ?? false,
     status: vehicle?.status ?? defaultValues?.status ?? "available",
@@ -410,10 +435,10 @@ export function VehicleForm({
     }
   }
 
-  const watchedSellingPrice = form.watch("sellingPrice");
-  const watchedTaxRate = form.watch("taxRate");
-  const watchedMarginTaxed = form.watch("marginTaxed");
-  const watchedPurchasePrice = form.watch("purchasePrice");
+  const watchedSellingPrice = form.watch("sellingPrice") ?? 0;
+  const watchedTaxRate = form.watch("taxRate") ?? 19;
+  const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
+  const watchedPurchasePrice = form.watch("purchasePrice") ?? 0;
   const watchedFuelType = form.watch("fuelType");
   const watchedHasDamage = form.watch("hasDamage");
   const watchedExportEnabled = form.watch("exportEnabled");
@@ -443,20 +468,38 @@ export function VehicleForm({
 
   // Initialize gross display
   useEffect(() => {
-    const gross = calculateGrossPrice(initialValues.sellingPrice, initialValues.taxRate, initialValues.marginTaxed);
+    const gross = calculateGrossPrice(
+      initialValues.sellingPrice ?? 0,
+      initialValues.taxRate ?? 19,
+      initialValues.marginTaxed ?? false
+    );
     setGrossDisplay(gross.toFixed(2));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleGrossChange(grossStr: string) {
     setGrossDisplay(grossStr);
-    const grossVal = parseFloat(grossStr) || 0;
+    if (grossStr.trim() === "") {
+      form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
+      return;
+    }
+    const grossVal = parseFloat(grossStr.replace(",", "."));
+    if (Number.isNaN(grossVal)) {
+      return;
+    }
     const netVal = calculateNetPrice(grossVal, watchedTaxRate, watchedMarginTaxed);
     form.setValue("sellingPrice", Math.round(netVal * 100) / 100);
   }
 
   function handleNettoChange(nettoStr: string) {
-    const netVal = parseFloat(nettoStr) || 0;
+    if (nettoStr.trim() === "") {
+      form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
+      return;
+    }
+    const netVal = parseFloat(nettoStr.replace(",", "."));
+    if (Number.isNaN(netVal)) {
+      return;
+    }
     form.setValue("sellingPrice", netVal);
   }
 
@@ -679,7 +722,16 @@ export function VehicleForm({
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="0" {...field} />
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value === "" ? ("" as unknown as number) : Number(e.target.value)
+                          )
+                        }
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1547,7 +1599,17 @@ export function VehicleForm({
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value === "" ? ("" as unknown as number) : Number(e.target.value)
+                          )
+                        }
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -1608,7 +1670,17 @@ export function VehicleForm({
                           <RequiredMark />
                         </FormLabel>
                         <FormControl>
-                          <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="0.00"
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value === "" ? ("" as unknown as number) : Number(e.target.value)
+                              )
+                            }
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -1634,7 +1706,7 @@ export function VehicleForm({
                             type="number"
                             step="0.01"
                             placeholder="0.00"
-                            value={field.value}
+                            value={field.value ?? ""}
                             onChange={(e) => handleNettoChange(e.target.value)}
                           />
                         </FormControl>
