@@ -2,17 +2,24 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
+import { env } from "../env";
 import {
   VehicleCreateSchema,
   VehicleUpdateSchema,
   VehicleCostCreateSchema,
   WorkLogItemCreateSchema,
   WorkLogItemUpdateSchema,
+  VehicleBriefExtractFieldsSchema,
+  VehicleBriefExtractResponseSchema,
+  type VehicleBriefExtractFields,
 } from "../types";
 import { join } from "path";
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
+import { tmpdir } from "os";
+import { execFile } from "child_process";
+import { promisify } from "util";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -22,6 +29,17 @@ if (!existsSync(UPLOADS_DIR)) {
 }
 
 const vehiclesRouter = new Hono();
+const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const BRIEF_MAX_FILES = 4;
+const BRIEF_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
+const OPENAI_PDF_FALLBACK_MODEL = "gpt-4o-mini";
+const BRIEF_ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+const execFileAsync = promisify(execFile);
 
 function isVehicleNumberConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -36,6 +54,517 @@ function isVehicleNumberConflict(error: unknown): boolean {
   }
   return typeof target === "string" && target.includes("vehicleNumber");
 }
+
+function normalizeString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const cleaned = value.replace(/\s+/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+  if (!cleaned) return undefined;
+  const parsed = Number(cleaned);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeVin(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+  const normalized = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalized.length === 17 ? normalized : undefined;
+}
+
+function normalizeFuelType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (
+    normalized.includes("elektro") ||
+    normalized.includes("electric") ||
+    normalized.includes("strom") ||
+    normalized.includes("bev")
+  ) {
+    return "Elektro";
+  }
+
+  if (normalized.includes("diesel")) {
+    return "Diesel";
+  }
+
+  if (normalized.includes("benzin") || normalized.includes("petrol")) {
+    return "Benzin";
+  }
+
+  if (
+    normalized.includes("hybrid") ||
+    normalized.includes("plug-in") ||
+    normalized.includes("plugin")
+  ) {
+    return "Hybrid";
+  }
+
+  if (normalized.includes("gas") || normalized.includes("cng") || normalized.includes("lpg")) {
+    return "Gas";
+  }
+
+  return raw;
+}
+
+function normalizeBodyType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("suv") || normalized.includes("geländ")) return "SUV";
+  if (normalized.includes("kombi")) return "Kombi";
+  if (normalized.includes("limousine") || normalized.includes("schr")) return "Limousine";
+  if (normalized.includes("coup")) return "Coupé";
+  if (normalized.includes("cabrio") || normalized.includes("roadster")) return "Cabrio";
+  if (normalized.includes("van") || normalized.includes("minivan") || normalized.includes("bus")) return "Van/Minivan";
+  if (normalized.includes("transporter") || normalized.includes("kasten")) return "Transporter";
+  if (normalized.includes("pickup") || normalized.includes("pick-up")) return "Pickup";
+
+  return raw;
+}
+
+function normalizeDriveType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("allrad") || normalized.includes("awd")) return "AWD";
+  if (normalized.includes("4x4")) return "4x4";
+  if (normalized.includes("front") || normalized.includes("fwd") || normalized.includes("vorderrad")) return "FWD";
+  if (normalized.includes("heck") || normalized.includes("rwd") || normalized.includes("hinterrad")) return "RWD";
+
+  return undefined;
+}
+
+function normalizeEmissionClass(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, "");
+  const euroMatch = normalized.match(/euro(\d)(d-temp|dtemp|d)?/);
+
+  if (!euroMatch) {
+    return raw;
+  }
+
+  const [, level, suffix] = euroMatch;
+  if (!suffix) return `Euro ${level}`;
+  if (suffix === "d") return `Euro ${level}d`;
+  return `Euro ${level}d-TEMP`;
+}
+
+function normalizeDate(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const dotMatch = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotMatch) {
+    const [, day, month, year] = dotMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const slashMatch = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, day, month, year] = slashMatch;
+    return `${year}-${month}-${day}`;
+  }
+
+  const monthYearMatch = raw.match(/^(\d{2})[./](\d{4})$/);
+  if (monthYearMatch) {
+    const [, month, year] = monthYearMatch;
+    return `${year}-${month}-01`;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return undefined;
+}
+
+function stripMarkdownCodeBlock(value: string): string {
+  const fenced = value.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced && fenced[1]) {
+    return fenced[1].trim();
+  }
+  return value.trim();
+}
+
+function extractOutputText(payload: unknown): string | undefined {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+
+  const direct = (payload as { output_text?: unknown }).output_text;
+  if (typeof direct === "string" && direct.trim() !== "") {
+    return direct;
+  }
+
+  const output = (payload as { output?: unknown }).output;
+  if (!Array.isArray(output)) {
+    return undefined;
+  }
+
+  const parts: string[] = [];
+  for (const item of output) {
+    if (typeof item !== "object" || item === null) continue;
+    const content = (item as { content?: unknown }).content;
+    if (!Array.isArray(content)) continue;
+    for (const fragment of content) {
+      if (typeof fragment !== "object" || fragment === null) continue;
+      const text = (fragment as { text?: unknown }).text;
+      if (typeof text === "string" && text.trim() !== "") {
+        parts.push(text);
+      }
+    }
+  }
+
+  return parts.length > 0 ? parts.join("\n") : undefined;
+}
+
+function normalizeExtractedFields(raw: unknown): { fields: VehicleBriefExtractFields; warnings: string[] } {
+  const warnings: string[] = [];
+  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+
+  const normalized: VehicleBriefExtractFields = {
+    vin: normalizeVin(input.vin),
+    firstRegistration: normalizeDate(input.firstRegistration),
+    color: normalizeString(input.color),
+    brand: normalizeString(input.brand),
+    model: normalizeString(input.model),
+    hsn: normalizeString(input.hsn)?.toUpperCase(),
+    tsn: normalizeString(input.tsn)?.toUpperCase(),
+    registrationDocNumber: normalizeString(input.registrationDocNumber),
+    fuelType: normalizeFuelType(input.fuelType),
+    co2Emission: normalizeNumber(input.co2Emission),
+    displacement: (() => {
+      const value = normalizeNumber(input.displacement);
+      return value === undefined ? undefined : Math.round(value);
+    })(),
+    power: normalizeNumber(input.power),
+    powerKw: normalizeNumber(input.powerKw),
+    bodyType: normalizeBodyType(input.bodyType),
+    driveType: normalizeDriveType(input.driveType),
+    emissionClass: normalizeEmissionClass(input.emissionClass),
+    previousOwners: (() => {
+      const value = normalizeNumber(input.previousOwners);
+      return value === undefined ? undefined : Math.round(value);
+    })(),
+  };
+
+  if (input.vin && !normalized.vin) {
+    warnings.push("VIN konnte nicht eindeutig validiert werden.");
+  }
+
+  if (input.firstRegistration && !normalized.firstRegistration) {
+    warnings.push("Erstzulassung konnte nicht sicher als Datum erkannt werden.");
+  }
+
+  if (normalized.power !== undefined && normalized.powerKw === undefined) {
+    normalized.powerKw = Math.round(normalized.power / 1.35962);
+  } else if (normalized.powerKw !== undefined && normalized.power === undefined) {
+    normalized.power = Math.round(normalized.powerKw * 1.35962);
+  }
+
+  const fields = VehicleBriefExtractFieldsSchema.parse(normalized);
+  return { fields, warnings };
+}
+
+function modelSupportsPdfInput(model: string): boolean {
+  const normalized = model.trim().toLowerCase();
+  return (
+    normalized === "gpt-4o" ||
+    normalized.startsWith("gpt-4o-") ||
+    normalized === "gpt-4o-mini" ||
+    normalized.startsWith("gpt-4o-mini-") ||
+    normalized === "o1" ||
+    normalized.startsWith("o1-")
+  );
+}
+
+function resolveExtractionModel(files: File[]): string {
+  const preferredModel = env.OPENAI_MODEL;
+  const hasPdf = files.some((file) => file.type === "application/pdf");
+
+  if (!hasPdf || modelSupportsPdfInput(preferredModel)) {
+    return preferredModel;
+  }
+
+  return OPENAI_PDF_FALLBACK_MODEL;
+}
+
+const VEHICLE_BRIEF_FIELD_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    vin: { type: ["string", "null"] },
+    firstRegistration: { type: ["string", "null"] },
+    color: { type: ["string", "null"] },
+    brand: { type: ["string", "null"] },
+    model: { type: ["string", "null"] },
+    hsn: { type: ["string", "null"] },
+    tsn: { type: ["string", "null"] },
+    registrationDocNumber: { type: ["string", "null"] },
+    fuelType: { type: ["string", "null"] },
+    co2Emission: { type: ["number", "null"] },
+    displacement: { type: ["number", "null"] },
+    power: { type: ["number", "null"] },
+    powerKw: { type: ["number", "null"] },
+    bodyType: { type: ["string", "null"] },
+    driveType: { type: ["string", "null"] },
+    emissionClass: { type: ["string", "null"] },
+    previousOwners: { type: ["number", "null"] },
+  },
+  required: [
+    "vin",
+    "firstRegistration",
+    "color",
+    "brand",
+    "model",
+    "hsn",
+    "tsn",
+    "registrationDocNumber",
+    "fuelType",
+    "co2Emission",
+    "displacement",
+    "power",
+    "powerKw",
+    "bodyType",
+    "driveType",
+    "emissionClass",
+    "previousOwners",
+  ],
+} as const;
+
+async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefExtractFields; warnings: string[] }> {
+  const model = resolveExtractionModel(files);
+  const content: Array<Record<string, unknown>> = [
+    {
+      type: "input_text",
+      text: [
+        "Extrahiere Fahrzeugdaten aus den hochgeladenen deutschen Fahrzeugpapieren.",
+        "Liefere ausschließlich JSON gemäß Schema.",
+        "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
+        "Nutze für firstRegistration das Format YYYY-MM-DD.",
+        "fuelType soll auf Benzin, Diesel, Elektro, Hybrid oder Gas normalisiert werden.",
+        "powerKw ist die Nennleistung in kW, z.B. aus Feld P.2 oder aus 'Nennleistung'.",
+        "power ist Leistung in PS und nur dann zu befüllen, wenn PS explizit angegeben sind; falls nur kW vorhanden sind, power leer lassen.",
+        "co2Emission ist der CO2-Ausstoß in g/km; bei Elektrofahrzeugen mit 0 g/km gib 0 zurück.",
+        "bodyType ist die Karosserieform und soll auf Limousine, Kombi, SUV, Coupé, Cabrio, Van/Minivan, Transporter oder Pickup normalisiert werden.",
+        "driveType ist der Antrieb und soll nur befüllt werden, wenn er klar erkennbar ist; normalisiere auf FWD, RWD, AWD oder 4x4.",
+        "emissionClass ist die Schadstoffklasse und soll z.B. als Euro 6 oder Euro 6d-TEMP zurückgegeben werden.",
+        "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
+      ].join(" "),
+    },
+  ];
+
+  for (const file of files) {
+    const bytes = await file.arrayBuffer();
+    const base64 = Buffer.from(bytes).toString("base64");
+    const dataUrl = `data:${file.type};base64,${base64}`;
+
+    if (file.type === "application/pdf") {
+      content.push({
+        type: "input_file",
+        filename: file.name || "fahrzeugbrief.pdf",
+        file_data: dataUrl,
+      });
+      continue;
+    }
+
+    content.push({
+      type: "input_image",
+      image_url: dataUrl,
+    });
+  }
+
+  const requestBody = {
+    model,
+    input: [
+      {
+        role: "user",
+        content,
+      },
+    ],
+    text: {
+      format: {
+        type: "json_schema",
+        name: "vehicle_brief_extract",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            fields: VEHICLE_BRIEF_FIELD_SCHEMA,
+            warnings: {
+              type: "array",
+              items: { type: "string" },
+            },
+          },
+          required: ["fields", "warnings"],
+        },
+      },
+    },
+    max_output_tokens: 700,
+  };
+
+  const tempDir = await mkdtemp(join(tmpdir(), "mainauto-openai-"));
+  const payloadPath = join(tempDir, "request.json");
+
+  let stdout = "";
+  let stderr = "";
+
+  try {
+    await writeFile(payloadPath, JSON.stringify(requestBody), "utf8");
+    ({ stdout, stderr } = await execFileAsync("curl", [
+      "-sS",
+      "-X",
+      "POST",
+      OPENAI_RESPONSES_URL,
+      "-H",
+      `Authorization: Bearer ${env.OPENAI_API_KEY}`,
+      "-H",
+      "Content-Type: application/json",
+      "--data-binary",
+      `@${payloadPath}`,
+      "-w",
+      "\n%{http_code}",
+    ]));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+
+  const lastNewline = stdout.lastIndexOf("\n");
+  if (lastNewline === -1) {
+    throw new Error(`OpenAI transport error [model=${model}]: malformed curl response ${stderr.slice(0, 300)}`);
+  }
+
+  const responseBody = stdout.slice(0, lastNewline);
+  const status = Number(stdout.slice(lastNewline + 1).trim());
+
+  if (!Number.isFinite(status)) {
+    throw new Error(`OpenAI transport error [model=${model}]: invalid status code ${stderr.slice(0, 300)}`);
+  }
+
+  if (status < 200 || status >= 300) {
+    throw new Error(`OpenAI error (${status}) [model=${model}]: ${responseBody.slice(0, 500)}`);
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(responseBody);
+  } catch {
+    throw new Error(`OpenAI transport error [model=${model}]: response is not valid JSON`);
+  }
+
+  const rawText = extractOutputText(payload);
+  if (!rawText) {
+    throw new Error("No extractable output returned by OpenAI.");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(stripMarkdownCodeBlock(rawText));
+  } catch {
+    throw new Error("OpenAI response is not valid JSON.");
+  }
+
+  const root = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  const modelWarnings = Array.isArray(root.warnings)
+    ? root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    : [];
+  const modelFields = "fields" in root ? root.fields : root;
+  const normalized = normalizeExtractedFields(modelFields);
+
+  return {
+    fields: normalized.fields,
+    warnings: [...modelWarnings, ...normalized.warnings],
+  };
+}
+
+// POST /api/vehicles/extract-brief - extract vehicle fields from uploaded brief
+vehiclesRouter.post("/extract-brief", async (c) => {
+  if (!env.OPENAI_API_KEY) {
+    return c.json(
+      { error: { message: "OpenAI API key fehlt auf dem Server", code: "OPENAI_NOT_CONFIGURED" } },
+      503
+    );
+  }
+
+  const formData = await c.req.formData();
+  const uploaded = [...formData.getAll("files"), ...formData.getAll("files[]")];
+  const files = uploaded.filter((item): item is File => item instanceof File);
+
+  if (files.length === 0) {
+    return c.json({ error: { message: "Keine Datei hochgeladen", code: "NO_FILE" } }, 400);
+  }
+
+  if (files.length > BRIEF_MAX_FILES) {
+    return c.json(
+      { error: { message: `Maximal ${BRIEF_MAX_FILES} Dateien erlaubt`, code: "TOO_MANY_FILES" } },
+      400
+    );
+  }
+
+  for (const file of files) {
+    if (!BRIEF_ALLOWED_MIME_TYPES.has(file.type)) {
+      return c.json(
+        { error: { message: `Dateityp nicht unterstützt: ${file.type || "unknown"}`, code: "UNSUPPORTED_FILE_TYPE" } },
+        400
+      );
+    }
+    if (file.size > BRIEF_MAX_FILE_SIZE_BYTES) {
+      return c.json(
+        { error: { message: `Datei zu groß: ${file.name}`, code: "FILE_TOO_LARGE" } },
+        400
+      );
+    }
+  }
+
+  try {
+    const extracted = await extractWithOpenAi(files);
+    const detectedFieldCount = Object.values(extracted.fields).filter((value) => value !== undefined).length;
+    const response = VehicleBriefExtractResponseSchema.parse({
+      fields: extracted.fields,
+      warnings: extracted.warnings,
+      detectedFieldCount,
+    });
+
+    return c.json({ data: response });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown extraction error";
+    console.error("[vehicles] brief_extraction_failed", { message });
+    return c.json(
+      {
+        error: {
+          message: "Fahrzeugbrief konnte nicht ausgewertet werden",
+          code: "EXTRACTION_FAILED",
+        },
+      },
+      502
+    );
+  }
+});
 
 // GET /api/vehicles - list all vehicles with optional filters
 vehiclesRouter.get("/", async (c) => {

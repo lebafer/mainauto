@@ -1,4 +1,3 @@
-import "@vibecodeapp/proxy"; // DO NOT REMOVE OTHERWISE VIBECODE PROXY WILL NOT WORK
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -106,11 +105,12 @@ app.get("/health", async (c) => {
   }
 });
 
-app.on(["POST", "GET"], "/api/auth/**", (c) => {
+// Hono uses `*` to match the full remaining auth subpath.
+app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-app.options("/api/auth/**", (c) => c.text("", 204));
+app.options("/api/auth/*", (c) => c.text("", 204));
 
 app.use("/api/*", async (c, next) => {
   if (c.req.path.startsWith("/api/auth")) {

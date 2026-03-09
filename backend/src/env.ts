@@ -32,6 +32,14 @@ const envSchema = z.object({
 
   // Comma-separated list of allowed origins, supports wildcard prefix via https://*.example.com
   CORS_ALLOWED_ORIGINS: z.string().optional(),
+
+  // AI extraction
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z
+    .string()
+    .optional()
+    .default("gpt-4o-mini")
+    .transform((value) => value.trim() || "gpt-4o-mini"),
 });
 
 /**

@@ -409,6 +409,9 @@ function generateContract(
     year: number | null;
     mileage: number;
     vin: string | null;
+    hsn: string | null;
+    tsn: string | null;
+    registrationDocNumber: string | null;
     color: string | null;
     fuelType: string | null;
     transmission: string | null;

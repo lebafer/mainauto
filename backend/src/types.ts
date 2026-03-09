@@ -131,6 +131,37 @@ export const VehicleUpdateSchema = z.object({
 export type VehicleCreate = z.infer<typeof VehicleCreateSchema>;
 export type VehicleUpdate = z.infer<typeof VehicleUpdateSchema>;
 
+// ─── Vehicle Brief Extraction Schemas ──────────────────────────
+
+export const VehicleBriefExtractFieldsSchema = z.object({
+  vin: z.string().optional(),
+  firstRegistration: z.string().optional(), // ISO date string (YYYY-MM-DD)
+  color: z.string().optional(),
+  brand: z.string().optional(),
+  model: z.string().optional(),
+  hsn: z.string().optional(),
+  tsn: z.string().optional(),
+  registrationDocNumber: z.string().optional(),
+  fuelType: z.string().optional(),
+  co2Emission: z.number().optional(),
+  displacement: z.number().int().optional(),
+  power: z.number().optional(),
+  powerKw: z.number().optional(),
+  bodyType: z.string().optional(),
+  driveType: z.string().optional(),
+  emissionClass: z.string().optional(),
+  previousOwners: z.number().int().optional(),
+});
+
+export const VehicleBriefExtractResponseSchema = z.object({
+  fields: VehicleBriefExtractFieldsSchema,
+  warnings: z.array(z.string()).default([]),
+  detectedFieldCount: z.number().int().min(0),
+});
+
+export type VehicleBriefExtractFields = z.infer<typeof VehicleBriefExtractFieldsSchema>;
+export type VehicleBriefExtractResponse = z.infer<typeof VehicleBriefExtractResponseSchema>;
+
 // ─── Customer Schemas ────────────────────────────────────────
 
 export const CustomerCreateSchema = z.object({
