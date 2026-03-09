@@ -147,6 +147,10 @@ export const VehicleBriefExtractFieldsSchema = z.object({
   displacement: z.number().int().optional(),
   power: z.number().optional(),
   powerKw: z.number().optional(),
+  bodyType: z.string().optional(),
+  driveType: z.string().optional(),
+  emissionClass: z.string().optional(),
+  previousOwners: z.number().int().optional(),
 });
 
 export const VehicleBriefExtractResponseSchema = z.object({

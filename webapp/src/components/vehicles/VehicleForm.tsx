@@ -149,6 +149,10 @@ const BRIEF_PREFILL_FIELDS: Array<keyof VehicleBriefExtractFields> = [
   "displacement",
   "power",
   "powerKw",
+  "bodyType",
+  "driveType",
+  "emissionClass",
+  "previousOwners",
 ];
 
 function RequiredMark() {

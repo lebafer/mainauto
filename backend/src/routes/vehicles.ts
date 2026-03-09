@@ -119,6 +119,55 @@ function normalizeFuelType(value: unknown): string | undefined {
   return raw;
 }
 
+function normalizeBodyType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("suv") || normalized.includes("geländ")) return "SUV";
+  if (normalized.includes("kombi")) return "Kombi";
+  if (normalized.includes("limousine") || normalized.includes("schr")) return "Limousine";
+  if (normalized.includes("coup")) return "Coupé";
+  if (normalized.includes("cabrio") || normalized.includes("roadster")) return "Cabrio";
+  if (normalized.includes("van") || normalized.includes("minivan") || normalized.includes("bus")) return "Van/Minivan";
+  if (normalized.includes("transporter") || normalized.includes("kasten")) return "Transporter";
+  if (normalized.includes("pickup") || normalized.includes("pick-up")) return "Pickup";
+
+  return raw;
+}
+
+function normalizeDriveType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("allrad") || normalized.includes("awd")) return "AWD";
+  if (normalized.includes("4x4")) return "4x4";
+  if (normalized.includes("front") || normalized.includes("fwd") || normalized.includes("vorderrad")) return "FWD";
+  if (normalized.includes("heck") || normalized.includes("rwd") || normalized.includes("hinterrad")) return "RWD";
+
+  return undefined;
+}
+
+function normalizeEmissionClass(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase().replace(/\s+/g, "");
+  const euroMatch = normalized.match(/euro(\d)(d-temp|dtemp|d)?/);
+
+  if (!euroMatch) {
+    return raw;
+  }
+
+  const [, level, suffix] = euroMatch;
+  if (!suffix) return `Euro ${level}`;
+  if (suffix === "d") return `Euro ${level}d`;
+  return `Euro ${level}d-TEMP`;
+}
+
 function normalizeDate(value: unknown): string | undefined {
   const raw = normalizeString(value);
   if (!raw) return undefined;
@@ -214,6 +263,13 @@ function normalizeExtractedFields(raw: unknown): { fields: VehicleBriefExtractFi
     })(),
     power: normalizeNumber(input.power),
     powerKw: normalizeNumber(input.powerKw),
+    bodyType: normalizeBodyType(input.bodyType),
+    driveType: normalizeDriveType(input.driveType),
+    emissionClass: normalizeEmissionClass(input.emissionClass),
+    previousOwners: (() => {
+      const value = normalizeNumber(input.previousOwners);
+      return value === undefined ? undefined : Math.round(value);
+    })(),
   };
 
   if (input.vin && !normalized.vin) {
@@ -274,6 +330,10 @@ const VEHICLE_BRIEF_FIELD_SCHEMA = {
     displacement: { type: ["number", "null"] },
     power: { type: ["number", "null"] },
     powerKw: { type: ["number", "null"] },
+    bodyType: { type: ["string", "null"] },
+    driveType: { type: ["string", "null"] },
+    emissionClass: { type: ["string", "null"] },
+    previousOwners: { type: ["number", "null"] },
   },
   required: [
     "vin",
@@ -289,6 +349,10 @@ const VEHICLE_BRIEF_FIELD_SCHEMA = {
     "displacement",
     "power",
     "powerKw",
+    "bodyType",
+    "driveType",
+    "emissionClass",
+    "previousOwners",
   ],
 } as const;
 
@@ -306,6 +370,10 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
         "powerKw ist die Nennleistung in kW, z.B. aus Feld P.2 oder aus 'Nennleistung'.",
         "power ist Leistung in PS und nur dann zu befüllen, wenn PS explizit angegeben sind; falls nur kW vorhanden sind, power leer lassen.",
         "co2Emission ist der CO2-Ausstoß in g/km; bei Elektrofahrzeugen mit 0 g/km gib 0 zurück.",
+        "bodyType ist die Karosserieform und soll auf Limousine, Kombi, SUV, Coupé, Cabrio, Van/Minivan, Transporter oder Pickup normalisiert werden.",
+        "driveType ist der Antrieb und soll nur befüllt werden, wenn er klar erkennbar ist; normalisiere auf FWD, RWD, AWD oder 4x4.",
+        "emissionClass ist die Schadstoffklasse und soll z.B. als Euro 6 oder Euro 6d-TEMP zurückgegeben werden.",
+        "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
       ].join(" "),
     },
   ];
