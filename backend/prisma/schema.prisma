@@ -73,6 +73,9 @@ model Supplier {
   name            String
   supplierType    String    @default("gewerblich") // "privat" | "gewerblich"
   address         String?
+  street          String?
+  zip             String?
+  city            String?
   country         String?
   contactPerson   String?   // Ansprechpartner
   phone           String?
@@ -94,6 +97,9 @@ model Vehicle {
   year            Int?
   mileage         Int
   vin             String?
+  hsn             String?   // Herstellerschlüsselnummer
+  tsn             String?   // Typschlüsselnummer
+  registrationDocNumber String? // Fahrzeugbrief-Nr.
   color           String?
   fuelType        String?
   transmission    String?
@@ -200,6 +206,9 @@ model Customer {
   country     String?  // Land
   company     String?
   taxId       String?   // Steuernummer / USt-IdNr.
+  idDocumentType String?
+  idDocumentNumber String?
+  idDocumentValidUntil DateTime?
   notes       String?
   customerType String   @default("privat") // privat | gewerblich
   vehicles    Vehicle[]

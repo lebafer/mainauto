@@ -78,10 +78,13 @@ customersRouter.post(
   async (c) => {
     const data = c.req.valid("json");
 
-    // Convert empty email string to null
+    // Convert empty strings to null for nullable fields and parse date
     const createData = {
       ...data,
       email: data.email === "" ? null : data.email,
+      idDocumentType: data.idDocumentType ? data.idDocumentType : null,
+      idDocumentNumber: data.idDocumentNumber ? data.idDocumentNumber : null,
+      idDocumentValidUntil: data.idDocumentValidUntil ? new Date(data.idDocumentValidUntil) : null,
     };
 
     const customer = await prisma.customer.create({
@@ -105,10 +108,15 @@ customersRouter.put(
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     }
 
-    // Convert empty email string to null
+    // Convert empty strings to null for nullable fields and parse date
     const updateData = {
       ...data,
       email: data.email === "" ? null : data.email,
+      idDocumentType: data.idDocumentType !== undefined ? (data.idDocumentType || null) : undefined,
+      idDocumentNumber: data.idDocumentNumber !== undefined ? (data.idDocumentNumber || null) : undefined,
+      idDocumentValidUntil: data.idDocumentValidUntil !== undefined
+        ? (data.idDocumentValidUntil ? new Date(data.idDocumentValidUntil) : null)
+        : undefined,
     };
 
     const customer = await prisma.customer.update({

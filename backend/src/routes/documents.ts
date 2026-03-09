@@ -168,6 +168,9 @@ function generateOffer(
     year: number | null;
     mileage: number;
     vin: string | null;
+    hsn: string | null;
+    tsn: string | null;
+    registrationDocNumber: string | null;
     color: string | null;
     fuelType: string | null;
     transmission: string | null;
@@ -471,7 +474,9 @@ function generateContract(
   if (vehicle.bodyType) vehicleRows.push(["Aufbau", vehicle.bodyType]);
   if (powerStr) vehicleRows.push(["Leistung", powerStr]);
   if (vehicle.vin) vehicleRows.push(["Fahrgestell-Nr.", vehicle.vin]);
-  vehicleRows.push(["Fahrzeugbrief-Nr.", ""]);
+  if (vehicle.hsn) vehicleRows.push(["HSN", vehicle.hsn]);
+  if (vehicle.tsn) vehicleRows.push(["TSN", vehicle.tsn]);
+  vehicleRows.push(["Fahrzeugbrief-Nr.", vehicle.registrationDocNumber ?? ""]);
   if (vehicle.color) vehicleRows.push(["Farbe", vehicle.color]);
   if (vehicle.transmission) vehicleRows.push(["Getriebe", vehicle.transmission]);
   if (vehicle.displacement) vehicleRows.push(["Hubraum", vehicle.displacement + " ccm"]);
@@ -807,11 +812,15 @@ function generateGelangensbestaetigung(
     country: string | null;
     phone: string | null;
     taxId: string | null;
+    idDocumentType: string | null;
+    idDocumentNumber: string | null;
+    idDocumentValidUntil: Date | string | null;
   },
   extra: {
     dateOfReceipt: string;
     passportType: string;
     passportNumber: string;
+    passportValidUntil: string;
   }
 ): string {
   // Build customer name line
@@ -839,6 +848,18 @@ function generateGelangensbestaetigung(
   } else if (vehicle.power) {
     powerStr = `${vehicle.power} PS`;
   }
+
+  const passportTypeValue = extra.passportType || customer.idDocumentType || "";
+  const passportNumberValue = extra.passportNumber || customer.idDocumentNumber || "";
+  const passportValidUntilRaw =
+    extra.passportValidUntil ||
+    (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : "");
+  const passportValidUntilValue = /^\d{4}-\d{2}-\d{2}$/.test(passportValidUntilRaw)
+    ? formatDateDE(passportValidUntilRaw)
+    : passportValidUntilRaw;
+  const dateOfReceiptValue = /^\d{4}-\d{2}-\d{2}$/.test(extra.dateOfReceipt)
+    ? formatDateDE(extra.dateOfReceipt)
+    : extra.dateOfReceipt;
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -874,7 +895,7 @@ function generateGelangensbestaetigung(
 
   .confirm-text { font-size: 8.5pt; margin-bottom: 20px; line-height: 1.6; border-top: 1px solid #ccc; padding-top: 10px; }
 
-  .sig-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 16px; }
+  .sig-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 16px; }
   .sig-item { }
   .sig-label { font-size: 7.5pt; color: #555; margin-bottom: 4px; line-height: 1.3; }
   .sig-value { border-bottom: 1px solid #000; min-height: 22px; padding-bottom: 2px; font-size: 9pt; }
@@ -943,15 +964,19 @@ function generateGelangensbestaetigung(
   <div class="sig-grid">
     <div class="sig-item">
       <div class="sig-label">Passport type / Art des Ausweisdokuments</div>
-      <div class="sig-value">${extra.passportType}</div>
+      <div class="sig-value">${passportTypeValue}</div>
     </div>
     <div class="sig-item">
       <div class="sig-label">Passport number / Ausweisnummer</div>
-      <div class="sig-value">${extra.passportNumber}</div>
+      <div class="sig-value">${passportNumberValue}</div>
+    </div>
+    <div class="sig-item">
+      <div class="sig-label">Valid until / Gültig bis</div>
+      <div class="sig-value">${passportValidUntilValue}</div>
     </div>
     <div class="sig-item">
       <div class="sig-label">Date of receipt / Datum des Empfangs</div>
-      <div class="sig-value">${extra.dateOfReceipt}</div>
+      <div class="sig-value">${dateOfReceiptValue}</div>
     </div>
   </div>
 
@@ -977,7 +1002,7 @@ documentsRouter.post(
   "/generate-gelangensbestaetigung",
   async (c) => {
     const body = await c.req.json();
-    const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber } = body;
+    const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
 
     if (!vehicleId || !customerId) {
       return c.json({ error: { message: "vehicleId and customerId required", code: "BAD_REQUEST" } }, 400);
@@ -991,8 +1016,11 @@ documentsRouter.post(
 
     const html = generateGelangensbestaetigung(vehicle, customer, {
       dateOfReceipt: dateOfReceipt ?? "",
-      passportType: passportType ?? "",
-      passportNumber: passportNumber ?? "",
+      passportType: passportType ?? customer.idDocumentType ?? "",
+      passportNumber: passportNumber ?? customer.idDocumentNumber ?? "",
+      passportValidUntil:
+        passportValidUntil ??
+        (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
     });
 
     try {
@@ -1012,15 +1040,18 @@ documentsRouter.post(
   "/generate-gelangensbestaetigung-html",
   async (c) => {
     const body = await c.req.json();
-    const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber } = body;
+    const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     const html = generateGelangensbestaetigung(vehicle, customer, {
       dateOfReceipt: dateOfReceipt ?? "",
-      passportType: passportType ?? "",
-      passportNumber: passportNumber ?? "",
+      passportType: passportType ?? customer.idDocumentType ?? "",
+      passportNumber: passportNumber ?? customer.idDocumentNumber ?? "",
+      passportValidUntil:
+        passportValidUntil ??
+        (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
     });
     return c.json({ data: { html } });
   }
@@ -1035,6 +1066,9 @@ function generateVermittlungsvertrag(
     year: number | null;
     mileage: number;
     vin: string | null;
+    hsn: string | null;
+    tsn: string | null;
+    registrationDocNumber: string | null;
     color: string | null;
     fuelType: string | null;
     transmission: string | null;
@@ -1111,7 +1145,9 @@ function generateVermittlungsvertrag(
   if (vehicle.bodyType) vehicleRows.push(["Aufbau", vehicle.bodyType]);
   if (powerStr) vehicleRows.push(["Leistung", powerStr]);
   if (vehicle.vin) vehicleRows.push(["Fahrgestell-Nr.", vehicle.vin]);
-  vehicleRows.push(["Fahrzeugbrief-Nr.", ""]);
+  if (vehicle.hsn) vehicleRows.push(["HSN", vehicle.hsn]);
+  if (vehicle.tsn) vehicleRows.push(["TSN", vehicle.tsn]);
+  vehicleRows.push(["Fahrzeugbrief-Nr.", vehicle.registrationDocNumber ?? ""]);
   if (vehicle.color) vehicleRows.push(["Farbe", vehicle.color]);
   if (vehicle.transmission) vehicleRows.push(["Getriebe", vehicle.transmission]);
   if (vehicle.displacement) vehicleRows.push(["Hubraum", vehicle.displacement + " ccm"]);
@@ -1351,7 +1387,18 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
     const s = await prisma.supplier.findUnique({ where: { id: buyerId } });
     if (!s) return c.json({ error: { message: "Buyer (supplier) not found", code: "NOT_FOUND" } }, 404);
     const nameParts = (s.contactPerson ?? s.name).split(" ");
-    buyer = { firstName: nameParts[0] ?? s.name, lastName: nameParts.slice(1).join(" ") || "", company: s.supplierType === "gewerblich" ? s.name : null, address: s.address ?? null, city: null, zip: null, country: s.country ?? null, email: null, phone: s.phone ?? null, taxId: null };
+    buyer = {
+      firstName: nameParts[0] ?? s.name,
+      lastName: nameParts.slice(1).join(" ") || "",
+      company: s.supplierType === "gewerblich" ? s.name : null,
+      address: s.street ?? s.address ?? null,
+      city: s.city ?? null,
+      zip: s.zip ?? null,
+      country: s.country ?? null,
+      email: s.email ?? null,
+      phone: s.phone ?? null,
+      taxId: null,
+    };
   }
 
   // Resolve seller
@@ -1364,7 +1411,18 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
     const s = await prisma.supplier.findUnique({ where: { id: sellerId } });
     if (!s) return c.json({ error: { message: "Seller (supplier) not found", code: "NOT_FOUND" } }, 404);
     const nameParts = (s.contactPerson ?? s.name).split(" ");
-    seller = { firstName: nameParts[0] ?? s.name, lastName: nameParts.slice(1).join(" ") || "", company: s.supplierType === "gewerblich" ? s.name : null, address: s.address ?? null, city: null, zip: null, country: s.country ?? null, email: null, phone: s.phone ?? null, taxId: null };
+    seller = {
+      firstName: nameParts[0] ?? s.name,
+      lastName: nameParts.slice(1).join(" ") || "",
+      company: s.supplierType === "gewerblich" ? s.name : null,
+      address: s.street ?? s.address ?? null,
+      city: s.city ?? null,
+      zip: s.zip ?? null,
+      country: s.country ?? null,
+      email: s.email ?? null,
+      phone: s.phone ?? null,
+      taxId: null,
+    };
   } else if (manualSeller) {
     seller = { firstName: manualSeller.firstName, lastName: manualSeller.lastName, company: manualSeller.company ?? null, address: manualSeller.address ?? null, city: manualSeller.city ?? null, zip: manualSeller.zip ?? null, country: manualSeller.country ?? null, email: manualSeller.email ?? null, phone: manualSeller.phone ?? null, taxId: manualSeller.taxId ?? null };
   } else {
@@ -1416,7 +1474,18 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
     const s = await prisma.supplier.findUnique({ where: { id: buyerId } });
     if (!s) return c.json({ error: { message: "Buyer not found", code: "NOT_FOUND" } }, 404);
     const nameParts = (s.contactPerson ?? s.name).split(" ");
-    buyer = { firstName: nameParts[0] ?? s.name, lastName: nameParts.slice(1).join(" ") || "", company: s.supplierType === "gewerblich" ? s.name : null, address: s.address ?? null, city: null, zip: null, country: s.country ?? null, email: null, phone: s.phone ?? null, taxId: null };
+    buyer = {
+      firstName: nameParts[0] ?? s.name,
+      lastName: nameParts.slice(1).join(" ") || "",
+      company: s.supplierType === "gewerblich" ? s.name : null,
+      address: s.street ?? s.address ?? null,
+      city: s.city ?? null,
+      zip: s.zip ?? null,
+      country: s.country ?? null,
+      email: s.email ?? null,
+      phone: s.phone ?? null,
+      taxId: null,
+    };
   }
 
   let seller: { firstName: string; lastName: string; company: string | null; address: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; taxId: string | null } | null = null;
@@ -1428,7 +1497,18 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
     const s = await prisma.supplier.findUnique({ where: { id: sellerId } });
     if (!s) return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
     const nameParts = (s.contactPerson ?? s.name).split(" ");
-    seller = { firstName: nameParts[0] ?? s.name, lastName: nameParts.slice(1).join(" ") || "", company: s.supplierType === "gewerblich" ? s.name : null, address: s.address ?? null, city: null, zip: null, country: s.country ?? null, email: null, phone: s.phone ?? null, taxId: null };
+    seller = {
+      firstName: nameParts[0] ?? s.name,
+      lastName: nameParts.slice(1).join(" ") || "",
+      company: s.supplierType === "gewerblich" ? s.name : null,
+      address: s.street ?? s.address ?? null,
+      city: s.city ?? null,
+      zip: s.zip ?? null,
+      country: s.country ?? null,
+      email: s.email ?? null,
+      phone: s.phone ?? null,
+      taxId: null,
+    };
   } else if (manualSeller) {
     seller = { firstName: manualSeller.firstName, lastName: manualSeller.lastName, company: manualSeller.company ?? null, address: manualSeller.address ?? null, city: manualSeller.city ?? null, zip: manualSeller.zip ?? null, country: manualSeller.country ?? null, email: manualSeller.email ?? null, phone: manualSeller.phone ?? null, taxId: manualSeller.taxId ?? null };
   } else {

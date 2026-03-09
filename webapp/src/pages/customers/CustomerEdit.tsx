@@ -56,6 +56,9 @@ interface CustomerFormData {
   country: string;
   company: string;
   taxId: string;
+  idDocumentType: string;
+  idDocumentNumber: string;
+  idDocumentValidUntil: string;
   notes: string;
   customerType: "privat" | "gewerblich";
 }
@@ -115,6 +118,9 @@ export default function CustomerEdit() {
       country: "",
       company: "",
       taxId: "",
+      idDocumentType: "",
+      idDocumentNumber: "",
+      idDocumentValidUntil: "",
       notes: "",
       customerType: "privat",
     },
@@ -137,6 +143,11 @@ export default function CustomerEdit() {
         country: customer.country ?? "",
         company: customer.company ?? "",
         taxId: customer.taxId ?? "",
+        idDocumentType: customer.idDocumentType ?? "",
+        idDocumentNumber: customer.idDocumentNumber ?? "",
+        idDocumentValidUntil: customer.idDocumentValidUntil
+          ? new Date(customer.idDocumentValidUntil).toISOString().split("T")[0]
+          : "",
         notes: customer.notes ?? "",
         customerType: customer.customerType ?? "privat",
       });
@@ -245,7 +256,7 @@ export default function CustomerEdit() {
               <CardHeader>
                 <CardTitle className="text-lg">Persönliche Daten</CardTitle>
                 <CardDescription>
-                  Name und Kontaktdaten des Kunden
+                  Name und Adresse des Kunden
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
@@ -280,6 +291,55 @@ export default function CustomerEdit() {
                   ) : null}
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="address">Strasse und Hausnummer</Label>
+                  <Input
+                    id="address"
+                    placeholder="Musterstrasse 1"
+                    {...register("address")}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="zip">PLZ</Label>
+                  <Input id="zip" placeholder="12345" {...register("zip")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city">Ort</Label>
+                  <Input
+                    id="city"
+                    placeholder="Musterstadt"
+                    {...register("city")}
+                  />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="country">Land</Label>
+                  <Controller
+                    control={control}
+                    name="country"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Land auswählen..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {COUNTRIES.map((c) => (
+                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Privat: Kontakt */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Kontakt</CardTitle>
+                <CardDescription>Kontaktdaten des Kunden</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
                   <Label htmlFor="email">E-Mail</Label>
                   <Input
                     id="email"
@@ -304,57 +364,6 @@ export default function CustomerEdit() {
                     type="tel"
                     placeholder="+49 123 456789"
                     {...register("phone2")}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Privat: Adresse */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Adresse</CardTitle>
-                <CardDescription>Anschrift des Kunden</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address">Strasse und Hausnummer</Label>
-                  <Input
-                    id="address"
-                    placeholder="Musterstrasse 1"
-                    {...register("address")}
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="zip">PLZ</Label>
-                    <Input id="zip" placeholder="12345" {...register("zip")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="city">Ort</Label>
-                    <Input
-                      id="city"
-                      placeholder="Musterstadt"
-                      {...register("city")}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Land</Label>
-                  <Controller
-                    control={control}
-                    name="country"
-                    render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Land auswählen..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {COUNTRIES.map((c) => (
-                            <SelectItem key={c} value={c}>{c}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
                   />
                 </div>
               </CardContent>
@@ -522,6 +531,40 @@ export default function CustomerEdit() {
             </Card>
           </>
         )}
+
+        {/* Personaldaten */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Personaldaten</CardTitle>
+            <CardDescription>Ausweisdaten für Dokumente (optional)</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="idDocumentType">Art des Ausweisdokuments</Label>
+              <Input
+                id="idDocumentType"
+                placeholder="z.B. Reisepass"
+                {...register("idDocumentType")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="idDocumentNumber">Ausweisnummer</Label>
+              <Input
+                id="idDocumentNumber"
+                placeholder="z.B. C01X00T47"
+                {...register("idDocumentNumber")}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="idDocumentValidUntil">Gültig bis</Label>
+              <Input
+                id="idDocumentValidUntil"
+                type="date"
+                {...register("idDocumentValidUntil")}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Notizen - always shown */}
         <Card>

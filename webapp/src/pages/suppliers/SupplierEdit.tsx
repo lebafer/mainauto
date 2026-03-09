@@ -48,7 +48,9 @@ interface SupplierFormData {
   name: string;
   supplierType: "privat" | "gewerblich";
   contactPerson: string;
-  address: string;
+  street: string;
+  zip: string;
+  city: string;
   country: string;
   phone: string;
   phone2: string;
@@ -58,8 +60,12 @@ interface SupplierFormData {
   notes: string;
 }
 
-interface Supplier extends SupplierFormData {
+interface Supplier extends Omit<SupplierFormData, "street" | "zip" | "city"> {
   id: string;
+  street?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  address?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -104,7 +110,9 @@ export default function SupplierEdit() {
       name: "",
       supplierType: "gewerblich",
       contactPerson: "",
-      address: "",
+      street: "",
+      zip: "",
+      city: "",
       country: "",
       phone: "",
       phone2: "",
@@ -123,7 +131,9 @@ export default function SupplierEdit() {
         name: supplier.name ?? "",
         supplierType: supplier.supplierType ?? "gewerblich",
         contactPerson: supplier.contactPerson ?? "",
-        address: supplier.address ?? "",
+        street: supplier.street ?? supplier.address ?? "",
+        zip: supplier.zip ?? "",
+        city: supplier.city ?? "",
         country: supplier.country ?? "",
         phone: supplier.phone ?? "",
         phone2: supplier.phone2 ?? "",
@@ -301,8 +311,8 @@ export default function SupplierEdit() {
                   <Label htmlFor="website">Webseite</Label>
                   <Input
                     id="website"
-                    type="url"
-                    placeholder="https://www.beispiel.de"
+                    type="text"
+                    placeholder="www.beispiel.de"
                     {...register("website")}
                   />
                 </div>
@@ -317,12 +327,22 @@ export default function SupplierEdit() {
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="address">Strasse, PLZ, Ort</Label>
+                  <Label htmlFor="street">Strasse und Hausnummer</Label>
                   <Input
-                    id="address"
-                    placeholder="Musterstrasse 1, 12345 Musterstadt"
-                    {...register("address")}
+                    id="street"
+                    placeholder="Musterstrasse 1"
+                    {...register("street")}
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">PLZ</Label>
+                    <Input id="zip" placeholder="12345" {...register("zip")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">Ort</Label>
+                    <Input id="city" placeholder="Musterstadt" {...register("city")} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="country">Land</Label>
@@ -404,12 +424,22 @@ export default function SupplierEdit() {
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="address">Strasse, PLZ, Ort</Label>
+                  <Label htmlFor="street">Strasse und Hausnummer</Label>
                   <Input
-                    id="address"
-                    placeholder="Musterstrasse 1, 12345 Musterstadt"
-                    {...register("address")}
+                    id="street"
+                    placeholder="Musterstrasse 1"
+                    {...register("street")}
                   />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="zip">PLZ</Label>
+                    <Input id="zip" placeholder="12345" {...register("zip")} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="city">Ort</Label>
+                    <Input id="city" placeholder="Musterstadt" {...register("city")} />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="country">Land</Label>
