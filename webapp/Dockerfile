@@ -6,6 +6,8 @@ COPY webapp/package.json webapp/bun.lock ./
 RUN bun install
 
 COPY webapp ./
+# Keep shared API contracts available for imports like ../../../../backend/src/types
+COPY backend/src/types.ts /backend/src/types.ts
 
 ARG VITE_BACKEND_URL=
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
