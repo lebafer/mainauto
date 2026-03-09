@@ -81,6 +81,44 @@ function normalizeVin(value: unknown): string | undefined {
   return normalized.length === 17 ? normalized : undefined;
 }
 
+function normalizeFuelType(value: unknown): string | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+
+  const normalized = raw.toLowerCase();
+
+  if (
+    normalized.includes("elektro") ||
+    normalized.includes("electric") ||
+    normalized.includes("strom") ||
+    normalized.includes("bev")
+  ) {
+    return "Elektro";
+  }
+
+  if (normalized.includes("diesel")) {
+    return "Diesel";
+  }
+
+  if (normalized.includes("benzin") || normalized.includes("petrol")) {
+    return "Benzin";
+  }
+
+  if (
+    normalized.includes("hybrid") ||
+    normalized.includes("plug-in") ||
+    normalized.includes("plugin")
+  ) {
+    return "Hybrid";
+  }
+
+  if (normalized.includes("gas") || normalized.includes("cng") || normalized.includes("lpg")) {
+    return "Gas";
+  }
+
+  return raw;
+}
+
 function normalizeDate(value: unknown): string | undefined {
   const raw = normalizeString(value);
   if (!raw) return undefined;
@@ -168,6 +206,7 @@ function normalizeExtractedFields(raw: unknown): { fields: VehicleBriefExtractFi
     hsn: normalizeString(input.hsn)?.toUpperCase(),
     tsn: normalizeString(input.tsn)?.toUpperCase(),
     registrationDocNumber: normalizeString(input.registrationDocNumber),
+    fuelType: normalizeFuelType(input.fuelType),
     co2Emission: normalizeNumber(input.co2Emission),
     displacement: (() => {
       const value = normalizeNumber(input.displacement);
@@ -230,6 +269,7 @@ const VEHICLE_BRIEF_FIELD_SCHEMA = {
     hsn: { type: ["string", "null"] },
     tsn: { type: ["string", "null"] },
     registrationDocNumber: { type: ["string", "null"] },
+    fuelType: { type: ["string", "null"] },
     co2Emission: { type: ["number", "null"] },
     displacement: { type: ["number", "null"] },
     power: { type: ["number", "null"] },
@@ -244,6 +284,7 @@ const VEHICLE_BRIEF_FIELD_SCHEMA = {
     "hsn",
     "tsn",
     "registrationDocNumber",
+    "fuelType",
     "co2Emission",
     "displacement",
     "power",
@@ -261,6 +302,10 @@ async function extractWithOpenAi(files: File[]): Promise<{ fields: VehicleBriefE
         "Liefere ausschließlich JSON gemäß Schema.",
         "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
         "Nutze für firstRegistration das Format YYYY-MM-DD.",
+        "fuelType soll auf Benzin, Diesel, Elektro, Hybrid oder Gas normalisiert werden.",
+        "powerKw ist die Nennleistung in kW, z.B. aus Feld P.2 oder aus 'Nennleistung'.",
+        "power ist Leistung in PS und nur dann zu befüllen, wenn PS explizit angegeben sind; falls nur kW vorhanden sind, power leer lassen.",
+        "co2Emission ist der CO2-Ausstoß in g/km; bei Elektrofahrzeugen mit 0 g/km gib 0 zurück.",
       ].join(" "),
     },
   ];

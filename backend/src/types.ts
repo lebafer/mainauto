@@ -142,6 +142,7 @@ export const VehicleBriefExtractFieldsSchema = z.object({
   hsn: z.string().optional(),
   tsn: z.string().optional(),
   registrationDocNumber: z.string().optional(),
+  fuelType: z.string().optional(),
   co2Emission: z.number().optional(),
   displacement: z.number().int().optional(),
   power: z.number().optional(),

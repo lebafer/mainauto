@@ -144,6 +144,7 @@ const BRIEF_PREFILL_FIELDS: Array<keyof VehicleBriefExtractFields> = [
   "hsn",
   "tsn",
   "registrationDocNumber",
+  "fuelType",
   "co2Emission",
   "displacement",
   "power",
@@ -684,7 +685,7 @@ export function VehicleForm({
       ...values,
       features: featuresToJson(values.features ?? ""),
       customerId: undefined,
-      power: values.power || undefined,
+      power: values.power ?? undefined,
       vin: values.vin || undefined,
       hsn: values.hsn || undefined,
       tsn: values.tsn || undefined,
@@ -701,9 +702,9 @@ export function VehicleForm({
       serviceDueKm: values.serviceDueKm,
       serviceDueDate: values.serviceDueDate || undefined,
       // Technical
-      co2Emission: values.co2Emission || undefined,
-      displacement: values.displacement || undefined,
-      powerKw: values.powerKw || undefined,
+      co2Emission: values.co2Emission ?? undefined,
+      displacement: values.displacement ?? undefined,
+      powerKw: values.powerKw ?? undefined,
       // Damage
       hasDamage: values.hasDamage,
       damageDescription: values.damageDescription || undefined,
@@ -1225,7 +1226,7 @@ export function VehicleForm({
                     <FormLabel>Kraftstoffart</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={field.value ?? ""}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -1252,7 +1253,7 @@ export function VehicleForm({
                     <FormLabel>Getriebe</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={field.value ?? ""}
                     >
                       <FormControl>
                         <SelectTrigger>
