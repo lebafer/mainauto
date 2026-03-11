@@ -285,6 +285,12 @@ export type SupplierUpdate = z.infer<typeof SupplierUpdateSchema>;
 
 // ─── Finances Schemas ─────────────────────────────────────────
 
+export const FinancesCostBreakdownItemSchema = z.object({
+  label: z.string(),
+  amount: z.number(),
+  category: z.enum(["manual", "export"]),
+});
+
 export const FinancesSaleRowSchema = z.object({
   id: z.string(),
   saleDate: z.string(),
@@ -292,7 +298,10 @@ export const FinancesSaleRowSchema = z.object({
   brand: z.string(),
   model: z.string(),
   purchasePrice: z.number(),
+  manualAdditionalCosts: z.number(),
+  exportAdditionalCosts: z.number(),
   additionalCosts: z.number(),
+  costBreakdown: z.array(FinancesCostBreakdownItemSchema),
   salePrice: z.number(),
   profit: z.number(),
   customerName: z.string(),
@@ -301,6 +310,8 @@ export const FinancesSaleRowSchema = z.object({
 export const FinancesDataSchema = z.object({
   vehiclesBought: z.number(),
   totalPurchaseCost: z.number(),
+  totalManualCosts: z.number(),
+  totalExportCosts: z.number(),
   totalAdditionalCosts: z.number(),
   vehiclesSold: z.number(),
   totalRevenue: z.number(),

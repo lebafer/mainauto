@@ -274,14 +274,21 @@ export default function Finances() {
             </span>
           }
           subtext={
-            <span>
-              {formatPrice(finances.totalPurchaseCost)}
+            <div className="space-y-1">
+              <span className="block">
+                {formatPrice(finances.totalPurchaseCost)}
+                {finances.totalAdditionalCosts > 0 ? (
+                  <span className="text-amber-500 ml-1">
+                    + {formatPrice(finances.totalAdditionalCosts)} Zusatzkosten
+                  </span>
+                ) : null}
+              </span>
               {finances.totalAdditionalCosts > 0 ? (
-                <span className="text-amber-500 ml-1">
-                  + {formatPrice(finances.totalAdditionalCosts)} Zusatzkosten
+                <span className="block text-[11px] text-muted-foreground/80">
+                  Export {formatPrice(finances.totalExportCosts)} · Sonstige {formatPrice(finances.totalManualCosts)}
                 </span>
               ) : null}
-            </span>
+            </div>
           }
         />
 
@@ -497,9 +504,20 @@ export default function Finances() {
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
                           {sale.additionalCosts > 0 ? (
-                            <span className="text-amber-500 font-medium">
-                              {formatPrice(sale.additionalCosts)}
-                            </span>
+                            <div className="space-y-1 text-right">
+                              <span className="block text-amber-500 font-medium">
+                                {formatPrice(sale.additionalCosts)}
+                              </span>
+                              {sale.costBreakdown.length > 0 ? (
+                                <div className="space-y-0.5 text-[11px] leading-tight text-muted-foreground">
+                                  {sale.costBreakdown.map((item) => (
+                                    <div key={`${sale.id}-${item.category}-${item.label}`}>
+                                      {item.label}: {formatPrice(item.amount)}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground/50">—</span>
                           )}

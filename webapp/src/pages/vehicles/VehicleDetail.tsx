@@ -23,7 +23,7 @@ import {
 import { api } from "@/lib/api";
 import {
   type Vehicle,
-  type VehicleCost,
+  type VehicleCostBreakdownItem,
   formatPrice,
   formatMileage,
   calculateGrossPrice,
@@ -31,6 +31,11 @@ import {
   parseFeatures,
   STATUS_CONFIG,
   getFileUrl,
+  getVehicleAdditionalCostsTotal,
+  getVehicleCostBreakdown,
+  getVehicleExportCostsTotal,
+  getVehicleManualCostsTotal,
+  getVehicleMargin,
 } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -339,8 +344,12 @@ export default function VehicleDetail() {
   );
   const features = parseFeatures(vehicle.features);
   const statusConfig = STATUS_CONFIG[vehicle.status] ?? STATUS_CONFIG.available;
-  const totalAdditionalCosts = (vehicle.costs ?? []).reduce((sum, c) => sum + c.amount, 0);
-  const margin = vehicle.sellingPrice - vehicle.purchasePrice - totalAdditionalCosts;
+  const manualAdditionalCosts = getVehicleManualCostsTotal(vehicle);
+  const exportAdditionalCosts = getVehicleExportCostsTotal(vehicle);
+  const totalAdditionalCosts = getVehicleAdditionalCostsTotal(vehicle);
+  const totalInvested = vehicle.purchasePrice + totalAdditionalCosts;
+  const margin = getVehicleMargin(vehicle);
+  const costBreakdown = getVehicleCostBreakdown(vehicle);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -1158,16 +1167,22 @@ export default function VehicleDetail() {
                 <span className="text-muted-foreground">Einkauf</span>
                 <span>{formatPrice(vehicle.purchasePrice)}</span>
               </div>
-              {totalAdditionalCosts > 0 ? (
+              {exportAdditionalCosts > 0 ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Zusatzkosten</span>
-                  <span className="text-orange-500">{formatPrice(totalAdditionalCosts)}</span>
+                  <span className="text-muted-foreground">Exportkosten</span>
+                  <span className="text-orange-500">{formatPrice(exportAdditionalCosts)}</span>
+                </div>
+              ) : null}
+              {manualAdditionalCosts > 0 ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Sonstige Zusatzkosten</span>
+                  <span className="text-orange-500">{formatPrice(manualAdditionalCosts)}</span>
                 </div>
               ) : null}
               {totalAdditionalCosts > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Gesamtkosten</span>
-                  <span className="font-medium">{formatPrice(vehicle.purchasePrice + totalAdditionalCosts)}</span>
+                  <span className="font-medium">{formatPrice(totalInvested)}</span>
                 </div>
               ) : null}
               <div className="flex items-center justify-between text-sm">
@@ -1197,7 +1212,7 @@ export default function VehicleDetail() {
             Dokumente ({vehicle.documents?.length ?? 0})
           </TabsTrigger>
           <TabsTrigger value="costs">
-            Zusatzkosten ({vehicle.costs?.length ?? 0})
+            Kosten ({costBreakdown.length})
           </TabsTrigger>
           <TabsTrigger value="customer">Kunde</TabsTrigger>
           <TabsTrigger value="sales">Verkäufe</TabsTrigger>
@@ -1224,7 +1239,9 @@ export default function VehicleDetail() {
         <TabsContent value="costs" className="mt-4">
           <CostsSection
             vehicleId={vehicle.id}
-            costs={vehicle.costs ?? []}
+            costBreakdown={costBreakdown}
+            manualAdditionalCosts={manualAdditionalCosts}
+            exportAdditionalCosts={exportAdditionalCosts}
             totalAdditionalCosts={totalAdditionalCosts}
             purchasePrice={vehicle.purchasePrice}
             onAddCost={() => setAddCostOpen(true)}
@@ -1451,14 +1468,18 @@ function SalesSection({ sales }: { sales: Vehicle["sales"] }) {
 
 function CostsSection({
   vehicleId,
-  costs,
+  costBreakdown,
+  manualAdditionalCosts,
+  exportAdditionalCosts,
   totalAdditionalCosts,
   purchasePrice,
   onAddCost,
   queryClient,
 }: {
   vehicleId: string;
-  costs: VehicleCost[];
+  costBreakdown: VehicleCostBreakdownItem[];
+  manualAdditionalCosts: number;
+  exportAdditionalCosts: number;
   totalAdditionalCosts: number;
   purchasePrice: number;
   onAddCost: () => void;
@@ -1482,9 +1503,9 @@ function CostsSection({
         <div className="flex items-center gap-2">
           <Receipt className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium text-muted-foreground">
-            {costs.length === 0
-              ? "Keine Zusatzkosten erfasst"
-              : `${costs.length} Posten · Gesamt: ${formatPrice(totalAdditionalCosts)}`}
+            {costBreakdown.length === 0
+              ? "Keine Kosten erfasst"
+              : `${costBreakdown.length} Posten · Gesamt: ${formatPrice(totalAdditionalCosts)}`}
           </span>
         </div>
         <Button size="sm" variant="outline" onClick={onAddCost}>
@@ -1493,11 +1514,11 @@ function CostsSection({
         </Button>
       </div>
 
-      {costs.length === 0 ? (
+      {costBreakdown.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
           <Receipt className="mb-3 h-8 w-8 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">
-            Noch keine Zusatzkosten erfasst
+            Noch keine Kosten erfasst
           </p>
           <Button size="sm" variant="ghost" className="mt-3" onClick={onAddCost}>
             <PlusCircle className="mr-2 h-4 w-4" />
@@ -1506,56 +1527,86 @@ function CostsSection({
         </div>
       ) : (
         <div className="space-y-2">
-          {costs.map((cost) => (
+          {costBreakdown.map((cost) => (
             <Card key={cost.id}>
               <CardContent className="flex items-center justify-between py-3 px-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10">
-                    <Receipt className="h-4 w-4 text-orange-500" />
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                      cost.category === "export" ? "bg-sky-500/10" : "bg-orange-500/10"
+                    }`}
+                  >
+                    <Receipt
+                      className={`h-4 w-4 ${
+                        cost.category === "export" ? "text-sky-500" : "text-orange-500"
+                      }`}
+                    />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{cost.costType}</p>
+                    <p className="text-sm font-medium">{cost.label}</p>
+                    <div className="mt-0.5">
+                      <Badge
+                        variant="outline"
+                        className={
+                          cost.category === "export"
+                            ? "border-sky-500/30 bg-sky-500/10 text-sky-500"
+                            : "border-orange-500/30 bg-orange-500/10 text-orange-500"
+                        }
+                      >
+                        {cost.category === "export" ? "Export" : "Zusatzkosten"}
+                      </Badge>
+                    </div>
                     {cost.notes ? (
                       <p className="text-xs text-muted-foreground">{cost.notes}</p>
                     ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(cost.createdAt).toLocaleDateString("de-DE")}
-                    </p>
+                    {cost.createdAt ? (
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(cost.createdAt).toLocaleDateString("de-DE")}
+                      </p>
+                    ) : cost.category === "export" ? (
+                      <p className="text-xs text-muted-foreground">Aus den Exportkosten des Fahrzeugs</p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-orange-500">
+                  <span
+                    className={`text-sm font-semibold ${
+                      cost.category === "export" ? "text-sky-500" : "text-orange-500"
+                    }`}
+                  >
                     {formatPrice(cost.amount)}
                   </span>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        disabled={deleteCostMutation.isPending}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Kosten löschen?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          "{cost.costType}" ({formatPrice(cost.amount)}) wird unwiderruflich gelöscht.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => deleteCostMutation.mutate(cost.id)}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  {cost.category === "manual" ? (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          disabled={deleteCostMutation.isPending}
                         >
-                          Löschen
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Kosten löschen?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            "{cost.label}" ({formatPrice(cost.amount)}) wird unwiderruflich gelöscht.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => deleteCostMutation.mutate(cost.id)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Löschen
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -1565,10 +1616,16 @@ function CostsSection({
           <Card className="border-orange-500/20 bg-orange-500/5">
             <CardContent className="flex items-center justify-between py-3 px-4">
               <div>
-                <p className="text-sm font-medium">Gesamte Zusatzkosten</p>
-                <p className="text-xs text-muted-foreground">
-                  Einkauf {formatPrice(purchasePrice)} + Zusatzkosten
-                </p>
+                <p className="text-sm font-medium">Gesamte Nebenkosten</p>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p>Einkauf {formatPrice(purchasePrice)} + Nebenkosten</p>
+                  {exportAdditionalCosts > 0 ? (
+                    <p>Export: {formatPrice(exportAdditionalCosts)}</p>
+                  ) : null}
+                  {manualAdditionalCosts > 0 ? (
+                    <p>Sonstige Zusatzkosten: {formatPrice(manualAdditionalCosts)}</p>
+                  ) : null}
+                </div>
               </div>
               <div className="text-right">
                 <p className="text-base font-bold text-orange-500">
@@ -1608,12 +1665,14 @@ function SellDialog({
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split("T")[0]);
   const [notes, setNotes] = useState("");
   const [exportEnabled, setExportEnabled] = useState(vehicle.exportEnabled ?? false);
+  const [transportCostDomestic, setTransportCostDomestic] = useState(vehicle.transportCostDomestic?.toString() ?? "");
   const [transportCostAbroad, setTransportCostAbroad] = useState(vehicle.transportCostAbroad?.toString() ?? "");
   const [customsDuties, setCustomsDuties] = useState(vehicle.customsDuties?.toString() ?? "");
   const [registrationFees, setRegistrationFees] = useState(vehicle.registrationFees?.toString() ?? "");
   const [repairCostsAbroad, setRepairCostsAbroad] = useState(vehicle.repairCostsAbroad?.toString() ?? "");
 
   const exportTotal =
+    (parseFloat(transportCostDomestic) || 0) +
     (parseFloat(transportCostAbroad) || 0) +
     (parseFloat(customsDuties) || 0) +
     (parseFloat(registrationFees) || 0) +
@@ -1660,6 +1719,7 @@ function SellDialog({
       // If export fields changed, update vehicle first
       if (exportEnabled !== vehicle.exportEnabled ||
           (exportEnabled && (
+            transportCostDomestic !== (vehicle.transportCostDomestic?.toString() ?? "") ||
             transportCostAbroad !== (vehicle.transportCostAbroad?.toString() ?? "") ||
             customsDuties !== (vehicle.customsDuties?.toString() ?? "") ||
             registrationFees !== (vehicle.registrationFees?.toString() ?? "") ||
@@ -1667,10 +1727,11 @@ function SellDialog({
           ))) {
         await api.put(`/api/vehicles/${vehicle.id}`, {
           exportEnabled,
-          transportCostAbroad: exportEnabled && transportCostAbroad ? parseFloat(transportCostAbroad) : null,
-          customsDuties: exportEnabled && customsDuties ? parseFloat(customsDuties) : null,
-          registrationFees: exportEnabled && registrationFees ? parseFloat(registrationFees) : null,
-          repairCostsAbroad: exportEnabled && repairCostsAbroad ? parseFloat(repairCostsAbroad) : null,
+          transportCostDomestic: exportEnabled && transportCostDomestic !== "" ? parseFloat(transportCostDomestic) : undefined,
+          transportCostAbroad: exportEnabled && transportCostAbroad !== "" ? parseFloat(transportCostAbroad) : undefined,
+          customsDuties: exportEnabled && customsDuties !== "" ? parseFloat(customsDuties) : undefined,
+          registrationFees: exportEnabled && registrationFees !== "" ? parseFloat(registrationFees) : undefined,
+          repairCostsAbroad: exportEnabled && repairCostsAbroad !== "" ? parseFloat(repairCostsAbroad) : undefined,
         });
       }
       return api.post("/api/sales", {
@@ -1834,6 +1895,16 @@ function SellDialog({
 
             {exportEnabled && (
               <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1">
+                  <Label className="text-xs">Transportkosten Inland (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={transportCostDomestic}
+                    onChange={(e) => setTransportCostDomestic(e.target.value)}
+                  />
+                </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Transportkosten Ausland (€)</Label>
                   <Input

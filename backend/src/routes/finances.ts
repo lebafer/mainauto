@@ -3,6 +3,74 @@ import { prisma } from "../prisma";
 
 const financesRouter = new Hono();
 
+const EXPORT_COST_FIELDS = [
+  { key: "transportCostDomestic", label: "Transport Inland" },
+  { key: "transportCostAbroad", label: "Transport Ausland" },
+  { key: "customsDuties", label: "Zollgebuehren" },
+  { key: "registrationFees", label: "Zulassungsgebuehren" },
+  { key: "repairCostsAbroad", label: "Reparaturen im Ausland" },
+] as const;
+
+function normalizeAmount(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function getManualAdditionalCosts(vehicle: {
+  costs: Array<{ amount: number }>;
+}): number {
+  return vehicle.costs.reduce((sum, cost) => sum + normalizeAmount(cost.amount), 0);
+}
+
+function getExportAdditionalCosts(vehicle: {
+  exportEnabled?: boolean | null;
+  transportCostDomestic?: number | null;
+  transportCostAbroad?: number | null;
+  customsDuties?: number | null;
+  registrationFees?: number | null;
+  repairCostsAbroad?: number | null;
+}): number {
+  return EXPORT_COST_FIELDS.reduce((sum, { key }) => {
+    if (key !== "transportCostDomestic" && !vehicle.exportEnabled) {
+      return sum;
+    }
+
+    return sum + normalizeAmount(vehicle[key]);
+  }, 0);
+}
+
+function getCostBreakdown(vehicle: {
+  costs: Array<{ costType: string; amount: number }>;
+  exportEnabled?: boolean | null;
+  transportCostDomestic?: number | null;
+  transportCostAbroad?: number | null;
+  customsDuties?: number | null;
+  registrationFees?: number | null;
+  repairCostsAbroad?: number | null;
+}) {
+  const manualCosts = vehicle.costs
+    .filter((cost) => normalizeAmount(cost.amount) > 0)
+    .map((cost) => ({
+      label: cost.costType,
+      amount: normalizeAmount(cost.amount),
+      category: "manual" as const,
+    }));
+
+  const exportCosts = EXPORT_COST_FIELDS.flatMap(({ key, label }) => {
+    if (key !== "transportCostDomestic" && !vehicle.exportEnabled) {
+      return [];
+    }
+
+    const amount = normalizeAmount(vehicle[key]);
+    if (amount <= 0) {
+      return [];
+    }
+
+    return [{ label, amount, category: "export" as const }];
+  });
+
+  return [...manualCosts, ...exportCosts];
+}
+
 // GET /api/finances?from=ISO_DATE&to=ISO_DATE
 financesRouter.get("/", async (c) => {
   const fromParam = c.req.query("from");
@@ -63,8 +131,16 @@ financesRouter.get("/", async (c) => {
     (sum, v) => sum + v.purchasePrice,
     0
   );
+  const totalManualCosts = vehiclesBoughtInPeriod.reduce(
+    (sum, v) => sum + getManualAdditionalCosts(v),
+    0
+  );
+  const totalExportCosts = vehiclesBoughtInPeriod.reduce(
+    (sum, v) => sum + getExportAdditionalCosts(v),
+    0
+  );
   const totalAdditionalCosts = vehiclesBoughtInPeriod.reduce(
-    (sum, v) => sum + v.costs.reduce((cs, c) => cs + c.amount, 0),
+    (sum, v) => sum + getManualAdditionalCosts(v) + getExportAdditionalCosts(v),
     0
   );
 
@@ -80,17 +156,23 @@ financesRouter.get("/", async (c) => {
     brand: string;
     model: string;
     purchasePrice: number;
+    manualAdditionalCosts: number;
+    exportAdditionalCosts: number;
     additionalCosts: number;
+    costBreakdown: Array<{
+      label: string;
+      amount: number;
+      category: "manual" | "export";
+    }>;
     salePrice: number;
     profit: number;
     customerName: string;
   };
 
   const saleRows: SaleRow[] = salesInPeriod.map((sale) => {
-    const additionalCosts = sale.vehicle.costs.reduce(
-      (sum, cost) => sum + cost.amount,
-      0
-    );
+    const manualAdditionalCosts = getManualAdditionalCosts(sale.vehicle);
+    const exportAdditionalCosts = getExportAdditionalCosts(sale.vehicle);
+    const additionalCosts = manualAdditionalCosts + exportAdditionalCosts;
     const profit =
       sale.salePrice - sale.vehicle.purchasePrice - additionalCosts;
     const customerName =
@@ -103,7 +185,10 @@ financesRouter.get("/", async (c) => {
       brand: sale.vehicle.brand,
       model: sale.vehicle.model,
       purchasePrice: sale.vehicle.purchasePrice,
+      manualAdditionalCosts,
+      exportAdditionalCosts,
       additionalCosts,
+      costBreakdown: getCostBreakdown(sale.vehicle),
       salePrice: sale.salePrice,
       profit,
       customerName,
@@ -145,6 +230,8 @@ financesRouter.get("/", async (c) => {
     data: {
       vehiclesBought: vehiclesBoughtCount,
       totalPurchaseCost,
+      totalManualCosts,
+      totalExportCosts,
       totalAdditionalCosts,
       vehiclesSold: vehiclesSoldCount,
       totalRevenue,
