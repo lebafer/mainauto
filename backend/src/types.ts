@@ -23,6 +23,7 @@ export const VehicleCreateSchema = z.object({
   marginTaxed: z.boolean().default(false),
   status: z.enum(["available", "reserved", "sold"]).default("available"),
   notes: z.string().optional(),
+  internalNotes: z.string().optional(),
   customerId: z.string().nullable().optional(),
   // Technical details
   co2Emission: z.number().optional(),
@@ -86,6 +87,7 @@ export const VehicleUpdateSchema = z.object({
   marginTaxed: z.boolean().optional(),
   status: z.enum(["available", "reserved", "sold"]).optional(),
   notes: z.string().optional(),
+  internalNotes: z.string().optional(),
   customerId: z.string().nullable().optional(),
   // Technical details
   co2Emission: z.number().optional(),

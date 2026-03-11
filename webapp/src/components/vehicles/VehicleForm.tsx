@@ -218,6 +218,7 @@ const vehicleFormSchema = z.object({
   marginTaxed: z.boolean().default(false),
   status: z.string().default("available"),
   notes: z.string().optional().default(""),
+  internalNotes: z.string().optional().default(""),
   customerId: z.string().optional().nullable(),
   supplierId: z.string().optional().nullable(),
   // History & Maintenance
@@ -261,7 +262,7 @@ export type VehicleFormValues = z.infer<typeof vehicleFormSchema>;
 
 export type VehicleFormSubmitValues = Omit<
   VehicleFormValues,
-  "power" | "vin" | "hsn" | "tsn" | "registrationDocNumber" | "color" | "fuelType" | "transmission" | "notes" | "customerId" | "damageDescription" | "batteryType" | "connectorType" | "supplierId" | "huDue" | "previousOwners" | "serviceDueKm" | "serviceDueDate"
+  "power" | "vin" | "hsn" | "tsn" | "registrationDocNumber" | "color" | "fuelType" | "transmission" | "notes" | "internalNotes" | "customerId" | "damageDescription" | "batteryType" | "connectorType" | "supplierId" | "huDue" | "previousOwners" | "serviceDueKm" | "serviceDueDate"
 > & {
   power?: number;
   vin?: string;
@@ -272,6 +273,7 @@ export type VehicleFormSubmitValues = Omit<
   fuelType?: string;
   transmission?: string;
   notes?: string;
+  internalNotes?: string;
   customerId?: null;
   damageDescription?: string;
   batteryType?: string;
@@ -348,6 +350,7 @@ export function VehicleForm({
     marginTaxed: vehicle?.marginTaxed ?? defaultValues?.marginTaxed ?? false,
     status: vehicle?.status ?? defaultValues?.status ?? "available",
     notes: vehicle?.notes ?? defaultValues?.notes ?? "",
+    internalNotes: vehicle?.internalNotes ?? defaultValues?.internalNotes ?? "",
     customerId: vehicle?.customerId ?? defaultValues?.customerId ?? null,
     supplierId: vehicle?.supplierId ?? defaultValues?.supplierId ?? null,
     // History & Maintenance
@@ -698,6 +701,7 @@ export function VehicleForm({
       fuelType: values.fuelType || undefined,
       transmission: values.transmission || undefined,
       notes: values.notes || undefined,
+      internalNotes: values.internalNotes || undefined,
       // Supplier relation
       supplierId: values.supplierId || null,
       // History & Maintenance
@@ -2263,6 +2267,22 @@ export function VehicleForm({
                     onChange={field.onChange}
                     placeholder="Besondere Vereinbarungen, Zusatzinfos für den Kaufvertrag..."
                     rows={5}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="internalNotes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Interne Bemerkungen (erscheint nicht im Kaufvertrag)</FormLabel>
+                  <Textarea
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    placeholder="Interne Hinweise, To-dos, Absprachen..."
+                    rows={4}
                   />
                   <FormMessage />
                 </FormItem>

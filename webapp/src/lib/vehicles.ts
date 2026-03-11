@@ -4,6 +4,7 @@ export interface VehicleImage {
   id: string;
   vehicleId: string;
   url: string;
+  isPrimary?: boolean;
   createdAt: string;
 }
 
@@ -77,6 +78,7 @@ export interface Vehicle {
   marginTaxed: boolean;
   status: "available" | "reserved" | "sold";
   notes: string;
+  internalNotes?: string | null;
   customerId?: string | null;
   supplier?: string | null;
   images: VehicleImage[];

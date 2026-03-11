@@ -40,6 +40,7 @@ const BRIEF_ALLOWED_MIME_TYPES = new Set([
   "image/webp",
 ]);
 const execFileAsync = promisify(execFile);
+const vehicleImageOrderBy = [{ isPrimary: "desc" as const }, { createdAt: "asc" as const }];
 
 function isVehicleNumberConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
@@ -590,7 +591,7 @@ vehiclesRouter.get("/", async (c) => {
   const vehicles = await prisma.vehicle.findMany({
     where,
     include: {
-      images: true,
+      images: { orderBy: vehicleImageOrderBy },
       customer: true,
       supplierRel: true,
       _count: {
@@ -610,7 +611,7 @@ vehiclesRouter.get("/:id", async (c) => {
   const vehicle = await prisma.vehicle.findUnique({
     where: { id },
     include: {
-      images: { orderBy: { createdAt: "asc" } },
+      images: { orderBy: vehicleImageOrderBy },
       documents: { orderBy: { createdAt: "desc" } },
       customer: true,
       supplierRel: true,
@@ -652,6 +653,7 @@ vehiclesRouter.post(
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
       notes: data.notes || null,
+      internalNotes: data.internalNotes || null,
       customerId: data.customerId || null,
       features: data.features || null,
       // New nullable string/number fields
@@ -738,6 +740,7 @@ vehiclesRouter.put(
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
       notes: data.notes !== undefined ? (data.notes || null) : undefined,
+      internalNotes: data.internalNotes !== undefined ? (data.internalNotes || null) : undefined,
       // New nullable string fields
       damageDescription: data.damageDescription !== undefined ? (data.damageDescription || null) : undefined,
       batteryType: data.batteryType !== undefined ? (data.batteryType || null) : undefined,
@@ -835,11 +838,14 @@ vehiclesRouter.post("/:id/images", async (c) => {
 
   const formData = await c.req.formData();
   const file = formData.get("file") as File | null;
-  const isPrimary = formData.get("isPrimary") === "true";
+  const requestedPrimary = formData.get("isPrimary") === "true";
 
   if (!file) {
     return c.json({ error: { message: "No file provided", code: "BAD_REQUEST" } }, 400);
   }
+
+  const existingImagesCount = await prisma.vehicleImage.count({ where: { vehicleId: id } });
+  const isPrimary = requestedPrimary || existingImagesCount === 0;
 
   const ext = file.name.split(".").pop() || "jpg";
   const fileName = `${randomUUID()}.${ext}`;
@@ -869,8 +875,37 @@ vehiclesRouter.post("/:id/images", async (c) => {
   return c.json({ data: image }, 201);
 });
 
+// PATCH /api/vehicles/:id/images/:imageId/primary - mark image as primary
+vehiclesRouter.patch("/:id/images/:imageId/primary", async (c) => {
+  const id = c.req.param("id");
+  const imageId = c.req.param("imageId");
+
+  const image = await prisma.vehicleImage.findFirst({
+    where: { id: imageId, vehicleId: id },
+  });
+
+  if (!image) {
+    return c.json({ error: { message: "Image not found", code: "NOT_FOUND" } }, 404);
+  }
+
+  await prisma.$transaction([
+    prisma.vehicleImage.updateMany({
+      where: { vehicleId: id },
+      data: { isPrimary: false },
+    }),
+    prisma.vehicleImage.update({
+      where: { id: imageId },
+      data: { isPrimary: true },
+    }),
+  ]);
+
+  const updated = await prisma.vehicleImage.findUnique({ where: { id: imageId } });
+  return c.json({ data: updated });
+});
+
 // DELETE /api/vehicles/:id/images/:imageId - delete image
 vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
+  const vehicleId = c.req.param("id");
   const imageId = c.req.param("imageId");
 
   const image = await prisma.vehicleImage.findUnique({ where: { id: imageId } });
@@ -887,6 +922,20 @@ vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
   }
 
   await prisma.vehicleImage.delete({ where: { id: imageId } });
+
+  if (image.isPrimary) {
+    const fallbackImage = await prisma.vehicleImage.findFirst({
+      where: { vehicleId },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (fallbackImage) {
+      await prisma.vehicleImage.update({
+        where: { id: fallbackImage.id },
+        data: { isPrimary: true },
+      });
+    }
+  }
 
   return c.body(null, 204);
 });
