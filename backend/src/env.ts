@@ -40,6 +40,11 @@ const envSchema = z.object({
     .optional()
     .default("gpt-4o-mini")
     .transform((value) => value.trim() || "gpt-4o-mini"),
+  OPENAI_EXTRACTION_MODEL: z
+    .string()
+    .optional()
+    .default("gpt-4o")
+    .transform((value) => value.trim() || "gpt-4o"),
 });
 
 /**

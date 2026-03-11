@@ -16,15 +16,12 @@ import {
   type VehicleBriefExtractFields,
 } from "../types";
 import { join } from "path";
-import { access, mkdir, mkdtemp, rm, unlink, writeFile } from "fs/promises";
+import { mkdir, mkdtemp, rm, unlink, writeFile } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import puppeteer, { type Browser } from "puppeteer";
-import puppeteerCore from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -37,20 +34,14 @@ const vehiclesRouter = new Hono();
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const BRIEF_MAX_FILES = 4;
 const BRIEF_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
-const OPENAI_PDF_FALLBACK_MODEL = "gpt-4o-mini";
+const OPENAI_DEFAULT_EXTRACTION_MODEL = "gpt-4o";
+const OPENAI_PDF_FALLBACK_MODEL = "gpt-4o";
 const BRIEF_ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",
   "image/webp",
 ]);
-const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
-const SYSTEM_BROWSER_PATHS = [
-  "/usr/bin/chromium",
-  "/usr/bin/chromium-browser",
-  "/usr/bin/google-chrome",
-  "/usr/bin/google-chrome-stable",
-];
 const execFileAsync = promisify(execFile);
 const vehicleImageOrderBy = [{ isPrimary: "desc" as const }, { createdAt: "asc" as const }];
 
@@ -71,7 +62,8 @@ function isVehicleNumberConflict(error: unknown): boolean {
 function normalizeString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
-  return trimmed === "" ? undefined : trimmed;
+  if (trimmed === "" || trimmed.toUpperCase() === "NULL") return undefined;
+  return trimmed;
 }
 
 function normalizeNumber(value: unknown): number | undefined {
@@ -283,65 +275,6 @@ function stripMarkdownCodeBlock(value: string): string {
   return value.trim();
 }
 
-async function launchWithPuppeteer(): Promise<Browser> {
-  return puppeteer.launch({
-    args: BROWSER_ARGS,
-    headless: true,
-  });
-}
-
-async function canAccessPath(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function launchWithPuppeteerCore(executablePath: string, args: string[]): Promise<Browser> {
-  return puppeteerCore.launch({
-    executablePath,
-    args,
-    headless: true,
-  });
-}
-
-async function launchBrowser(): Promise<Browser> {
-  const isProduction = process.env.NODE_ENV === "production" || process.env.VIBECODE_PRODUCTION === "true";
-  if (!isProduction) {
-    return launchWithPuppeteer();
-  }
-
-  const preferredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
-  if (preferredPath) {
-    try {
-      return await launchWithPuppeteerCore(preferredPath, BROWSER_ARGS);
-    } catch {
-      // Fall through to the next available browser option.
-    }
-  }
-
-  for (const candidatePath of SYSTEM_BROWSER_PATHS) {
-    if (!(await canAccessPath(candidatePath))) {
-      continue;
-    }
-
-    try {
-      return await launchWithPuppeteerCore(candidatePath, BROWSER_ARGS);
-    } catch {
-      // Continue trying other candidates.
-    }
-  }
-
-  try {
-    const executablePath = await chromium.executablePath();
-    return await launchWithPuppeteerCore(executablePath, [...chromium.args, ...BROWSER_ARGS]);
-  } catch {
-    return launchWithPuppeteer();
-  }
-}
-
 function extractOutputText(payload: unknown): string | undefined {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
@@ -474,7 +407,7 @@ function modelSupportsPdfInput(model: string): boolean {
 }
 
 function resolveExtractionModel(files: File[]): string {
-  const preferredModel = env.OPENAI_MODEL;
+  const preferredModel = env.OPENAI_EXTRACTION_MODEL || env.OPENAI_MODEL || OPENAI_DEFAULT_EXTRACTION_MODEL;
   const hasPdf = files.some((file) => file.type === "application/pdf");
 
   if (!hasPdf || modelSupportsPdfInput(preferredModel)) {
@@ -588,172 +521,6 @@ async function buildOpenAiInputContent(files: File[]): Promise<Array<Record<stri
   }
 
   return content;
-}
-
-async function buildTeil1FocusContent(files: File[]): Promise<Array<Record<string, unknown>>> {
-  const imageFile = files.find((file) => file.type.startsWith("image/"));
-  if (!imageFile) {
-    return [];
-  }
-
-  const dataUrl = `data:${imageFile.type};base64,${Buffer.from(await imageFile.arrayBuffer()).toString("base64")}`;
-  const browser = await launchBrowser();
-
-  try {
-    const page = await browser.newPage();
-    const crops = await page.evaluate(async (inputDataUrl) => {
-      const runtime = globalThis as unknown as {
-        Image: new () => {
-          src: string;
-          decode: () => Promise<void>;
-          naturalWidth: number;
-          naturalHeight: number;
-        };
-        document: {
-          createElement: (tag: string) => {
-            width: number;
-            height: number;
-            getContext: (type: string) => {
-              drawImage: (...args: unknown[]) => void;
-              getImageData: (x: number, y: number, width: number, height: number) => { data: Uint8ClampedArray };
-            } | null;
-            toDataURL: (type: string) => string;
-          };
-        };
-      };
-      const specs = [
-        {
-          label: "Ausschnitt HSN/TSN/Leistung",
-          description: "Dieser Ausschnitt zeigt den oberen rechten Bereich mit 2.1, 2.2, P.2 und P.4.",
-          x: 0.52,
-          y: 0.04,
-          width: 0.43,
-          height: 0.17,
-        },
-        {
-          label: "Ausschnitt VIN/Marke/Modell",
-          description: "Dieser Ausschnitt zeigt den mittleren Bereich mit E, D.1 und D.3.",
-          x: 0.34,
-          y: 0.11,
-          width: 0.36,
-          height: 0.26,
-        },
-        {
-          label: "Ausschnitt Technik/Farbe",
-          description: "Dieser Ausschnitt zeigt P.1, P.3, R, V.7 und V.9.",
-          x: 0.34,
-          y: 0.34,
-          width: 0.60,
-          height: 0.28,
-        },
-      ];
-
-      const image = new runtime.Image();
-      image.src = inputDataUrl;
-      await image.decode();
-
-      const canvas = runtime.document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return [];
-      }
-
-      context.drawImage(image, 0, 0);
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-
-      let minX = canvas.width;
-      let minY = canvas.height;
-      let maxX = 0;
-      let maxY = 0;
-      let found = false;
-
-      for (let y = 0; y < canvas.height; y += 1) {
-        for (let x = 0; x < canvas.width; x += 1) {
-          const index = (y * canvas.width + x) * 4;
-          const alpha = pixels[index + 3] ?? 0;
-          const red = pixels[index] ?? 255;
-          const green = pixels[index + 1] ?? 255;
-          const blue = pixels[index + 2] ?? 255;
-          const isNearWhite = red > 245 && green > 245 && blue > 245;
-
-          if (alpha > 0 && !isNearWhite) {
-            found = true;
-            minX = Math.min(minX, x);
-            minY = Math.min(minY, y);
-            maxX = Math.max(maxX, x);
-            maxY = Math.max(maxY, y);
-          }
-        }
-      }
-
-      if (!found) {
-        minX = 0;
-        minY = 0;
-        maxX = canvas.width;
-        maxY = canvas.height;
-      }
-
-      const paddingX = Math.round((maxX - minX) * 0.03);
-      const paddingY = Math.round((maxY - minY) * 0.03);
-      const docX = Math.max(0, minX - paddingX);
-      const docY = Math.max(0, minY - paddingY);
-      const docWidth = Math.min(canvas.width - docX, maxX - minX + paddingX * 2);
-      const docHeight = Math.min(canvas.height - docY, maxY - minY + paddingY * 2);
-
-      return specs.map((spec) => {
-        const cropX = Math.round(docX + docWidth * spec.x);
-        const cropY = Math.round(docY + docHeight * spec.y);
-        const cropWidth = Math.max(1, Math.round(docWidth * spec.width));
-        const cropHeight = Math.max(1, Math.round(docHeight * spec.height));
-
-        const target = runtime.document.createElement("canvas");
-        target.width = cropWidth;
-        target.height = cropHeight;
-        const targetContext = target.getContext("2d");
-        if (!targetContext) {
-          return null;
-        }
-
-        targetContext.drawImage(
-          image,
-          cropX,
-          cropY,
-          cropWidth,
-          cropHeight,
-          0,
-          0,
-          cropWidth,
-          cropHeight
-        );
-
-        return {
-          label: spec.label,
-          description: spec.description,
-          dataUrl: target.toDataURL("image/png"),
-        };
-      }).filter((value): value is { label: string; description: string; dataUrl: string } => value !== null);
-    }, dataUrl);
-
-    return crops.flatMap((crop) => [
-      {
-        type: "input_text",
-        text: `${crop.label}: ${crop.description}`,
-      },
-      {
-        type: "input_image",
-        image_url: crop.dataUrl,
-      },
-    ]);
-  } catch (error) {
-    console.warn("[vehicles] teil1_focus_crop_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  } finally {
-    await browser.close();
-  }
 }
 
 async function runOpenAiStructuredRequest(
@@ -890,6 +657,7 @@ async function extractWithOpenAi(files: File[]): Promise<{
       "Extrahiere Fahrzeugdaten aus den hochgeladenen deutschen Fahrzeugpapieren.",
       "Liefere ausschließlich JSON gemäß Schema.",
       "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
+      "Gib niemals den String 'NULL' zurück, sondern JSON null.",
       "Erkenne zuerst den Dokumenttyp und setze documentType auf teil1, teil2, mixed oder unknown.",
       "teil1 bedeutet Zulassungsbescheinigung Teil I beziehungsweise Fahrzeugschein.",
       "teil2 bedeutet Zulassungsbescheinigung Teil II beziehungsweise Fahrzeugbrief.",
@@ -904,7 +672,9 @@ async function extractWithOpenAi(files: File[]): Promise<{
       "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
       "Für Teil I gelten insbesondere diese Felder: B = Erstzulassung, 2.1 = HSN, 2.2 = TSN, E = VIN, D.1 = Marke, D.3 = Modell, J = Fahrzeugklasse oder Aufbauart, P.1 = Hubraum, P.2 = Leistung in kW, P.3 = Kraftstoffart, R = Farbe, V.7 = CO2, V.9 = Emissionsklasse.",
       "Gib für Teil I zusätzlich sourceFields mit den exakt abgelesenen Werten aus B, E, D.1, D.3, J, Feld 5 oder Aufbauart, P.1, P.2, P.3, R, V.7, V.9, 2.1 und 2.2 zurück.",
-      "P.2 ist nur die kW-Angabe vor dem Schrägstrich. Werte aus 7.1, 7.2, 8.1, 8.2 oder ähnlichen Feldern dürfen niemals als Leistung oder Hubraum verwendet werden.",
+      "2.1 ist nur die vierstellige HSN. 2.2 ist nur die TSN rechts daneben. D.2 oder D.2.1 sind niemals HSN oder TSN.",
+      "P.2 ist nur die kW-Angabe vor dem Schrägstrich. P.4 ist PS. Werte aus 7.1, 7.2, 8.1, 8.2, T oder ähnlichen Feldern dürfen niemals als Leistung oder Hubraum verwendet werden.",
+      "Wenn auf Teil I bei P.4 kein PS-Wert steht, lasse power leer. power wird später aus powerKw berechnet.",
       "Verwende bei Teil I niemals die oben links stehende Nummer 'Nr.' als registrationDocNumber.",
       "Wenn nur Teil I vorliegt, lasse registrationDocNumber leer.",
       "Kennzeichen, Halterdaten, lokale Aktennummern und sonstige Dokumentnummern dürfen niemals als VIN, HSN, TSN oder registrationDocNumber verwendet werden.",
@@ -926,78 +696,6 @@ async function extractWithOpenAi(files: File[]): Promise<{
     modelFieldPayload,
     "documentType" in root ? root.documentType : undefined
   );
-
-  if (normalized.documentType === "teil1") {
-    try {
-      const teil1FocusContent = [...baseContent, ...(await buildTeil1FocusContent(files))];
-      const focusedTeil1Root = await runOpenAiStructuredRequest(
-        model,
-        teil1FocusContent,
-        "vehicle_teil1_source_fields",
-        {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            sourceFields: VEHICLE_TEIL1_SOURCE_SCHEMA,
-            warnings: {
-              type: "array",
-              items: { type: "string" },
-            },
-          },
-          required: ["sourceFields", "warnings"],
-        },
-        [
-          "Dies ist sicher eine Zulassungsbescheinigung Teil I beziehungsweise ein Fahrzeugschein.",
-          "Lies ausschließlich die exakt bezeichneten Felder aus und gib nur sourceFields zurück.",
-          "Wichtig: E ist die VIN mit genau 17 Zeichen.",
-          "Wichtig: 2.1 ist die HSN mit 4 Ziffern.",
-          "Wichtig: 2.2 ist die TSN direkt rechts neben 2.1 und darf niemals aus D.2 oder D.2.1 stammen.",
-          "Wichtig: P.1 ist der Hubraum.",
-          "Wichtig: P.2 ist die Leistung in kW vor dem Schrägstrich.",
-          "Wichtig: P.3 ist die Kraftstoffart.",
-          "Wichtig: R ist die Farbe.",
-          "Wichtig: V.7 ist CO2, V.9 ist die Emissionsklasse.",
-          "Wichtig: D.1 ist Marke, D.3 ist Handelsbezeichnung/Modell.",
-          "Feld 5 oder die explizite Aufbauart enthält die Karosserieform wie Limousine.",
-          "Verwechsle 2.2 niemals mit D.2, D.2.1 oder mit Zeilen wie '003 ESLR'.",
-          "Verwechsle P.2 niemals mit Feldern 7.1, 7.2, 8.1, 8.2, T oder Achslasten.",
-          "Wenn du ein Feld nicht sicher lesen kannst, gib null zurück.",
-        ],
-        500
-      );
-
-      const focusedWarnings = Array.isArray(focusedTeil1Root.warnings)
-        ? focusedTeil1Root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
-        : [];
-      const focusedNormalized = normalizeExtractedFields(
-        {
-          ...("fields" in root && typeof root.fields === "object" && root.fields !== null ? root.fields : {}),
-          sourceFields: focusedTeil1Root.sourceFields,
-        },
-        "teil1"
-      );
-
-      return {
-        documentType: "teil1",
-        fields: focusedNormalized.fields,
-        warnings: [...modelWarnings, ...focusedWarnings, ...focusedNormalized.warnings],
-      };
-    } catch (error) {
-      console.warn("[vehicles] teil1_focus_fallback", {
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      return {
-        documentType: "teil1",
-        fields: normalized.fields,
-        warnings: [
-          ...modelWarnings,
-          ...normalized.warnings,
-          "Teil-I-Spezialauslese fehlgeschlagen. Allgemeine Auslese wurde verwendet.",
-        ],
-      };
-    }
-  }
 
   return {
     documentType:
