@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Upload, FileText, X, Loader2, Download } from "lucide-react";
 import { type VehicleDocument, getFileUrl } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,6 +29,24 @@ import {
 interface VehicleDocumentsTabProps {
   vehicleId: string;
   documents: VehicleDocument[];
+}
+
+function getDocumentContentLabel(name: string): string {
+  const normalized = name.trim().toLowerCase();
+  if (normalized.includes("fahrzeugschein")) return "Fahrzeugschein";
+  if (normalized.includes("fahrzeugbrief")) return "Fahrzeugbrief";
+  if (normalized.includes("fahrzeugpapier")) return "Fahrzeugpapiere";
+  return "Dokument";
+}
+
+function getDocumentFileTypeLabel(url: string): string {
+  const extension = url.split(".").pop()?.split("?")[0]?.toLowerCase();
+  if (!extension) return "Datei";
+  if (extension === "pdf") return "PDF";
+  if (["jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif"].includes(extension)) {
+    return "Bild";
+  }
+  return extension.toUpperCase();
 }
 
 export function VehicleDocumentsTab({
@@ -97,6 +116,35 @@ export function VehicleDocumentsTab({
     uploadMutation.mutate({ file: docFile, name: docName.trim() });
   }
 
+  async function handleDownload(doc: VehicleDocument) {
+    try {
+      const response = await fetch(getFileUrl(doc.url), {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Download fehlgeschlagen");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const extension = doc.url.split(".").pop()?.split("?")[0];
+      const filename = extension && !doc.name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)
+        ? `${doc.name}.${extension}`
+        : doc.name;
+
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast.error("Fehler beim Download");
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Upload dialog */}
@@ -160,6 +208,14 @@ export function VehicleDocumentsTab({
                 <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{doc.name}</p>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge variant="outline" className="text-[11px]">
+                      {getDocumentContentLabel(doc.name)}
+                    </Badge>
+                    <Badge variant="secondary" className="text-[11px]">
+                      {getDocumentFileTypeLabel(doc.url)}
+                    </Badge>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {new Date(doc.createdAt).toLocaleDateString("de-DE")}
                   </p>
@@ -174,6 +230,14 @@ export function VehicleDocumentsTab({
                   <a href={getFileUrl(doc.url)} target="_blank" rel="noopener noreferrer">
                     Öffnen
                   </a>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDownload(doc)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   VehicleBriefExtractResponseSchema,
+  type VehicleBriefDocumentType,
   type VehicleBriefExtractFields,
 } from "../../../../backend/src/types";
 import {
@@ -54,7 +55,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Popover,
   PopoverContent,
@@ -309,7 +309,7 @@ interface VehicleFormProps {
   onSubmit: (values: VehicleFormSubmitValues) => void;
   isSubmitting: boolean;
   submitLabel: string;
-  onExtractedBriefFiles?: (files: File[]) => void;
+  onExtractedBriefFiles?: (files: File[], documentType: VehicleBriefDocumentType) => void;
 }
 
 export function VehicleForm({
@@ -320,8 +320,8 @@ export function VehicleForm({
   submitLabel,
   onExtractedBriefFiles,
 }: VehicleFormProps) {
-  const [priceInputMode, setPriceInputMode] = useState<"netto" | "brutto">("netto");
-  const [grossDisplay, setGrossDisplay] = useState("");
+  const [purchaseGrossDisplay, setPurchaseGrossDisplay] = useState("");
+  const [sellingGrossDisplay, setSellingGrossDisplay] = useState("");
   const [showAddBrand, setShowAddBrand] = useState(false);
   const [newBrandInput, setNewBrandInput] = useState("");
   const [showAddColor, setShowAddColor] = useState(false);
@@ -335,12 +335,24 @@ export function VehicleForm({
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
   const [briefResult, setBriefResult] = useState<{
+    documentType: VehicleBriefDocumentType;
     detectedFieldCount: number;
     applied: number;
     skipped: number;
     savedDocuments: number;
     warnings: string[];
   } | null>(null);
+
+  function getBriefDocumentLabel(documentType: VehicleBriefDocumentType): string {
+    switch (documentType) {
+      case "teil1":
+        return "Fahrzeugschein";
+      case "teil2":
+        return "Fahrzeugbrief";
+      default:
+        return "Fahrzeugpapiere";
+    }
+  }
 
   const initialValues: Partial<VehicleFormValues> = {
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
@@ -533,13 +545,18 @@ export function VehicleForm({
     return { applied, skipped };
   }
 
-  async function uploadBriefDocuments(vehicleId: string, files: File[]): Promise<number> {
+  async function uploadBriefDocuments(
+    vehicleId: string,
+    files: File[],
+    documentType: VehicleBriefDocumentType
+  ): Promise<number> {
     let uploaded = 0;
+    const label = getBriefDocumentLabel(documentType);
 
     for (const [index, file] of files.entries()) {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("name", files.length === 1 ? "Fahrzeugbrief" : `Fahrzeugbrief ${index + 1}`);
+      formData.append("name", files.length === 1 ? label : `${label} ${index + 1}`);
 
       const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
         method: "POST",
@@ -582,16 +599,17 @@ export function VehicleForm({
 
       if (vehicle?.id) {
         try {
-          savedDocuments = await uploadBriefDocuments(vehicle.id, files);
+          savedDocuments = await uploadBriefDocuments(vehicle.id, files, result.documentType);
           queryClient.invalidateQueries({ queryKey: ["vehicle", vehicle.id] });
         } catch (error) {
-          warnings.push(error instanceof Error ? error.message : "Fahrzeugbrief konnte nicht gespeichert werden");
+          warnings.push(error instanceof Error ? error.message : "Fahrzeugpapiere konnten nicht gespeichert werden");
         }
       } else {
-        onExtractedBriefFiles?.(files);
+        onExtractedBriefFiles?.(files, result.documentType);
       }
 
       setBriefResult({
+        documentType: result.documentType,
         detectedFieldCount: result.detectedFieldCount,
         applied,
         skipped,
@@ -600,8 +618,9 @@ export function VehicleForm({
       });
     },
     onError: (error: unknown) => {
-      onExtractedBriefFiles?.([]);
+      onExtractedBriefFiles?.([], "unknown");
       setBriefResult({
+        documentType: "unknown",
         detectedFieldCount: 0,
         applied: 0,
         skipped: 0,
@@ -611,10 +630,10 @@ export function VehicleForm({
     },
   });
 
-  const watchedSellingPrice = form.watch("sellingPrice") ?? 0;
+  const watchedSellingPrice = form.watch("sellingPrice");
   const watchedTaxRate = form.watch("taxRate") ?? 19;
   const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
-  const watchedPurchasePrice = form.watch("purchasePrice") ?? 0;
+  const watchedPurchasePrice = form.watch("purchasePrice");
   const watchedFuelType = form.watch("fuelType");
   const watchedHasDamage = form.watch("hasDamage");
   const watchedExportEnabled = form.watch("exportEnabled");
@@ -640,27 +659,79 @@ export function VehicleForm({
     (watchedRegistrationFees ?? 0) +
     (watchedRepairCostsAbroad ?? 0);
 
-  // Keep gross display in sync with selling price changes
+  const numericPurchasePrice =
+    typeof watchedPurchasePrice === "number"
+      ? watchedPurchasePrice
+      : Number(watchedPurchasePrice) || 0;
+  const numericSellingPrice =
+    typeof watchedSellingPrice === "number"
+      ? watchedSellingPrice
+      : Number(watchedSellingPrice) || 0;
+
+  // Keep gross displays in sync with net price changes
   useEffect(() => {
-    if (priceInputMode === "netto") {
-      const gross = calculateGrossPrice(watchedSellingPrice, watchedTaxRate, watchedMarginTaxed);
-      setGrossDisplay(gross.toFixed(2));
+    if (isFormFieldEmpty(watchedPurchasePrice)) {
+      setPurchaseGrossDisplay("");
+      return;
     }
-  }, [watchedSellingPrice, watchedTaxRate, watchedMarginTaxed, priceInputMode]);
 
-  // Initialize gross display
+    const gross = calculateGrossPrice(numericPurchasePrice, watchedTaxRate, watchedMarginTaxed);
+    setPurchaseGrossDisplay(gross.toFixed(2));
+  }, [numericPurchasePrice, watchedPurchasePrice, watchedTaxRate, watchedMarginTaxed]);
+
   useEffect(() => {
-    const gross = calculateGrossPrice(
-      initialValues.sellingPrice ?? 0,
-      initialValues.taxRate ?? 19,
-      initialValues.marginTaxed ?? false
-    );
-    setGrossDisplay(gross.toFixed(2));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (isFormFieldEmpty(watchedSellingPrice)) {
+      setSellingGrossDisplay("");
+      return;
+    }
 
-  function handleGrossChange(grossStr: string) {
-    setGrossDisplay(grossStr);
+    const gross = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
+    setSellingGrossDisplay(gross.toFixed(2));
+  }, [numericSellingPrice, watchedSellingPrice, watchedTaxRate, watchedMarginTaxed]);
+
+  function handlePurchaseNetChange(nettoStr: string) {
+    if (nettoStr.trim() === "") {
+      form.setValue("purchasePrice", "" as unknown as number, { shouldValidate: true });
+      return;
+    }
+    const netVal = parseFloat(nettoStr.replace(",", "."));
+    if (Number.isNaN(netVal)) {
+      return;
+    }
+    form.setValue("purchasePrice", netVal, { shouldValidate: true, shouldDirty: true });
+  }
+
+  function handlePurchaseGrossChange(grossStr: string) {
+    setPurchaseGrossDisplay(grossStr);
+    if (grossStr.trim() === "") {
+      form.setValue("purchasePrice", "" as unknown as number, { shouldValidate: true });
+      return;
+    }
+    const grossVal = parseFloat(grossStr.replace(",", "."));
+    if (Number.isNaN(grossVal)) {
+      return;
+    }
+    const netVal = calculateNetPrice(grossVal, watchedTaxRate, watchedMarginTaxed);
+    form.setValue("purchasePrice", Math.round(netVal * 100) / 100, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  }
+
+  function handleSellingNetChange(nettoStr: string) {
+    if (nettoStr.trim() === "") {
+      form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
+      return;
+    }
+    const netVal = parseFloat(nettoStr.replace(",", "."));
+    if (Number.isNaN(netVal)) {
+      return;
+    }
+    form.setValue("sellingPrice", netVal, { shouldValidate: true, shouldDirty: true });
+  }
+
+  function handleSellingGrossChange(grossStr: string) {
+    setSellingGrossDisplay(grossStr);
     if (grossStr.trim() === "") {
       form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
       return;
@@ -670,19 +741,10 @@ export function VehicleForm({
       return;
     }
     const netVal = calculateNetPrice(grossVal, watchedTaxRate, watchedMarginTaxed);
-    form.setValue("sellingPrice", Math.round(netVal * 100) / 100);
-  }
-
-  function handleNettoChange(nettoStr: string) {
-    if (nettoStr.trim() === "") {
-      form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
-      return;
-    }
-    const netVal = parseFloat(nettoStr.replace(",", "."));
-    if (Number.isNaN(netVal)) {
-      return;
-    }
-    form.setValue("sellingPrice", netVal);
+    form.setValue("sellingPrice", Math.round(netVal * 100) / 100, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   }
 
   // PS <-> kW auto-calculation
@@ -770,8 +832,8 @@ export function VehicleForm({
     domesticTransportCost +
     (watchedExportEnabled ? exportOnlyCosts : 0) +
     existingAdditionalCosts;
-  const margin = watchedSellingPrice - watchedPurchasePrice - totalAdditionalCosts;
-  const grossPrice = calculateGrossPrice(watchedSellingPrice, watchedTaxRate, watchedMarginTaxed);
+  const margin = numericSellingPrice - numericPurchasePrice - totalAdditionalCosts;
+  const grossPrice = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
   const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS.filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
 
@@ -792,7 +854,7 @@ export function VehicleForm({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Fahrzeugbrief analysieren (PDF/Bild)</CardTitle>
+            <CardTitle className="text-lg">Fahrzeugpapiere analysieren (Brief/Schein, PDF/Bild)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
@@ -806,7 +868,7 @@ export function VehicleForm({
                   onChange={handleBriefFilesChange}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Unterstützt: PDF, JPG, PNG, WEBP. Bereits ausgefüllte Felder werden nicht überschrieben.
+                  Unterstützt: PDF, JPG, PNG, WEBP. Fahrzeugschein und Fahrzeugbrief werden erkannt. Bereits ausgefüllte Felder werden nicht überschrieben.
                 </p>
                 {briefFiles.length > 0 ? (
                   <p className="text-xs text-muted-foreground">
@@ -831,6 +893,7 @@ export function VehicleForm({
 
             {briefResult ? (
               <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm space-y-1">
+                <p>Dokumenttyp: {getBriefDocumentLabel(briefResult.documentType)}</p>
                 <p>
                   Erkannt: {briefResult.detectedFieldCount} · Übernommen: {briefResult.applied} · Übersprungen: {briefResult.skipped}
                 </p>
@@ -1915,7 +1978,7 @@ export function VehicleForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {watchedMarginTaxed ? "Einkaufspreis" : "Einkaufspreis (Netto)"}
+                      Einkaufspreis Netto
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
@@ -1924,11 +1987,7 @@ export function VehicleForm({
                         step="0.01"
                         placeholder="0.00"
                         value={field.value ?? ""}
-                        onChange={(e) =>
-                          field.onChange(
-                            e.target.value === "" ? ("" as unknown as number) : Number(e.target.value)
-                          )
-                        }
+                        onChange={(e) => handlePurchaseNetChange(e.target.value)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -1936,140 +1995,91 @@ export function VehicleForm({
                 )}
               />
 
-              {/* Tax rate - only shown for Regelbesteuerung */}
-              {!watchedMarginTaxed ? (
+              <FormItem>
+                <FormLabel>Einkaufspreis Brutto</FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={purchaseGrossDisplay}
+                    onChange={(e) => handlePurchaseGrossChange(e.target.value)}
+                  />
+                </FormControl>
+                <p className="text-xs text-muted-foreground">
+                  Wird mit {watchedTaxRate}% MwSt berechnet.
+                </p>
+              </FormItem>
+
+              <FormField
+                control={form.control}
+                name="taxRate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>MwSt-Satz (%)</FormLabel>
+                    <FormControl>
+                      <Input type="number" step="0.1" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">
+                Verkaufspreis
+                <RequiredMark />
+              </Label>
+
+              <div className="grid gap-4 sm:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="taxRate"
+                  name="sellingPrice"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>MwSt-Satz (%)</FormLabel>
+                      <FormLabel>Verkaufspreis Netto</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.1" {...field} />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={field.value ?? ""}
+                          onChange={(e) => handleSellingNetChange(e.target.value)}
+                          className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-              ) : null}
-            </div>
-
-            {/* Selling price with netto/brutto toggle */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium">
-                  Verkaufspreis
-                  <RequiredMark />
-                </Label>
-                {!watchedMarginTaxed ? (
-                  <Tabs
-                    value={priceInputMode}
-                    onValueChange={(v) => setPriceInputMode(v as "netto" | "brutto")}
-                  >
-                    <TabsList className="h-8">
-                      <TabsTrigger value="netto" className="text-xs px-3 h-6">
-                        Netto eingeben
-                      </TabsTrigger>
-                      <TabsTrigger value="brutto" className="text-xs px-3 h-6">
-                        Brutto eingeben
-                      </TabsTrigger>
-                    </TabsList>
-                  </Tabs>
-                ) : null}
-              </div>
-
-              {watchedMarginTaxed ? (
-                <div>
-                  <FormField
-                    control={form.control}
-                    name="sellingPrice"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Verkaufspreis (Endpreis)
-                          <RequiredMark />
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={field.value ?? ""}
-                            onChange={(e) =>
-                              field.onChange(
-                                e.target.value === "" ? ("" as unknown as number) : Number(e.target.value)
-                              )
-                            }
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Differenzbesteuert -- dies ist der Endpreis inkl. aller Abgaben.
-                  </p>
-                </div>
-              ) : priceInputMode === "netto" ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="sellingPrice"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>
-                          Netto
-                          <RequiredMark />
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={field.value ?? ""}
-                            onChange={(e) => handleNettoChange(e.target.value)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Brutto (berechnet)</Label>
-                    <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 text-sm font-medium">
-                      {formatPrice(grossPrice)}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>
-                      Brutto
-                      <RequiredMark />
-                    </Label>
+                <FormItem>
+                  <FormLabel>
+                    Verkaufspreis Brutto
+                    {watchedMarginTaxed ? " / Endpreis" : ""}
+                  </FormLabel>
+                  <FormControl>
                     <Input
                       type="number"
                       step="0.01"
                       placeholder="0.00"
-                      value={grossDisplay}
-                      onChange={(e) => handleGrossChange(e.target.value)}
+                      value={sellingGrossDisplay}
+                      onChange={(e) => handleSellingGrossChange(e.target.value)}
                       className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
                     />
-                    {sellingPriceHasError ? (
-                      <p className="text-sm font-medium text-destructive">
-                        {form.formState.errors.sellingPrice?.message as string}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Netto (berechnet)</Label>
-                    <div className="flex h-10 items-center rounded-md border bg-muted/50 px-3 text-sm font-medium">
-                      {formatPrice(watchedSellingPrice)}
-                    </div>
-                  </div>
-                </div>
-              )}
+                  </FormControl>
+                  {sellingPriceHasError ? (
+                    <p className="text-sm font-medium text-destructive">
+                      {form.formState.errors.sellingPrice?.message as string}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {watchedMarginTaxed
+                      ? "Bei Differenzbesteuerung ist Brutto gleich Netto."
+                      : `Wird mit ${watchedTaxRate}% MwSt berechnet.`}
+                  </p>
+                </FormItem>
+              </div>
             </div>
 
             {/* Transportkosten Inland - always visible */}
@@ -2122,7 +2132,7 @@ export function VehicleForm({
               <div className="grid gap-2 text-sm sm:grid-cols-4">
                 <div>
                   <p className="text-muted-foreground">Einkauf</p>
-                  <p className="font-semibold">{formatPrice(watchedPurchasePrice)}</p>
+                  <p className="font-semibold">{formatPrice(numericPurchasePrice)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Verkauf (Brutto)</p>
