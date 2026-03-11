@@ -236,6 +236,35 @@ function normalizeDate(value: unknown): string | undefined {
   return undefined;
 }
 
+function normalizeTeil1PowerKw(value: unknown): number | undefined {
+  const raw = normalizeString(value);
+  if (!raw) return undefined;
+  const match = raw.match(/(\d+(?:[.,]\d+)?)(?=\s*\/|$)/);
+  if (!match) return normalizeNumber(raw);
+  return normalizeNumber(match[1]);
+}
+
+function normalizeTeil1SourceFields(raw: unknown): Record<string, string | undefined> {
+  const input = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
+
+  return {
+    fieldB: normalizeString(input.fieldB),
+    fieldE: normalizeString(input.fieldE),
+    fieldD1: normalizeString(input.fieldD1),
+    fieldD3: normalizeString(input.fieldD3),
+    fieldJ: normalizeString(input.fieldJ),
+    field5: normalizeString(input.field5),
+    fieldP1: normalizeString(input.fieldP1),
+    fieldP2: normalizeString(input.fieldP2),
+    fieldP3: normalizeString(input.fieldP3),
+    fieldR: normalizeString(input.fieldR),
+    fieldV7: normalizeString(input.fieldV7),
+    fieldV9: normalizeString(input.fieldV9),
+    field21: normalizeString(input.field21),
+    field22: normalizeString(input.field22),
+  };
+}
+
 function stripMarkdownCodeBlock(value: string): string {
   const fenced = value.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (fenced && fenced[1]) {
@@ -286,46 +315,61 @@ function normalizeExtractedFields(raw: unknown, explicitDocumentType?: unknown):
   const documentType = VehicleBriefDocumentTypeSchema.parse(
     normalizeDocumentType(explicitDocumentType ?? input.documentType)
   );
+  const teil1Fields = normalizeTeil1SourceFields(input.sourceFields);
 
   const normalized: VehicleBriefExtractFields = {
-    vin: normalizeVin(input.vin),
-    firstRegistration: normalizeDate(input.firstRegistration),
-    color: normalizeString(input.color),
-    brand: normalizeString(input.brand),
-    model: normalizeString(input.model),
-    hsn: normalizeHsn(input.hsn),
-    tsn: normalizeTsn(input.tsn),
+    vin: normalizeVin(documentType === "teil1" ? teil1Fields.fieldE ?? input.vin : input.vin),
+    firstRegistration: normalizeDate(
+      documentType === "teil1" ? teil1Fields.fieldB ?? input.firstRegistration : input.firstRegistration
+    ),
+    color: normalizeString(documentType === "teil1" ? teil1Fields.fieldR ?? input.color : input.color),
+    brand: normalizeString(documentType === "teil1" ? teil1Fields.fieldD1 ?? input.brand : input.brand),
+    model: normalizeString(documentType === "teil1" ? teil1Fields.fieldD3 ?? input.model : input.model),
+    hsn: normalizeHsn(documentType === "teil1" ? teil1Fields.field21 ?? input.hsn : input.hsn),
+    tsn: normalizeTsn(documentType === "teil1" ? teil1Fields.field22 ?? input.tsn : input.tsn),
     registrationDocNumber: normalizeRegistrationDocNumber(input.registrationDocNumber),
-    fuelType: normalizeFuelType(input.fuelType),
-    co2Emission: normalizeNumber(input.co2Emission),
+    fuelType: normalizeFuelType(documentType === "teil1" ? teil1Fields.fieldP3 ?? input.fuelType : input.fuelType),
+    co2Emission: normalizeNumber(documentType === "teil1" ? teil1Fields.fieldV7 ?? input.co2Emission : input.co2Emission),
     displacement: (() => {
-      const value = normalizeNumber(input.displacement);
+      const value = documentType === "teil1"
+        ? normalizeNumber(teil1Fields.fieldP1 ?? input.displacement)
+        : normalizeNumber(input.displacement);
       return value === undefined ? undefined : Math.round(value);
     })(),
-    power: normalizeNumber(input.power),
-    powerKw: normalizeNumber(input.powerKw),
-    bodyType: normalizeBodyType(input.bodyType),
+    power: documentType === "teil1" ? undefined : normalizeNumber(input.power),
+    powerKw: documentType === "teil1"
+      ? normalizeTeil1PowerKw(teil1Fields.fieldP2 ?? input.powerKw)
+      : normalizeNumber(input.powerKw),
+    bodyType: normalizeBodyType(documentType === "teil1" ? teil1Fields.field5 ?? input.bodyType : input.bodyType),
     driveType: normalizeDriveType(input.driveType),
-    emissionClass: normalizeEmissionClass(input.emissionClass),
+    emissionClass: normalizeEmissionClass(
+      documentType === "teil1" ? teil1Fields.fieldV9 ?? input.emissionClass : input.emissionClass
+    ),
     previousOwners: (() => {
       const value = normalizeNumber(input.previousOwners);
       return value === undefined ? undefined : Math.round(value);
     })(),
   };
 
-  if (input.vin && !normalized.vin) {
+  const rawVin = documentType === "teil1" ? teil1Fields.fieldE ?? input.vin : input.vin;
+  const rawHsn = documentType === "teil1" ? teil1Fields.field21 ?? input.hsn : input.hsn;
+  const rawTsn = documentType === "teil1" ? teil1Fields.field22 ?? input.tsn : input.tsn;
+  const rawFirstRegistration =
+    documentType === "teil1" ? teil1Fields.fieldB ?? input.firstRegistration : input.firstRegistration;
+
+  if (rawVin && !normalized.vin) {
     warnings.push("VIN konnte nicht eindeutig validiert werden.");
   }
 
-  if (input.hsn && !normalized.hsn) {
+  if (rawHsn && !normalized.hsn) {
     warnings.push("HSN konnte nicht sicher erkannt werden.");
   }
 
-  if (input.tsn && !normalized.tsn) {
+  if (rawTsn && !normalized.tsn) {
     warnings.push("TSN konnte nicht sicher erkannt werden.");
   }
 
-  if (input.firstRegistration && !normalized.firstRegistration) {
+  if (rawFirstRegistration && !normalized.firstRegistration) {
     warnings.push("Erstzulassung konnte nicht sicher als Datum erkannt werden.");
   }
 
@@ -414,6 +458,43 @@ const VEHICLE_BRIEF_FIELD_SCHEMA = {
   ],
 } as const;
 
+const VEHICLE_TEIL1_SOURCE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    fieldB: { type: ["string", "null"] },
+    fieldE: { type: ["string", "null"] },
+    fieldD1: { type: ["string", "null"] },
+    fieldD3: { type: ["string", "null"] },
+    fieldJ: { type: ["string", "null"] },
+    field5: { type: ["string", "null"] },
+    fieldP1: { type: ["string", "null"] },
+    fieldP2: { type: ["string", "null"] },
+    fieldP3: { type: ["string", "null"] },
+    fieldR: { type: ["string", "null"] },
+    fieldV7: { type: ["string", "null"] },
+    fieldV9: { type: ["string", "null"] },
+    field21: { type: ["string", "null"] },
+    field22: { type: ["string", "null"] },
+  },
+  required: [
+    "fieldB",
+    "fieldE",
+    "fieldD1",
+    "fieldD3",
+    "fieldJ",
+    "field5",
+    "fieldP1",
+    "fieldP2",
+    "fieldP3",
+    "fieldR",
+    "fieldV7",
+    "fieldV9",
+    "field21",
+    "field22",
+  ],
+} as const;
+
 async function extractWithOpenAi(files: File[]): Promise<{
   documentType: VehicleBriefDocumentType;
   fields: VehicleBriefExtractFields;
@@ -440,6 +521,8 @@ async function extractWithOpenAi(files: File[]): Promise<{
         "emissionClass ist die Schadstoffklasse und soll z.B. als Euro 6 oder Euro 6d-TEMP zurückgegeben werden.",
         "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
         "Für Teil I gelten insbesondere diese Felder: B = Erstzulassung, 2.1 = HSN, 2.2 = TSN, E = VIN, D.1 = Marke, D.3 = Modell, J = Fahrzeugklasse oder Aufbauart, P.1 = Hubraum, P.2 = Leistung in kW, P.3 = Kraftstoffart, R = Farbe, V.7 = CO2, V.9 = Emissionsklasse.",
+        "Gib für Teil I zusätzlich sourceFields mit den exakt abgelesenen Werten aus B, E, D.1, D.3, J, Feld 5 oder Aufbauart, P.1, P.2, P.3, R, V.7, V.9, 2.1 und 2.2 zurück.",
+        "P.2 ist nur die kW-Angabe vor dem Schrägstrich. Werte aus 7.1, 7.2, 8.1, 8.2 oder ähnlichen Feldern dürfen niemals als Leistung oder Hubraum verwendet werden.",
         "Verwende bei Teil I niemals die oben links stehende Nummer 'Nr.' als registrationDocNumber.",
         "Wenn nur Teil I vorliegt, lasse registrationDocNumber leer.",
         "Kennzeichen, Halterdaten, lokale Aktennummern und sonstige Dokumentnummern dürfen niemals als VIN, HSN, TSN oder registrationDocNumber verwendet werden.",
@@ -489,12 +572,13 @@ async function extractWithOpenAi(files: File[]): Promise<{
               enum: ["teil1", "teil2", "mixed", "unknown"],
             },
             fields: VEHICLE_BRIEF_FIELD_SCHEMA,
+            sourceFields: VEHICLE_TEIL1_SOURCE_SCHEMA,
             warnings: {
               type: "array",
               items: { type: "string" },
             },
           },
-          required: ["documentType", "fields", "warnings"],
+          required: ["documentType", "fields", "sourceFields", "warnings"],
         },
       },
     },
@@ -567,7 +651,17 @@ async function extractWithOpenAi(files: File[]): Promise<{
     ? root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
     : [];
   const modelFields = "fields" in root ? root.fields : root;
-  const normalized = normalizeExtractedFields(modelFields, "documentType" in root ? root.documentType : undefined);
+  const modelFieldPayload =
+    typeof modelFields === "object" && modelFields !== null
+      ? {
+          ...(modelFields as Record<string, unknown>),
+          sourceFields: "sourceFields" in root ? root.sourceFields : undefined,
+        }
+      : modelFields;
+  const normalized = normalizeExtractedFields(
+    modelFieldPayload,
+    "documentType" in root ? root.documentType : undefined
+  );
 
   return {
     documentType:
