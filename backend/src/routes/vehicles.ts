@@ -495,40 +495,8 @@ const VEHICLE_TEIL1_SOURCE_SCHEMA = {
   ],
 } as const;
 
-async function extractWithOpenAi(files: File[]): Promise<{
-  documentType: VehicleBriefDocumentType;
-  fields: VehicleBriefExtractFields;
-  warnings: string[];
-}> {
-  const model = resolveExtractionModel(files);
-  const content: Array<Record<string, unknown>> = [
-    {
-      type: "input_text",
-      text: [
-        "Extrahiere Fahrzeugdaten aus den hochgeladenen deutschen Fahrzeugpapieren.",
-        "Liefere ausschließlich JSON gemäß Schema.",
-        "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
-        "Erkenne zuerst den Dokumenttyp und setze documentType auf teil1, teil2, mixed oder unknown.",
-        "teil1 bedeutet Zulassungsbescheinigung Teil I beziehungsweise Fahrzeugschein.",
-        "teil2 bedeutet Zulassungsbescheinigung Teil II beziehungsweise Fahrzeugbrief.",
-        "Nutze für firstRegistration das Format YYYY-MM-DD.",
-        "fuelType soll auf Benzin, Diesel, Elektro, Hybrid oder Gas normalisiert werden.",
-        "powerKw ist die Nennleistung in kW, z.B. aus Feld P.2 oder aus 'Nennleistung'.",
-        "power ist Leistung in PS und nur dann zu befüllen, wenn PS explizit angegeben sind; falls nur kW vorhanden sind, power leer lassen.",
-        "co2Emission ist der CO2-Ausstoß in g/km; bei Elektrofahrzeugen mit 0 g/km gib 0 zurück.",
-        "bodyType ist die Karosserieform und soll auf Limousine, Kombi, SUV, Coupé, Cabrio, Van/Minivan, Transporter oder Pickup normalisiert werden.",
-        "driveType ist der Antrieb und soll nur befüllt werden, wenn er klar erkennbar ist; normalisiere auf FWD, RWD, AWD oder 4x4.",
-        "emissionClass ist die Schadstoffklasse und soll z.B. als Euro 6 oder Euro 6d-TEMP zurückgegeben werden.",
-        "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
-        "Für Teil I gelten insbesondere diese Felder: B = Erstzulassung, 2.1 = HSN, 2.2 = TSN, E = VIN, D.1 = Marke, D.3 = Modell, J = Fahrzeugklasse oder Aufbauart, P.1 = Hubraum, P.2 = Leistung in kW, P.3 = Kraftstoffart, R = Farbe, V.7 = CO2, V.9 = Emissionsklasse.",
-        "Gib für Teil I zusätzlich sourceFields mit den exakt abgelesenen Werten aus B, E, D.1, D.3, J, Feld 5 oder Aufbauart, P.1, P.2, P.3, R, V.7, V.9, 2.1 und 2.2 zurück.",
-        "P.2 ist nur die kW-Angabe vor dem Schrägstrich. Werte aus 7.1, 7.2, 8.1, 8.2 oder ähnlichen Feldern dürfen niemals als Leistung oder Hubraum verwendet werden.",
-        "Verwende bei Teil I niemals die oben links stehende Nummer 'Nr.' als registrationDocNumber.",
-        "Wenn nur Teil I vorliegt, lasse registrationDocNumber leer.",
-        "Kennzeichen, Halterdaten, lokale Aktennummern und sonstige Dokumentnummern dürfen niemals als VIN, HSN, TSN oder registrationDocNumber verwendet werden.",
-      ].join(" "),
-    },
-  ];
+async function buildOpenAiInputContent(files: File[]): Promise<Array<Record<string, unknown>>> {
+  const content: Array<Record<string, unknown>> = [];
 
   for (const file of files) {
     const bytes = await file.arrayBuffer();
@@ -538,7 +506,7 @@ async function extractWithOpenAi(files: File[]): Promise<{
     if (file.type === "application/pdf") {
       content.push({
         type: "input_file",
-        filename: file.name || "fahrzeugbrief.pdf",
+        filename: file.name || "fahrzeugpapier.pdf",
         file_data: dataUrl,
       });
       continue;
@@ -549,6 +517,25 @@ async function extractWithOpenAi(files: File[]): Promise<{
       image_url: dataUrl,
     });
   }
+
+  return content;
+}
+
+async function runOpenAiStructuredRequest(
+  model: string,
+  files: File[],
+  schemaName: string,
+  schema: Record<string, unknown>,
+  instructions: string[],
+  maxOutputTokens = 700
+): Promise<Record<string, unknown>> {
+  const content = [
+    {
+      type: "input_text",
+      text: instructions.join(" "),
+    },
+    ...(await buildOpenAiInputContent(files)),
+  ];
 
   const requestBody = {
     model,
@@ -561,28 +548,12 @@ async function extractWithOpenAi(files: File[]): Promise<{
     text: {
       format: {
         type: "json_schema",
-        name: "vehicle_brief_extract",
+        name: schemaName,
         strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            documentType: {
-              type: "string",
-              enum: ["teil1", "teil2", "mixed", "unknown"],
-            },
-            fields: VEHICLE_BRIEF_FIELD_SCHEMA,
-            sourceFields: VEHICLE_TEIL1_SOURCE_SCHEMA,
-            warnings: {
-              type: "array",
-              items: { type: "string" },
-            },
-          },
-          required: ["documentType", "fields", "sourceFields", "warnings"],
-        },
+        schema,
       },
     },
-    max_output_tokens: 700,
+    max_output_tokens: maxOutputTokens,
   };
 
   const tempDir = await mkdtemp(join(tmpdir(), "mainauto-openai-"));
@@ -639,14 +610,66 @@ async function extractWithOpenAi(files: File[]): Promise<{
     throw new Error("No extractable output returned by OpenAI.");
   }
 
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(stripMarkdownCodeBlock(rawText));
+    const parsed = JSON.parse(stripMarkdownCodeBlock(rawText));
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   } catch {
     throw new Error("OpenAI response is not valid JSON.");
   }
+}
 
-  const root = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+async function extractWithOpenAi(files: File[]): Promise<{
+  documentType: VehicleBriefDocumentType;
+  fields: VehicleBriefExtractFields;
+  warnings: string[];
+}> {
+  const model = resolveExtractionModel(files);
+  const root = await runOpenAiStructuredRequest(
+    model,
+    files,
+    "vehicle_brief_extract",
+    {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        documentType: {
+          type: "string",
+          enum: ["teil1", "teil2", "mixed", "unknown"],
+        },
+        fields: VEHICLE_BRIEF_FIELD_SCHEMA,
+        sourceFields: VEHICLE_TEIL1_SOURCE_SCHEMA,
+        warnings: {
+          type: "array",
+          items: { type: "string" },
+        },
+      },
+      required: ["documentType", "fields", "sourceFields", "warnings"],
+    },
+    [
+      "Extrahiere Fahrzeugdaten aus den hochgeladenen deutschen Fahrzeugpapieren.",
+      "Liefere ausschließlich JSON gemäß Schema.",
+      "Wenn ein Wert nicht sicher erkannt wird, lasse das Feld weg.",
+      "Erkenne zuerst den Dokumenttyp und setze documentType auf teil1, teil2, mixed oder unknown.",
+      "teil1 bedeutet Zulassungsbescheinigung Teil I beziehungsweise Fahrzeugschein.",
+      "teil2 bedeutet Zulassungsbescheinigung Teil II beziehungsweise Fahrzeugbrief.",
+      "Nutze für firstRegistration das Format YYYY-MM-DD.",
+      "fuelType soll auf Benzin, Diesel, Elektro, Hybrid oder Gas normalisiert werden.",
+      "powerKw ist die Nennleistung in kW, z.B. aus Feld P.2 oder aus 'Nennleistung'.",
+      "power ist Leistung in PS und nur dann zu befüllen, wenn PS explizit angegeben sind; falls nur kW vorhanden sind, power leer lassen.",
+      "co2Emission ist der CO2-Ausstoß in g/km; bei Elektrofahrzeugen mit 0 g/km gib 0 zurück.",
+      "bodyType ist die Karosserieform und soll auf Limousine, Kombi, SUV, Coupé, Cabrio, Van/Minivan, Transporter oder Pickup normalisiert werden.",
+      "driveType ist der Antrieb und soll nur befüllt werden, wenn er klar erkennbar ist; normalisiere auf FWD, RWD, AWD oder 4x4.",
+      "emissionClass ist die Schadstoffklasse und soll z.B. als Euro 6 oder Euro 6d-TEMP zurückgegeben werden.",
+      "previousOwners ist die Anzahl der Vorbesitzer/Halter als Zahl und nur zu befüllen, wenn sie explizit im Dokument steht.",
+      "Für Teil I gelten insbesondere diese Felder: B = Erstzulassung, 2.1 = HSN, 2.2 = TSN, E = VIN, D.1 = Marke, D.3 = Modell, J = Fahrzeugklasse oder Aufbauart, P.1 = Hubraum, P.2 = Leistung in kW, P.3 = Kraftstoffart, R = Farbe, V.7 = CO2, V.9 = Emissionsklasse.",
+      "Gib für Teil I zusätzlich sourceFields mit den exakt abgelesenen Werten aus B, E, D.1, D.3, J, Feld 5 oder Aufbauart, P.1, P.2, P.3, R, V.7, V.9, 2.1 und 2.2 zurück.",
+      "P.2 ist nur die kW-Angabe vor dem Schrägstrich. Werte aus 7.1, 7.2, 8.1, 8.2 oder ähnlichen Feldern dürfen niemals als Leistung oder Hubraum verwendet werden.",
+      "Verwende bei Teil I niemals die oben links stehende Nummer 'Nr.' als registrationDocNumber.",
+      "Wenn nur Teil I vorliegt, lasse registrationDocNumber leer.",
+      "Kennzeichen, Halterdaten, lokale Aktennummern und sonstige Dokumentnummern dürfen niemals als VIN, HSN, TSN oder registrationDocNumber verwendet werden.",
+    ],
+    700
+  );
   const modelWarnings = Array.isArray(root.warnings)
     ? root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
     : [];
@@ -662,6 +685,61 @@ async function extractWithOpenAi(files: File[]): Promise<{
     modelFieldPayload,
     "documentType" in root ? root.documentType : undefined
   );
+
+  if (normalized.documentType === "teil1") {
+    const focusedTeil1Root = await runOpenAiStructuredRequest(
+      model,
+      files,
+      "vehicle_teil1_source_fields",
+      {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          sourceFields: VEHICLE_TEIL1_SOURCE_SCHEMA,
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+        required: ["sourceFields", "warnings"],
+      },
+      [
+        "Dies ist sicher eine Zulassungsbescheinigung Teil I beziehungsweise ein Fahrzeugschein.",
+        "Lies ausschließlich die exakt bezeichneten Felder aus und gib nur sourceFields zurück.",
+        "Wichtig: E ist die VIN mit genau 17 Zeichen.",
+        "Wichtig: 2.1 ist die HSN mit 4 Ziffern.",
+        "Wichtig: 2.2 ist die TSN direkt rechts neben 2.1 und darf niemals aus D.2 oder D.2.1 stammen.",
+        "Wichtig: P.1 ist der Hubraum.",
+        "Wichtig: P.2 ist die Leistung in kW vor dem Schrägstrich.",
+        "Wichtig: P.3 ist die Kraftstoffart.",
+        "Wichtig: R ist die Farbe.",
+        "Wichtig: V.7 ist CO2, V.9 ist die Emissionsklasse.",
+        "Wichtig: D.1 ist Marke, D.3 ist Handelsbezeichnung/Modell.",
+        "Feld 5 oder die explizite Aufbauart enthält die Karosserieform wie Limousine.",
+        "Verwechsle 2.2 niemals mit D.2, D.2.1 oder mit Zeilen wie '003 ESLR'.",
+        "Verwechsle P.2 niemals mit Feldern 7.1, 7.2, 8.1, 8.2 oder Achslasten.",
+        "Wenn du ein Feld nicht sicher lesen kannst, gib null zurück.",
+      ],
+      500
+    );
+
+    const focusedWarnings = Array.isArray(focusedTeil1Root.warnings)
+      ? focusedTeil1Root.warnings.filter((item): item is string => typeof item === "string" && item.trim() !== "")
+      : [];
+    const focusedNormalized = normalizeExtractedFields(
+      {
+        ...("fields" in root && typeof root.fields === "object" && root.fields !== null ? root.fields : {}),
+        sourceFields: focusedTeil1Root.sourceFields,
+      },
+      "teil1"
+    );
+
+    return {
+      documentType: "teil1",
+      fields: focusedNormalized.fields,
+      warnings: [...modelWarnings, ...focusedWarnings, ...focusedNormalized.warnings],
+    };
+  }
 
   return {
     documentType:
