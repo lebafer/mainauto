@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, useEffect, type ChangeEvent, type FocusEvent } from "react";
 import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -192,6 +192,22 @@ function isFormFieldEmpty(value: unknown): boolean {
   return false;
 }
 
+function handleNumberFieldFocusCapture(event: FocusEvent<HTMLFormElement>) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || target.type !== "number") {
+    return;
+  }
+
+  const normalizedValue = target.value.trim().replace(",", ".");
+  if (!/^(0|0\.0+)$/.test(normalizedValue)) {
+    return;
+  }
+
+  requestAnimationFrame(() => {
+    target.select();
+  });
+}
+
 const vehicleFormSchema = z.object({
   vehicleNumber: z.string().trim().min(1, "Interne Nummer ist erforderlich"),
   brand: z.string().min(1, "Marke ist erforderlich"),
@@ -333,7 +349,7 @@ export function VehicleForm({
     firstRegistration: vehicle?.firstRegistration
       ? new Date(vehicle.firstRegistration).toISOString().split("T")[0]
       : defaultValues?.firstRegistration ?? "",
-    mileage: vehicle?.mileage ?? defaultValues?.mileage,
+    mileage: vehicle?.mileage ?? defaultValues?.mileage ?? 0,
     vin: vehicle?.vin ?? defaultValues?.vin ?? "",
     hsn: vehicle?.hsn ?? defaultValues?.hsn ?? "",
     tsn: vehicle?.tsn ?? defaultValues?.tsn ?? "",
@@ -761,7 +777,11 @@ export function VehicleForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)} className="space-y-6">
+      <form
+        onSubmit={form.handleSubmit(handleSubmit, handleInvalidSubmit)}
+        onFocusCapture={handleNumberFieldFocusCapture}
+        className="space-y-6"
+      >
         <p className="text-xs text-muted-foreground">* Pflichtfeld</p>
         {form.formState.submitCount > 0 && requiredFieldErrors.length > 0 ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
