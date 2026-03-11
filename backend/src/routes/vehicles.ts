@@ -97,7 +97,10 @@ function normalizeTsn(value: unknown): string | undefined {
   const raw = normalizeString(value);
   if (!raw) return undefined;
   const normalized = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return /^[A-Z0-9]{3,10}$/.test(normalized) ? normalized : undefined;
+  if (normalized.length < 3) {
+    return undefined;
+  }
+  return normalized.slice(0, 3);
 }
 
 function normalizeRegistrationDocNumber(value: unknown): string | undefined {
