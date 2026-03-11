@@ -23,6 +23,7 @@ import {
   calculateNetPrice,
   formatPrice,
   featuresToJson,
+  getVehicleManualCostsTotal,
   parseFeatures,
 } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
@@ -616,6 +617,12 @@ export function VehicleForm({
     (watchedCustomsDuties ?? 0) +
     (watchedRegistrationFees ?? 0) +
     (watchedRepairCostsAbroad ?? 0);
+  const domesticTransportCost = watchedTransportCostDomestic ?? 0;
+  const exportOnlyCosts =
+    (watchedTransportCostAbroad ?? 0) +
+    (watchedCustomsDuties ?? 0) +
+    (watchedRegistrationFees ?? 0) +
+    (watchedRepairCostsAbroad ?? 0);
 
   // Keep gross display in sync with selling price changes
   useEffect(() => {
@@ -726,11 +733,11 @@ export function VehicleForm({
       connectorType: values.connectorType || undefined,
       // Export
       exportEnabled: values.exportEnabled,
-      transportCostDomestic: values.transportCostDomestic || undefined,
-      transportCostAbroad: values.transportCostAbroad || undefined,
-      customsDuties: values.customsDuties || undefined,
-      registrationFees: values.registrationFees || undefined,
-      repairCostsAbroad: values.repairCostsAbroad || undefined,
+      transportCostDomestic: values.transportCostDomestic ?? undefined,
+      transportCostAbroad: values.transportCostAbroad ?? undefined,
+      customsDuties: values.customsDuties ?? undefined,
+      registrationFees: values.registrationFees ?? undefined,
+      repairCostsAbroad: values.repairCostsAbroad ?? undefined,
     };
     onSubmit(processed);
   }
@@ -742,7 +749,12 @@ export function VehicleForm({
     }
   }
 
-  const margin = watchedSellingPrice - watchedPurchasePrice;
+  const existingAdditionalCosts = vehicle ? getVehicleManualCostsTotal(vehicle) : 0;
+  const totalAdditionalCosts =
+    domesticTransportCost +
+    (watchedExportEnabled ? exportOnlyCosts : 0) +
+    existingAdditionalCosts;
+  const margin = watchedSellingPrice - watchedPurchasePrice - totalAdditionalCosts;
   const grossPrice = calculateGrossPrice(watchedSellingPrice, watchedTaxRate, watchedMarginTaxed);
   const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS.filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
@@ -2087,7 +2099,7 @@ export function VehicleForm({
 
             {/* Margin summary */}
             <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="grid gap-2 text-sm sm:grid-cols-3">
+              <div className="grid gap-2 text-sm sm:grid-cols-4">
                 <div>
                   <p className="text-muted-foreground">Einkauf</p>
                   <p className="font-semibold">{formatPrice(watchedPurchasePrice)}</p>
@@ -2097,12 +2109,23 @@ export function VehicleForm({
                   <p className="font-semibold">{formatPrice(grossPrice)}</p>
                 </div>
                 <div>
+                  <p className="text-muted-foreground">Nebenkosten</p>
+                  <p className="font-semibold text-orange-500">{formatPrice(totalAdditionalCosts)}</p>
+                </div>
+                <div>
                   <p className="text-muted-foreground">Marge (Netto)</p>
                   <p className={`font-semibold ${margin >= 0 ? "text-emerald-500" : "text-red-500"}`}>
                     {formatPrice(margin)}
                   </p>
                 </div>
               </div>
+              {totalAdditionalCosts > 0 ? (
+                <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  {domesticTransportCost > 0 ? <p>Transport Inland: {formatPrice(domesticTransportCost)}</p> : null}
+                  {watchedExportEnabled && exportOnlyCosts > 0 ? <p>Exportkosten: {formatPrice(exportOnlyCosts)}</p> : null}
+                  {existingAdditionalCosts > 0 ? <p>Bereits erfasste Zusatzkosten: {formatPrice(existingAdditionalCosts)}</p> : null}
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>

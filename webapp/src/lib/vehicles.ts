@@ -129,10 +129,156 @@ export interface Vehicle {
   dealerPrice?: number | null;
 }
 
+export interface VehicleCostBreakdownItem {
+  id: string;
+  label: string;
+  amount: number;
+  category: "manual" | "export";
+  notes?: string | null;
+  createdAt?: string | null;
+}
+
 export type VehicleCreateInput = Omit<
   Vehicle,
   "id" | "images" | "documents" | "customer" | "sales" | "createdAt" | "updatedAt"
 >;
+
+const EXPORT_COST_LABELS = [
+  { key: "transportCostDomestic", label: "Transport Inland" },
+  { key: "transportCostAbroad", label: "Transport Ausland" },
+  { key: "customsDuties", label: "Zollgebuehren" },
+  { key: "registrationFees", label: "Zulassungsgebuehren" },
+  { key: "repairCostsAbroad", label: "Reparaturen im Ausland" },
+] as const satisfies ReadonlyArray<{
+  key: keyof Pick<
+    Vehicle,
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >;
+  label: string;
+}>;
+
+function normalizeCost(value?: number | null): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+export function getVehicleManualCostBreakdown(
+  vehicle: Pick<Vehicle, "costs">
+): VehicleCostBreakdownItem[] {
+  return (vehicle.costs ?? [])
+    .filter((cost) => normalizeCost(cost.amount) > 0)
+    .map((cost) => ({
+      id: cost.id,
+      label: cost.costType,
+      amount: normalizeCost(cost.amount),
+      category: "manual" as const,
+      notes: cost.notes,
+      createdAt: cost.createdAt,
+    }));
+}
+
+export function getVehicleExportCostBreakdown(
+  vehicle: Pick<
+    Vehicle,
+    | "exportEnabled"
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >
+): VehicleCostBreakdownItem[] {
+  return EXPORT_COST_LABELS.flatMap(({ key, label }) => {
+    if (key !== "transportCostDomestic" && !vehicle.exportEnabled) {
+      return [];
+    }
+
+    const amount = normalizeCost(vehicle[key]);
+    if (amount <= 0) {
+      return [];
+    }
+
+    return [
+      {
+        id: `export-${key}`,
+        label,
+        amount,
+        category: "export" as const,
+      },
+    ];
+  });
+}
+
+export function getVehicleManualCostsTotal(vehicle: Pick<Vehicle, "costs">): number {
+  return getVehicleManualCostBreakdown(vehicle).reduce((sum, cost) => sum + cost.amount, 0);
+}
+
+export function getVehicleExportCostsTotal(
+  vehicle: Pick<
+    Vehicle,
+    | "exportEnabled"
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >
+): number {
+  return getVehicleExportCostBreakdown(vehicle).reduce((sum, cost) => sum + cost.amount, 0);
+}
+
+export function getVehicleAdditionalCostsTotal(
+  vehicle: Pick<
+    Vehicle,
+    | "costs"
+    | "exportEnabled"
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >
+): number {
+  return getVehicleManualCostsTotal(vehicle) + getVehicleExportCostsTotal(vehicle);
+}
+
+export function getVehicleCostBreakdown(
+  vehicle: Pick<
+    Vehicle,
+    | "costs"
+    | "exportEnabled"
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >
+): VehicleCostBreakdownItem[] {
+  return [
+    ...getVehicleManualCostBreakdown(vehicle),
+    ...getVehicleExportCostBreakdown(vehicle),
+  ];
+}
+
+export function getVehicleMargin(
+  vehicle: Pick<
+    Vehicle,
+    | "sellingPrice"
+    | "purchasePrice"
+    | "costs"
+    | "exportEnabled"
+    | "transportCostDomestic"
+    | "transportCostAbroad"
+    | "customsDuties"
+    | "registrationFees"
+    | "repairCostsAbroad"
+  >
+): number {
+  return vehicle.sellingPrice - vehicle.purchasePrice - getVehicleAdditionalCostsTotal(vehicle);
+}
 
 // Format price as EUR
 export function formatPrice(value: number): string {
