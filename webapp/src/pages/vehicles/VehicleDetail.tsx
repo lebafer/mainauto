@@ -14,8 +14,6 @@ import {
   Zap,
   Hash,
   FileText,
-  ChevronLeft,
-  ChevronRight,
   ShoppingCart,
   UserPlus,
   PlusCircle,
@@ -84,6 +82,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import {
+  type CarouselApi,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 // ─── Shared Customer type ────────────────────────────────────────
 
@@ -1106,6 +1112,13 @@ export default function VehicleDetail() {
                 />
               </div>
             ) : null}
+
+            {vehicle.internalNotes ? (
+              <div className="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/5 p-4">
+                <p className="mb-1 text-sm font-medium text-amber-300">Interne Bemerkungen</p>
+                <p className="whitespace-pre-wrap text-sm text-muted-foreground">{vehicle.internalNotes}</p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -1246,7 +1259,27 @@ function HeroImages({
   brand: string;
   model: string;
 }) {
+  const [api, setApi] = useState<CarouselApi>();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [snapCount, setSnapCount] = useState(0);
+
+  useEffect(() => {
+    if (!api) return;
+
+    const syncState = () => {
+      setCurrentIndex(api.selectedScrollSnap());
+      setSnapCount(api.scrollSnapList().length);
+    };
+
+    syncState();
+    api.on("select", syncState);
+    api.on("reInit", syncState);
+
+    return () => {
+      api.off("select", syncState);
+      api.off("reInit", syncState);
+    };
+  }, [api]);
 
   if (!images || images.length === 0) {
     return (
@@ -1260,50 +1293,51 @@ function HeroImages({
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border bg-muted/60">
-      <img
-        src={getFileUrl(images[currentIndex]?.url ?? "")}
-        alt={`${brand} ${model}`}
-        className="h-[260px] w-full object-contain bg-black/5 p-2 sm:h-[320px] lg:h-[380px]"
-      />
-      {images.length > 1 ? (
-        <>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute left-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            onClick={() =>
-              setCurrentIndex((prev) =>
-                prev === 0 ? images.length - 1 : prev - 1
-              )
-            }
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute right-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70"
-            onClick={() =>
-              setCurrentIndex((prev) =>
-                prev === images.length - 1 ? 0 : prev + 1
-              )
-            }
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
-          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full bg-black/35 px-3 py-2">
-            {images.map((_, i) => (
-              <button
-                key={i}
-                className={`h-2 rounded-full transition-all ${
-                  i === currentIndex ? "w-6 bg-white" : "w-2 bg-white/50"
-                }`}
-                onClick={() => setCurrentIndex(i)}
-              />
-            ))}
-          </div>
-        </>
+    <div className="relative rounded-xl border bg-muted/40 px-12 py-4">
+      <Carousel
+        setApi={setApi}
+        opts={{
+          align: "start",
+          containScroll: "trimSnaps",
+          dragFree: true,
+        }}
+        className="w-full"
+      >
+        <CarouselContent className="-ml-3">
+          {images.map((image, index) => (
+            <CarouselItem
+              key={image.id}
+              className="pl-3 basis-full md:basis-1/2 xl:basis-1/3"
+            >
+              <div className="overflow-hidden rounded-xl border bg-muted/60">
+                <img
+                  src={getFileUrl(image.url)}
+                  alt={`${brand} ${model} Bild ${index + 1}`}
+                  className="h-[220px] w-full object-contain bg-black/5 p-2 sm:h-[260px] lg:h-[300px]"
+                />
+              </div>
+            </CarouselItem>
+          ))}
+        </CarouselContent>
+        {images.length > 1 ? (
+          <>
+            <CarouselPrevious className="left-3 top-1/2 h-9 w-9 -translate-y-1/2 border-0 bg-black/50 text-white hover:bg-black/70" />
+            <CarouselNext className="right-3 top-1/2 h-9 w-9 -translate-y-1/2 border-0 bg-black/50 text-white hover:bg-black/70" />
+          </>
+        ) : null}
+      </Carousel>
+      {snapCount > 1 ? (
+        <div className="mt-4 flex justify-center gap-1.5">
+          {Array.from({ length: snapCount }).map((_, i) => (
+            <button
+              key={i}
+              className={`h-2 rounded-full transition-all ${
+                i === currentIndex ? "w-6 bg-white" : "w-2 bg-white/40"
+              }`}
+              onClick={() => api?.scrollTo(i)}
+            />
+          ))}
+        </div>
       ) : null}
     </div>
   );

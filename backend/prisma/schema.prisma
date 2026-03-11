@@ -111,6 +111,7 @@ model Vehicle {
   marginTaxed     Boolean   @default(false) // Differenzbesteuerung
   status          String    @default("available") // available, reserved, sold
   notes           String?
+  internalNotes   String?
   customerId      String?   // Linked customer (buyer)
   customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   supplierId      String?   // Linked supplier (Lieferant, DB relation)

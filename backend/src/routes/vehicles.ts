@@ -653,6 +653,7 @@ vehiclesRouter.post(
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
       notes: data.notes || null,
+      internalNotes: data.internalNotes || null,
       customerId: data.customerId || null,
       features: data.features || null,
       // New nullable string/number fields
@@ -739,6 +740,7 @@ vehiclesRouter.put(
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
       notes: data.notes !== undefined ? (data.notes || null) : undefined,
+      internalNotes: data.internalNotes !== undefined ? (data.internalNotes || null) : undefined,
       // New nullable string fields
       damageDescription: data.damageDescription !== undefined ? (data.damageDescription || null) : undefined,
       batteryType: data.batteryType !== undefined ? (data.batteryType || null) : undefined,
