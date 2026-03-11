@@ -1,10 +1,11 @@
 import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Upload, X, ImageIcon, Loader2 } from "lucide-react";
+import { Upload, X, ImageIcon, Loader2, Star } from "lucide-react";
 import { type VehicleImage, getFileUrl } from "@/lib/vehicles";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,7 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       toast.success("Bild hochgeladen");
     },
     onError: () => {
@@ -66,10 +68,33 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       toast.success("Bild gelöscht");
     },
     onError: () => {
       toast.error("Fehler beim Löschen");
+    },
+  });
+
+  const setPrimaryMutation = useMutation({
+    mutationFn: async (imageId: string) => {
+      const response = await api.raw(`/api/vehicles/${vehicleId}/images/${imageId}/primary`, {
+        method: "PATCH",
+      });
+
+      if (!response.ok) {
+        throw new Error("Hauptfoto konnte nicht gesetzt werden");
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      toast.success("Hauptfoto aktualisiert");
+    },
+    onError: () => {
+      toast.error("Fehler beim Setzen des Hauptfotos");
     },
   });
 
@@ -148,9 +173,27 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
               <img
                 src={getFileUrl(image.url)}
                 alt="Fahrzeugbild"
-                className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                className="h-full w-full object-contain p-2 transition-transform group-hover:scale-[1.02]"
               />
               <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/30" />
+              <div className="absolute left-2 top-2">
+                {image.isPrimary ? (
+                  <Badge className="bg-amber-500 text-black hover:bg-amber-500">Hauptfoto</Badge>
+                ) : null}
+              </div>
+              {!image.isPrimary ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="absolute bottom-2 left-2 opacity-0 transition-opacity group-hover:opacity-100"
+                  disabled={setPrimaryMutation.isPending}
+                  onClick={() => setPrimaryMutation.mutate(image.id)}
+                >
+                  <Star className="mr-2 h-4 w-4" />
+                  Als Hauptfoto
+                </Button>
+              ) : null}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

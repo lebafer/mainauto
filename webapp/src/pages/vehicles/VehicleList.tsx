@@ -26,6 +26,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type StatusFilter = "all" | "available" | "reserved" | "sold";
 
+function getPrimaryImage(vehicle: Vehicle) {
+  return vehicle.images?.find((image) => image.isPrimary) ?? vehicle.images?.[0];
+}
+
 export default function VehicleList() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -106,63 +110,67 @@ export default function VehicleList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vehicles.map((vehicle) => (
-                <TableRow
-                  key={vehicle.id}
-                  className="cursor-pointer"
-                  onClick={() => navigate(`/vehicles/${vehicle.id}`)}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        {vehicle.images?.[0] ? (
-                          <img
-                            src={getFileUrl(vehicle.images[0].url)}
-                            alt={`${vehicle.brand} ${vehicle.model}`}
-                            className="h-10 w-10 rounded-lg object-cover"
-                          />
-                        ) : (
-                          <Car className="h-5 w-5 text-muted-foreground" />
-                        )}
+              {vehicles.map((vehicle) => {
+                const primaryImage = getPrimaryImage(vehicle);
+
+                return (
+                  <TableRow
+                    key={vehicle.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/60">
+                          {primaryImage ? (
+                            <img
+                              src={getFileUrl(primaryImage.url)}
+                              alt={`${vehicle.brand} ${vehicle.model}`}
+                              className="h-full w-full object-contain p-1"
+                            />
+                          ) : (
+                            <Car className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {vehicle.brand} {vehicle.model}
+                          </p>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {vehicle.vehicleNumber}
+                          </p>
+                          <p className="text-xs text-muted-foreground sm:hidden">
+                            {vehicle.firstRegistration
+                              ? new Date(vehicle.firstRegistration).getFullYear()
+                              : vehicle.year ?? "--"} &middot;{" "}
+                            {formatMileage(vehicle.mileage)}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">
-                          {vehicle.brand} {vehicle.model}
-                        </p>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          {vehicle.vehicleNumber}
-                        </p>
-                        <p className="text-xs text-muted-foreground sm:hidden">
-                          {vehicle.firstRegistration
-                            ? new Date(vehicle.firstRegistration).getFullYear()
-                            : vehicle.year ?? "--"} &middot;{" "}
-                          {formatMileage(vehicle.mileage)}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {vehicle.firstRegistration
-                      ? new Date(vehicle.firstRegistration).getFullYear()
-                      : vehicle.year ?? "--"}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    {formatMileage(vehicle.mileage)}
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatPrice(
-                      calculateGrossPrice(
-                        vehicle.sellingPrice,
-                        vehicle.taxRate,
-                        vehicle.marginTaxed
-                      )
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <StatusBadge status={vehicle.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      {vehicle.firstRegistration
+                        ? new Date(vehicle.firstRegistration).getFullYear()
+                        : vehicle.year ?? "--"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {formatMileage(vehicle.mileage)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatPrice(
+                        calculateGrossPrice(
+                          vehicle.sellingPrice,
+                          vehicle.taxRate,
+                          vehicle.marginTaxed
+                        )
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <StatusBadge status={vehicle.status} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>

@@ -1260,12 +1260,11 @@ function HeroImages({
   }
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border bg-muted" style={{ maxHeight: "420px" }}>
+    <div className="relative w-full overflow-hidden rounded-xl border bg-muted/60">
       <img
         src={getFileUrl(images[currentIndex]?.url ?? "")}
         alt={`${brand} ${model}`}
-        className="w-full object-cover"
-        style={{ maxHeight: "420px" }}
+        className="h-[260px] w-full object-contain bg-black/5 p-2 sm:h-[320px] lg:h-[380px]"
       />
       {images.length > 1 ? (
         <>
@@ -1293,7 +1292,7 @@ function HeroImages({
           >
             <ChevronRight className="h-5 w-5" />
           </Button>
-          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5">
+          <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 gap-1.5 rounded-full bg-black/35 px-3 py-2">
             {images.map((_, i) => (
               <button
                 key={i}

@@ -4,6 +4,7 @@ export interface VehicleImage {
   id: string;
   vehicleId: string;
   url: string;
+  isPrimary?: boolean;
   createdAt: string;
 }
 
