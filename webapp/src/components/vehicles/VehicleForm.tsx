@@ -9,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   VehicleBriefExtractResponseSchema,
+  type VehicleBriefDocumentType,
   type VehicleBriefExtractFields,
 } from "../../../../backend/src/types";
 import {
@@ -309,7 +310,7 @@ interface VehicleFormProps {
   onSubmit: (values: VehicleFormSubmitValues) => void;
   isSubmitting: boolean;
   submitLabel: string;
-  onExtractedBriefFiles?: (files: File[]) => void;
+  onExtractedBriefFiles?: (files: File[], documentType: VehicleBriefDocumentType) => void;
 }
 
 export function VehicleForm({
@@ -335,12 +336,24 @@ export function VehicleForm({
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
   const [briefResult, setBriefResult] = useState<{
+    documentType: VehicleBriefDocumentType;
     detectedFieldCount: number;
     applied: number;
     skipped: number;
     savedDocuments: number;
     warnings: string[];
   } | null>(null);
+
+  function getBriefDocumentLabel(documentType: VehicleBriefDocumentType): string {
+    switch (documentType) {
+      case "teil1":
+        return "Fahrzeugschein";
+      case "teil2":
+        return "Fahrzeugbrief";
+      default:
+        return "Fahrzeugpapiere";
+    }
+  }
 
   const initialValues: Partial<VehicleFormValues> = {
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
@@ -533,13 +546,18 @@ export function VehicleForm({
     return { applied, skipped };
   }
 
-  async function uploadBriefDocuments(vehicleId: string, files: File[]): Promise<number> {
+  async function uploadBriefDocuments(
+    vehicleId: string,
+    files: File[],
+    documentType: VehicleBriefDocumentType
+  ): Promise<number> {
     let uploaded = 0;
+    const label = getBriefDocumentLabel(documentType);
 
     for (const [index, file] of files.entries()) {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("name", files.length === 1 ? "Fahrzeugbrief" : `Fahrzeugbrief ${index + 1}`);
+      formData.append("name", files.length === 1 ? label : `${label} ${index + 1}`);
 
       const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
         method: "POST",
@@ -582,16 +600,17 @@ export function VehicleForm({
 
       if (vehicle?.id) {
         try {
-          savedDocuments = await uploadBriefDocuments(vehicle.id, files);
+          savedDocuments = await uploadBriefDocuments(vehicle.id, files, result.documentType);
           queryClient.invalidateQueries({ queryKey: ["vehicle", vehicle.id] });
         } catch (error) {
-          warnings.push(error instanceof Error ? error.message : "Fahrzeugbrief konnte nicht gespeichert werden");
+          warnings.push(error instanceof Error ? error.message : "Fahrzeugpapiere konnten nicht gespeichert werden");
         }
       } else {
-        onExtractedBriefFiles?.(files);
+        onExtractedBriefFiles?.(files, result.documentType);
       }
 
       setBriefResult({
+        documentType: result.documentType,
         detectedFieldCount: result.detectedFieldCount,
         applied,
         skipped,
@@ -600,8 +619,9 @@ export function VehicleForm({
       });
     },
     onError: (error: unknown) => {
-      onExtractedBriefFiles?.([]);
+      onExtractedBriefFiles?.([], "unknown");
       setBriefResult({
+        documentType: "unknown",
         detectedFieldCount: 0,
         applied: 0,
         skipped: 0,
@@ -792,7 +812,7 @@ export function VehicleForm({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Fahrzeugbrief analysieren (PDF/Bild)</CardTitle>
+            <CardTitle className="text-lg">Fahrzeugpapiere analysieren (Brief/Schein, PDF/Bild)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
@@ -806,7 +826,7 @@ export function VehicleForm({
                   onChange={handleBriefFilesChange}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Unterstützt: PDF, JPG, PNG, WEBP. Bereits ausgefüllte Felder werden nicht überschrieben.
+                  Unterstützt: PDF, JPG, PNG, WEBP. Fahrzeugschein und Fahrzeugbrief werden erkannt. Bereits ausgefüllte Felder werden nicht überschrieben.
                 </p>
                 {briefFiles.length > 0 ? (
                   <p className="text-xs text-muted-foreground">
@@ -831,6 +851,7 @@ export function VehicleForm({
 
             {briefResult ? (
               <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm space-y-1">
+                <p>Dokumenttyp: {getBriefDocumentLabel(briefResult.documentType)}</p>
                 <p>
                   Erkannt: {briefResult.detectedFieldCount} · Übernommen: {briefResult.applied} · Übersprungen: {briefResult.skipped}
                 </p>

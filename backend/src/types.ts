@@ -135,6 +135,13 @@ export type VehicleUpdate = z.infer<typeof VehicleUpdateSchema>;
 
 // ─── Vehicle Brief Extraction Schemas ──────────────────────────
 
+export const VehicleBriefDocumentTypeSchema = z.enum([
+  "teil1",
+  "teil2",
+  "mixed",
+  "unknown",
+]);
+
 export const VehicleBriefExtractFieldsSchema = z.object({
   vin: z.string().optional(),
   firstRegistration: z.string().optional(), // ISO date string (YYYY-MM-DD)
@@ -156,11 +163,13 @@ export const VehicleBriefExtractFieldsSchema = z.object({
 });
 
 export const VehicleBriefExtractResponseSchema = z.object({
+  documentType: VehicleBriefDocumentTypeSchema.default("unknown"),
   fields: VehicleBriefExtractFieldsSchema,
   warnings: z.array(z.string()).default([]),
   detectedFieldCount: z.number().int().min(0),
 });
 
+export type VehicleBriefDocumentType = z.infer<typeof VehicleBriefDocumentTypeSchema>;
 export type VehicleBriefExtractFields = z.infer<typeof VehicleBriefExtractFieldsSchema>;
 export type VehicleBriefExtractResponse = z.infer<typeof VehicleBriefExtractResponseSchema>;
 

@@ -6,6 +6,7 @@ import { ArrowLeft, CheckCircle, ArrowRight, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
 import { type Vehicle } from "@/lib/vehicles";
+import { type VehicleBriefDocumentType } from "../../../../backend/src/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VehicleForm, type VehicleFormSubmitValues } from "@/components/vehicles/VehicleForm";
@@ -17,14 +18,31 @@ export default function VehicleNew() {
   const queryClient = useQueryClient();
   const [createdVehicle, setCreatedVehicle] = useState<Vehicle | null>(null);
   const [pendingBriefFiles, setPendingBriefFiles] = useState<File[]>([]);
+  const [pendingBriefDocumentType, setPendingBriefDocumentType] = useState<VehicleBriefDocumentType>("unknown");
 
-  async function uploadBriefDocuments(vehicleId: string, files: File[]): Promise<number> {
+  function getBriefDocumentLabel(documentType: VehicleBriefDocumentType): string {
+    switch (documentType) {
+      case "teil1":
+        return "Fahrzeugschein";
+      case "teil2":
+        return "Fahrzeugbrief";
+      default:
+        return "Fahrzeugpapiere";
+    }
+  }
+
+  async function uploadBriefDocuments(
+    vehicleId: string,
+    files: File[],
+    documentType: VehicleBriefDocumentType
+  ): Promise<number> {
     let uploaded = 0;
+    const label = getBriefDocumentLabel(documentType);
 
     for (const [index, file] of files.entries()) {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("name", files.length === 1 ? "Fahrzeugbrief" : `Fahrzeugbrief ${index + 1}`);
+      formData.append("name", files.length === 1 ? label : `${label} ${index + 1}`);
 
       const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
         method: "POST",
@@ -33,7 +51,7 @@ export default function VehicleNew() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error?.message || "Fahrzeugbrief konnte nicht gespeichert werden");
+        throw new Error(errorData?.error?.message || "Fahrzeugpapiere konnten nicht gespeichert werden");
       }
 
       uploaded += 1;
@@ -48,16 +66,17 @@ export default function VehicleNew() {
     onSuccess: async (data) => {
       if (pendingBriefFiles.length > 0) {
         try {
-          const uploaded = await uploadBriefDocuments(data.id, pendingBriefFiles);
+          const uploaded = await uploadBriefDocuments(data.id, pendingBriefFiles, pendingBriefDocumentType);
           if (uploaded > 0) {
-            toast.success(`Fahrzeugbrief gespeichert (${uploaded})`);
+            toast.success(`${getBriefDocumentLabel(pendingBriefDocumentType)} gespeichert (${uploaded})`);
           }
         } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Fahrzeugbrief konnte nicht gespeichert werden");
+          toast.error(error instanceof Error ? error.message : "Fahrzeugpapiere konnten nicht gespeichert werden");
         }
       }
 
       setPendingBriefFiles([]);
+      setPendingBriefDocumentType("unknown");
       queryClient.invalidateQueries({ queryKey: ["vehicles"] });
       queryClient.invalidateQueries({ queryKey: ["vehicle", data.id] });
       setCreatedVehicle(data);
@@ -150,7 +169,10 @@ export default function VehicleNew() {
         onSubmit={(values) => createMutation.mutate(values)}
         isSubmitting={createMutation.isPending}
         submitLabel="Fahrzeug anlegen"
-        onExtractedBriefFiles={(files) => setPendingBriefFiles(files)}
+        onExtractedBriefFiles={(files, documentType) => {
+          setPendingBriefFiles(files);
+          setPendingBriefDocumentType(documentType);
+        }}
       />
     </div>
   );

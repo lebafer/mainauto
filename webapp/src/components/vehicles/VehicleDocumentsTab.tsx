@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Upload, FileText, X, Loader2, Download } from "lucide-react";
 import { type VehicleDocument, getFileUrl } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,6 +97,35 @@ export function VehicleDocumentsTab({
     uploadMutation.mutate({ file: docFile, name: docName.trim() });
   }
 
+  async function handleDownload(doc: VehicleDocument) {
+    try {
+      const response = await fetch(getFileUrl(doc.url), {
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Download fehlgeschlagen");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const extension = doc.url.split(".").pop()?.split("?")[0];
+      const filename = extension && !doc.name.toLowerCase().endsWith(`.${extension.toLowerCase()}`)
+        ? `${doc.name}.${extension}`
+        : doc.name;
+
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast.error("Fehler beim Download");
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Upload dialog */}
@@ -174,6 +203,14 @@ export function VehicleDocumentsTab({
                   <a href={getFileUrl(doc.url)} target="_blank" rel="noopener noreferrer">
                     Öffnen
                   </a>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDownload(doc)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
                 </Button>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
