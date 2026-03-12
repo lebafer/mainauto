@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
-import { DocumentGenerateSchema } from "../types";
+import { DocumentGenerateSchema, PurchaseContractGenerateSchema } from "../types";
+import { readFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
@@ -100,6 +101,168 @@ async function htmlToPdf(html: string): Promise<Uint8Array> {
 }
 
 const documentsRouter = new Hono();
+const DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
+const DEALER_ADDRESS = "Mainzer Str. 10 + 37";
+const DEALER_CITY = "63897 Miltenberg";
+const DEALER_WEB = "www.mainauto.eu";
+const DEALER_EMAIL = "mainauto@gmail.com";
+const DEALER_PHONE = "+49(0)9371-5054245";
+const DEALER_TAX_ID = "DE196691148";
+const DEALER_BANK = "Sparkasse Odenwaldkreis";
+const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
+const DEALER_BIC = "HELADEF1ERB";
+const LOGO_DATA_URI = (() => {
+  try {
+    const logoUrl = new URL("../../../webapp/public/mainauto-logo.png", import.meta.url);
+    const buffer = readFileSync(logoUrl);
+    return `data:image/png;base64,${buffer.toString("base64")}`;
+  } catch (error) {
+    console.warn("[documents] logo_load_failed", error);
+    return null;
+  }
+})();
+
+interface DocumentParty {
+  firstName: string;
+  lastName: string;
+  company: string | null;
+  address: string | null;
+  city: string | null;
+  zip: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
+  taxId: string | null;
+}
+
+function getDealerFooterHtml(): string {
+  return `
+    ${DEALER_NAME} &bull; ${DEALER_ADDRESS} &bull; ${DEALER_CITY}<br>
+    E-Mail: ${DEALER_EMAIL} &bull; Tel. ${DEALER_PHONE} &bull; Web: ${DEALER_WEB}<br>
+    ${DEALER_BANK} &bull; IBAN: ${DEALER_IBAN} &bull; BIC: ${DEALER_BIC}<br>
+    USt-IdNr. ${DEALER_TAX_ID} &bull; Vertretungsberechtigt: Manuel Rui Fernandes
+  `;
+}
+
+function getDealerHeaderHtml(): string {
+  const logoHtml = LOGO_DATA_URI
+    ? `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="dealer-logo" />`
+    : "";
+
+  return `
+    <div class="dealer-header">
+      <div class="dealer-brand">
+        ${logoHtml}
+        <div>
+          <div class="dealer-name">${DEALER_NAME}</div>
+          <div class="dealer-sub">${DEALER_ADDRESS} &bull; ${DEALER_CITY} &bull; Tel. ${DEALER_PHONE} &bull; Web: ${DEALER_WEB} &bull; Mail: ${DEALER_EMAIL} &bull; USt-IdNr. ${DEALER_TAX_ID}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function getPartyCityLine(party: Pick<DocumentParty, "zip" | "city" | "country">): string {
+  const base = [party.zip, party.city].filter(Boolean).join(" ");
+  if (party.country) {
+    return base ? `${base} / ${party.country}` : party.country;
+  }
+  return base;
+}
+
+function normalizePartyFromCustomer(customer: {
+  firstName: string;
+  lastName: string;
+  company: string | null;
+  address: string | null;
+  city: string | null;
+  zip: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
+  taxId: string | null;
+}): DocumentParty {
+  return {
+    firstName: customer.firstName,
+    lastName: customer.lastName,
+    company: customer.company,
+    address: customer.address,
+    city: customer.city,
+    zip: customer.zip,
+    country: customer.country,
+    email: customer.email,
+    phone: customer.phone,
+    taxId: customer.taxId,
+  };
+}
+
+function normalizePartyFromSupplier(supplier: {
+  name: string;
+  supplierType: string | null;
+  contactPerson: string | null;
+  street: string | null;
+  address: string | null;
+  city: string | null;
+  zip: string | null;
+  country: string | null;
+  email: string | null;
+  phone: string | null;
+}): DocumentParty {
+  const rawName = (supplier.contactPerson ?? supplier.name).trim();
+  const parts = rawName.split(/\s+/).filter(Boolean);
+  const firstName = parts[0] ?? supplier.name;
+  const lastName = parts.slice(1).join(" ") || "";
+
+  return {
+    firstName,
+    lastName,
+    company: supplier.supplierType === "gewerblich" ? supplier.name : null,
+    address: supplier.street ?? supplier.address ?? null,
+    city: supplier.city,
+    zip: supplier.zip,
+    country: supplier.country,
+    email: supplier.email,
+    phone: supplier.phone,
+    taxId: null,
+  };
+}
+
+async function resolveParty(
+  source: "customer" | "supplier" | "manual",
+  id?: string,
+  manualParty?: Partial<DocumentParty>
+): Promise<DocumentParty | null> {
+  if (source === "manual") {
+    if (!manualParty?.firstName || !manualParty?.lastName) {
+      return null;
+    }
+
+    return {
+      firstName: manualParty.firstName,
+      lastName: manualParty.lastName,
+      company: manualParty.company ?? null,
+      address: manualParty.address ?? null,
+      city: manualParty.city ?? null,
+      zip: manualParty.zip ?? null,
+      country: manualParty.country ?? null,
+      email: manualParty.email ?? null,
+      phone: manualParty.phone ?? null,
+      taxId: manualParty.taxId ?? null,
+    };
+  }
+
+  if (!id) {
+    return null;
+  }
+
+  if (source === "customer") {
+    const customer = await prisma.customer.findUnique({ where: { id } });
+    return customer ? normalizePartyFromCustomer(customer) : null;
+  }
+
+  const supplier = await prisma.supplier.findUnique({ where: { id } });
+  return supplier ? normalizePartyFromSupplier(supplier) : null;
+}
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat("de-DE", {
@@ -552,6 +715,8 @@ function generateContract(
 
   /* Dealer header */
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
+  .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
+  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
@@ -619,10 +784,7 @@ function generateContract(
 <body>
 <div class="page">
 
-  <div class="dealer-header">
-    <div class="dealer-name">MainAuto Miltenberg Manuel Rui Fernandes</div>
-    <div class="dealer-sub">Mainzer Str. 10 + 37 &bull; 63897 Miltenberg &bull; Tel. +49(0)9371-5054245 &bull; Fax: &bull; Web: www.mainauto.eu &bull; Mail: mainauto@gmail.com &bull; USt-IdNr. DE196691148</div>
-  </div>
+  ${getDealerHeaderHtml()}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-internalref">Interne Nr. ${vehicle.vehicleNumber}&nbsp;&nbsp;&nbsp;Export</div>
@@ -630,11 +792,11 @@ function generateContract(
   <div class="parties">
     <div class="party-block">
       <div class="party-block-title">Verk&auml;ufer</div>
-      <div>MainAuto Miltenberg Manuel Rui Fernandes</div>
-      <div>Mainzer Str. 10 + 37</div>
-      <div>63897 Miltenberg</div>
-      <div>Tel. +49(0)9371-5054245, Fax: , Web: www.mainauto.eu</div>
-      <div>Mail: mainauto@gmail.com, USt-IdNr. DE196691148</div>
+      <div>${DEALER_NAME}</div>
+      <div>${DEALER_ADDRESS}</div>
+      <div>${DEALER_CITY}</div>
+      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}</div>
+      <div>Mail: ${DEALER_EMAIL}, USt-IdNr. ${DEALER_TAX_ID}</div>
     </div>
     <div class="party-block">
       <div class="party-block-title">K&auml;ufer</div>
@@ -690,13 +852,242 @@ function generateContract(
   </div>
   <div class="sig-city">Miltenberg, ${todayFormatted}</div>
 
-  <div class="doc-footer">
-    MainAuto Miltenberg Manuel Rui Fernandes &bull; Mainzer Str. 10 + 37 &bull; 63897 Miltenberg<br>
-    E-Mail: mainauto@gmail.com &bull; Tel. +49(0)9371-5054245 &bull; Fax:<br>
-    Sparkasse Odenwaldkreis &bull; Kto.-Inhaber: Manuel Fernandes &bull; IBAN: DE 59 5085 1952 0000 1147 77 &bull; BIC: HELADEF1ERB<br>
-    USt-IdNr. DE196691148 &bull; Vertretungsberechtigt: Manuel Rui Fernandes
+  <div class="doc-footer">${getDealerFooterHtml()}</div>
+
+</div>
+</body>
+</html>`;
+}
+
+function generatePurchaseContract(
+  vehicle: {
+    brand: string;
+    model: string;
+    mileage: number;
+    vin: string | null;
+    registrationDocNumber: string | null;
+    color: string | null;
+    fuelType: string | null;
+    transmission: string | null;
+    power: string | null;
+    purchasePrice: number;
+    taxRate: number;
+    marginTaxed: boolean;
+    features: string | null;
+    bodyType: string | null;
+    displacement: number | null;
+    powerKw: number | null;
+    firstRegistration: Date | string | null;
+    huDue: Date | string | null;
+    previousOwners: number | null;
+    hasDamage: boolean;
+    damageDescription: string | null;
+    damageAmount: number | null;
+    vehicleNumber: string;
+    dealerPrice: number | null;
+    notes: string | null;
+  },
+  seller: DocumentParty
+): string {
+  const today = new Date();
+  const todayFormatted = formatDateDE(today);
+  const sellerCityLine = getPartyCityLine(seller);
+  const contractPrice = vehicle.purchasePrice > 0 ? vehicle.purchasePrice : (vehicle.dealerPrice ?? 0);
+  const priceFormatted = formatGermanPrice(contractPrice);
+  const priceInWords = numberToGermanWords(Math.round(contractPrice));
+
+  let featuresList: string[] = [];
+  if (vehicle.features) {
+    try {
+      featuresList = JSON.parse(vehicle.features) as string[];
+    } catch {
+      featuresList = [vehicle.features];
+    }
+  }
+
+  const hasTowhitch = featuresList.some((feature) => /anh.?ng|tow.?hitch|anh.ngevorrichtung/i.test(feature));
+  const powerText = vehicle.powerKw
+    ? `${vehicle.powerKw} kW`
+    : vehicle.power
+      ? `${vehicle.power} PS`
+      : "";
+
+  const leftRows = [
+    ["Aufbau", vehicle.bodyType ?? ""],
+    ["Leistung", powerText],
+    ["Fahrgestell-Nr.", vehicle.vin ?? ""],
+    ["Fahrzeugbrief-Nr.", vehicle.registrationDocNumber ?? ""],
+    ["Farbe", vehicle.color ?? ""],
+    ["Getriebe", vehicle.transmission ?? ""],
+    ["Hubraum", vehicle.displacement ? `${vehicle.displacement} ccm` : ""],
+    ["Kraftstoff", vehicle.fuelType ?? ""],
+    ["Anhängerkupplung", hasTowhitch ? "ja" : "nein"],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+
+  const rightRows = [
+    ["Erstzulassung", formatDateDE(vehicle.firstRegistration)],
+    ["Km-Stand", `${vehicle.mileage.toLocaleString("de-DE")} km`],
+    ["nächste HU", formatMonthYearDE(vehicle.huDue)],
+    ["nächste AU", formatMonthYearDE(vehicle.huDue)],
+    ["Anzahl Halter", vehicle.previousOwners != null ? String(vehicle.previousOwners) : ""],
+    ["Taxi-/Miet-/Fahrschule", "nein"],
+    ["Unfallfrei", vehicle.hasDamage ? "nein" : "ja"],
+    ["Fahrzeug fahrbereit", "ja"],
+    ["Bestellung verbindlich", "ja"],
+    ["Übergabetermin", todayFormatted],
+  ].filter((row): row is [string, string] => Boolean(row[1]));
+
+  const rowHtml = (rows: [string, string][]) =>
+    rows.map(([label, value]) => `
+      <div class="data-row">
+        <div class="data-label">${label}</div>
+        <div class="data-value">${value}</div>
+      </div>
+    `).join("");
+
+  const vehicleNoteParts = [vehicle.damageDescription, vehicle.notes?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()]
+    .filter(Boolean);
+  if (vehicle.damageAmount) {
+    vehicleNoteParts.push(`Bekannte Aufbereitung/Reparatur ca. ${formatGermanPrice(vehicle.damageAmount)}`);
+  }
+
+  const priceTaxLabel = vehicle.marginTaxed
+    ? "Differenzbesteuert"
+    : `Regelbesteuert (${vehicle.taxRate}% MwSt.)`;
+
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Ankaufschein</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111; line-height: 1.4; background: #fff; }
+  .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
+  .dealer-header { margin-bottom: 10px; }
+  .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
+  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-name { font-size: 12pt; font-weight: bold; color: #111; }
+  .dealer-sub { font-size: 8pt; color: #333; margin-top: 3px; line-height: 1.45; }
+  .doc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; background: #efefef; padding: 6px 8px; margin-bottom: 10px; }
+  .doc-title { font-size: 18pt; font-weight: 700; line-height: 1; }
+  .doc-subtitle { font-size: 10pt; font-weight: 700; margin-top: 2px; }
+  .doc-internalref { font-size: 10pt; font-weight: 700; white-space: nowrap; }
+  .party-section { display: grid; grid-template-columns: 94px 1fr; gap: 12px 18px; margin-bottom: 12px; font-size: 8.5pt; }
+  .party-label { font-size: 14pt; font-weight: 700; }
+  .party-content strong { display: block; margin-bottom: 2px; }
+  .party-content div { margin-bottom: 1px; }
+  .intro-text { font-size: 8.5pt; margin-bottom: 8px; }
+  .vehicle-name { border: 1px solid #777; background: #e9e9e9; padding: 6px 8px; font-size: 18pt; font-weight: 700; margin-bottom: 6px; }
+  .data-box { border: 1px solid #888; background: #f5f5f5; padding: 8px 8px 6px; }
+  .data-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .data-row { display: grid; grid-template-columns: 110px 1fr; gap: 8px; font-size: 8.5pt; margin-bottom: 2px; }
+  .data-label { color: #333; }
+  .data-value { font-weight: 700; }
+  .section-box { border: 1px solid #888; background: #f5f5f5; padding: 8px; margin-top: 4px; }
+  .section-title { font-size: 10pt; font-weight: 700; margin-bottom: 4px; }
+  .section-text { font-size: 8.5pt; line-height: 1.45; }
+  .price-box { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; border: 1px solid #888; background: #efefef; padding: 8px; margin-top: 4px; }
+  .price-main { font-size: 9pt; }
+  .price-amount { font-size: 15pt; font-weight: 700; }
+  .price-words { font-size: 7pt; color: #333; margin-top: 2px; text-transform: lowercase; }
+  .price-tax { font-size: 9pt; font-weight: 700; text-align: right; }
+  .legal-title { font-size: 9pt; font-weight: 700; margin: 14px 0 4px; }
+  .legal-text { font-size: 7.6pt; line-height: 1.55; color: #222; margin-bottom: 6px; }
+  .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; align-items: end; }
+  .signature-box { min-height: 34px; border: 1px solid #888; background: #efefef; padding: 4px 6px; font-size: 8pt; display: flex; align-items: flex-end; }
+  .signature-box.center { justify-content: center; align-items: center; }
+  .signature-logo { max-width: 88px; max-height: 24px; object-fit: contain; }
+  .signature-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 8pt; margin-top: 2px; }
+  .doc-footer { margin-top: 12px; text-align: center; font-size: 7pt; line-height: 1.5; color: #333; }
+  @media print {
+    body { margin: 0; }
+    .page { padding: 12mm 14mm; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  ${getDealerHeaderHtml()}
+
+  <div class="doc-head">
+    <div>
+      <div class="doc-title">Ankaufschein</div>
+      <div class="doc-subtitle">Verbindlicher Ankauf eines gebrauchten Kraftfahrzeuges/Anh&auml;ngers</div>
+    </div>
+    <div class="doc-internalref">Interne Nr. ${vehicle.vehicleNumber}</div>
   </div>
 
+  <div class="party-section">
+    <div class="party-label">K&auml;ufer</div>
+    <div class="party-content">
+      <strong>${DEALER_NAME}</strong>
+      <div>${DEALER_ADDRESS}, ${DEALER_CITY}</div>
+      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}, Mail: ${DEALER_EMAIL}</div>
+    </div>
+
+    <div class="party-label">Verk&auml;ufer</div>
+    <div class="party-content">
+      ${seller.company ? `<strong>${seller.company}</strong>` : ""}
+      <div>${seller.firstName} ${seller.lastName}</div>
+      ${seller.address ? `<div>${seller.address}</div>` : ""}
+      ${sellerCityLine ? `<div>${sellerCityLine}</div>` : ""}
+      ${seller.phone ? `<div>Tel. ${seller.phone}</div>` : ""}
+      ${seller.email ? `<div>E-Mail: ${seller.email}</div>` : ""}
+      ${seller.taxId ? `<div>USt-IdNr.: ${seller.taxId}</div>` : ""}
+    </div>
+  </div>
+
+  <p class="intro-text">Der oben genannte K&auml;ufer kauft vom oben genannten Verk&auml;ufer folgendes Fahrzeug:</p>
+
+  <div class="vehicle-name">${vehicle.brand} ${vehicle.model}</div>
+
+  <div class="data-box">
+    <div class="data-grid">
+      <div>${rowHtml(leftRows)}</div>
+      <div>${rowHtml(rightRows)}</div>
+    </div>
+  </div>
+
+  ${featuresList.length > 0 ? `
+    <div class="section-box">
+      <div class="section-title">Ausstattung</div>
+      <div class="section-text">${featuresList.join(" &bull; ")}</div>
+    </div>
+  ` : ""}
+
+  ${vehicleNoteParts.length > 0 ? `
+    <div class="section-box">
+      <div class="section-title">Hinweise</div>
+      <div class="section-text">${vehicleNoteParts.join(" ")}</div>
+    </div>
+  ` : ""}
+
+  <div class="price-box">
+    <div class="price-main">
+      <div class="price-amount">Ankaufspreis: ${priceFormatted}</div>
+      <div class="price-words">In Worten: ${priceInWords.toLowerCase()}</div>
+    </div>
+    <div class="price-tax">${priceTaxLabel}</div>
+  </div>
+
+  <div class="legal-title">Zahlungsweise + sonstige Vereinbarungen mit Vorrang auf die ausgeh&auml;ndigten Gesch&auml;ftsbedingungen:</div>
+  <p class="legal-text">Der Ankauf/tausch beruht auf dem zum Zeitpunkt des Ankaufes aktuellen Zustand des Fahrzeugs. Der Verk&auml;ufer erkl&auml;rt, das Fahrzeug in seinem rechtm&auml;&szlig;igen Eigentum zu haben und frei von Rechten Dritter zu &uuml;bergeben, soweit nichts anderes schriftlich vermerkt ist. F&uuml;r bekannte oder erkennbare M&auml;ngel, Vorsch&auml;den oder technische Besonderheiten des Fahrzeugs ist der Verk&auml;ufer zur wahrheitsgem&auml;&szlig;en Angabe verpflichtet.</p>
+  <p class="legal-text">Mit der Unterschrift best&auml;tigt der Verk&auml;ufer, dass die Angaben zum Fahrzeug nach bestem Wissen richtig sind. Das Fahrzeug wird mit den ausgeh&auml;ndigten Unterlagen, Schl&uuml;sseln und dem vereinbarten Zubeh&ouml;r &uuml;bergeben. Falls eine Abl&ouml;sung oder Finanzierung besteht, ist dies vor &Uuml;bergabe offenzulegen.</p>
+  <p class="legal-text">Die Zahlung erfolgt nach Vereinbarung per Barzahlung oder &Uuml;berweisung. Bis zur vollst&auml;ndigen &Uuml;bergabe aller zum Eigentums&uuml;bergang erforderlichen Unterlagen kann der K&auml;ufer die Auszahlung zur&uuml;ckhalten. Bei Minderj&auml;hrigen ist die Unterschrift des gesetzlichen Vertreters erforderlich.</p>
+
+  <div class="signature-row">
+    <div class="signature-box">Miltenberg, ${todayFormatted}</div>
+    <div class="signature-box center">${LOGO_DATA_URI ? `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="signature-logo" />` : ""}</div>
+    <div class="signature-box"></div>
+  </div>
+  <div class="signature-labels">
+    <div>Ort, Datum</div>
+    <div>Unterschrift K&auml;ufer</div>
+    <div>Unterschrift Verk&auml;ufer</div>
+  </div>
+
+  <div class="doc-footer">${getDealerFooterHtml()}</div>
 </div>
 </body>
 </html>`;
@@ -788,6 +1179,63 @@ documentsRouter.post(
       return c.body(pdfBuffer as unknown as ReadableStream);
     } catch (error) {
       console.error("[documents] contract_pdf_generation_failed", { vehicleId, customerId, error });
+      return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
+    }
+  }
+);
+
+documentsRouter.post(
+  "/generate-purchase-html",
+  zValidator("json", PurchaseContractGenerateSchema),
+  async (c) => {
+    const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const seller = await resolveParty(sellerSource, sellerId, manualSeller);
+    if (!seller) {
+      return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const html = generatePurchaseContract(vehicle, seller);
+    return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
+  }
+);
+
+documentsRouter.post(
+  "/generate-purchase-pdf",
+  zValidator("json", PurchaseContractGenerateSchema),
+  async (c) => {
+    const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const seller = await resolveParty(sellerSource, sellerId, manualSeller);
+    if (!seller) {
+      return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const html = generatePurchaseContract(vehicle, seller);
+
+    try {
+      const pdfBuffer = await htmlToPdf(html);
+      c.header("Content-Type", "application/pdf");
+      c.header("Content-Disposition", `attachment; filename="Ankaufvertrag_${vehicle.vehicleNumber}.pdf"`);
+      c.header("X-Vehicle-Number", vehicle.vehicleNumber);
+      return c.body(pdfBuffer as unknown as ReadableStream);
+    } catch (error) {
+      console.error("[documents] purchase_contract_pdf_generation_failed", {
+        vehicleId,
+        sellerSource,
+        sellerId,
+        error,
+      });
       return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
     }
   }
@@ -1215,6 +1663,8 @@ function generateVermittlungsvertrag(
   .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
 
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
+  .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
+  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
@@ -1266,10 +1716,7 @@ function generateVermittlungsvertrag(
 <body>
 <div class="page">
 
-  <div class="dealer-header">
-    <div class="dealer-name">MainAuto Miltenberg Manuel Rui Fernandes</div>
-    <div class="dealer-sub">Mainzer Str. 10 + 37 &bull; 63897 Miltenberg &bull; Tel. +49(0)9371-5054245 &bull; Fax: &bull; Web: www.mainauto.eu &bull; Mail: mainauto@gmail.com &bull; USt-IdNr. DE196691148</div>
-  </div>
+  ${getDealerHeaderHtml()}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-subtitle">Vermittlungsvertrag</div>
@@ -1278,11 +1725,11 @@ function generateVermittlungsvertrag(
   <div class="parties">
     <div class="party-block">
       <div class="party-block-title">Vermittler</div>
-      <div><strong>MainAuto Miltenberg Manuel Rui Fernandes</strong></div>
-      <div>Mainzer Str. 10 + 37</div>
-      <div>63897 Miltenberg</div>
-      <div>Tel. +49(0)9371-5054245, Web: www.mainauto.eu</div>
-      <div>Mail: mainauto@gmail.com, USt-IdNr. DE196691148</div>
+      <div><strong>${DEALER_NAME}</strong></div>
+      <div>${DEALER_ADDRESS}</div>
+      <div>${DEALER_CITY}</div>
+      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}</div>
+      <div>Mail: ${DEALER_EMAIL}, USt-IdNr. ${DEALER_TAX_ID}</div>
     </div>
     <div class="party-block">
       <div class="party-block-title">Verk&auml;ufer</div>
@@ -1349,12 +1796,7 @@ function generateVermittlungsvertrag(
   </div>
   <div class="sig-city">Miltenberg, ${todayFormatted}</div>
 
-  <div class="doc-footer">
-    MainAuto Miltenberg Manuel Rui Fernandes &bull; Mainzer Str. 10 + 37 &bull; 63897 Miltenberg<br>
-    E-Mail: mainauto@gmail.com &bull; Tel. +49(0)9371-5054245 &bull; Fax:<br>
-    Sparkasse Odenwaldkreis &bull; Kto.-Inhaber: Manuel Fernandes &bull; IBAN: DE 59 5085 1952 0000 1147 77 &bull; BIC: HELADEF1ERB<br>
-    USt-IdNr. DE196691148 &bull; Vertretungsberechtigt: Manuel Rui Fernandes
-  </div>
+  <div class="doc-footer">${getDealerFooterHtml()}</div>
 
 </div>
 </body>

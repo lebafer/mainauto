@@ -33,6 +33,9 @@ interface VehicleDocumentsTabProps {
 
 function getDocumentContentLabel(name: string): string {
   const normalized = name.trim().toLowerCase();
+  if (normalized.includes("ankaufvertrag") || normalized.includes("ankaufschein")) return "Ankaufvertrag";
+  if (normalized.includes("kaufvertrag")) return "Kaufvertrag";
+  if (normalized.includes("vermittlungsvertrag")) return "Vermittlungsvertrag";
   if (normalized.includes("fahrzeugschein")) return "Fahrzeugschein";
   if (normalized.includes("fahrzeugbrief")) return "Fahrzeugbrief";
   if (normalized.includes("fahrzeugpapier")) return "Fahrzeugpapiere";

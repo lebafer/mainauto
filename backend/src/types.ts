@@ -241,13 +241,58 @@ export type VehicleCostCreate = z.infer<typeof VehicleCostCreateSchema>;
 
 // ─── Document Generation Schemas ─────────────────────────────
 
+export const DocumentTypeSchema = z.enum(["offer", "price-tag", "contract", "purchase-contract"]);
+
 export const DocumentGenerateSchema = z.object({
-  type: z.enum(["offer", "price-tag", "contract"]),
+  type: DocumentTypeSchema,
   vehicleId: z.string().min(1, "Vehicle ID is required"),
   customerId: z.string().optional(),
 });
 
 export type DocumentGenerate = z.infer<typeof DocumentGenerateSchema>;
+
+export const DocumentPartySourceSchema = z.enum(["customer", "supplier", "manual"]);
+
+export const DocumentManualPartySchema = z.object({
+  firstName: z.string().trim().min(1, "Vorname ist erforderlich"),
+  lastName: z.string().trim().min(1, "Nachname ist erforderlich"),
+  company: z.string().optional(),
+  address: z.string().optional(),
+  city: z.string().optional(),
+  zip: z.string().optional(),
+  country: z.string().optional(),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  taxId: z.string().optional(),
+});
+
+export const PurchaseContractGenerateSchema = z.object({
+  vehicleId: z.string().min(1, "Vehicle ID is required"),
+  sellerSource: DocumentPartySourceSchema,
+  sellerId: z.string().optional(),
+  manualSeller: DocumentManualPartySchema.optional(),
+}).superRefine((value, ctx) => {
+  if (value.sellerSource === "manual") {
+    if (!value.manualSeller) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["manualSeller"],
+        message: "Verkäuferdaten sind erforderlich",
+      });
+    }
+    return;
+  }
+
+  if (!value.sellerId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["sellerId"],
+      message: "Verkäufer-ID ist erforderlich",
+    });
+  }
+});
+
+export type PurchaseContractGenerate = z.infer<typeof PurchaseContractGenerateSchema>;
 
 // ─── WorkLog Schemas ──────────────────────────────────────────
 

@@ -162,6 +162,19 @@ export default function VehicleDetail() {
   const [addCostOpen, setAddCostOpen] = useState(false);
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
+  const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
+  const [purchaseSellerSource, setPurchaseSellerSource] = useState<"customer" | "supplier" | "manual">("customer");
+  const [purchaseSellerId, setPurchaseSellerId] = useState("");
+  const [purchaseManualFirstName, setPurchaseManualFirstName] = useState("");
+  const [purchaseManualLastName, setPurchaseManualLastName] = useState("");
+  const [purchaseManualCompany, setPurchaseManualCompany] = useState("");
+  const [purchaseManualAddress, setPurchaseManualAddress] = useState("");
+  const [purchaseManualZip, setPurchaseManualZip] = useState("");
+  const [purchaseManualCity, setPurchaseManualCity] = useState("");
+  const [purchaseManualCountry, setPurchaseManualCountry] = useState("");
+  const [purchaseManualPhone, setPurchaseManualPhone] = useState("");
+  const [purchaseManualEmail, setPurchaseManualEmail] = useState("");
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [gbDialogOpen, setGbDialogOpen] = useState(false);
   const [gbCustomerId, setGbCustomerId] = useState("");
   const [gbDateOfReceipt, setGbDateOfReceipt] = useState("");
@@ -290,14 +303,14 @@ export default function VehicleDetail() {
   const { data: contractCustomers } = useQuery({
     queryKey: ["customers"],
     queryFn: () => api.get<Customer[]>("/api/customers"),
-    enabled: contractDialogOpen || gbDialogOpen || vermDialogOpen,
+    enabled: contractDialogOpen || purchaseDialogOpen || gbDialogOpen || vermDialogOpen,
   });
 
-  // Suppliers for Vermittlungsvertrag dialog
+  // Suppliers for purchase / vermittlung dialogs
   const { data: vermSuppliers } = useQuery({
     queryKey: ["suppliers-db"],
     queryFn: () => api.get<Supplier[]>("/api/suppliers-db"),
-    enabled: vermDialogOpen,
+    enabled: purchaseDialogOpen || vermDialogOpen,
   });
 
   const selectedGbCustomer = contractCustomers?.find((c) => c.id === gbCustomerId);
@@ -312,6 +325,81 @@ export default function VehicleDetail() {
         : ""
     );
   }, [selectedGbCustomer]);
+
+  async function handlePurchaseContractDownload() {
+    if (!id || !vehicle) return;
+
+    setPurchaseLoading(true);
+    const vn = vehicle.vehicleNumber ?? id;
+    const filename = `Ankaufvertrag_${vn}.pdf`;
+    const docName = `Ankaufvertrag ${vn}`;
+    const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+    const payload = {
+      vehicleId: id,
+      sellerSource: purchaseSellerSource,
+      ...(purchaseSellerSource === "manual"
+        ? {
+            manualSeller: {
+              firstName: purchaseManualFirstName,
+              lastName: purchaseManualLastName,
+              company: purchaseManualCompany || undefined,
+              address: purchaseManualAddress || undefined,
+              zip: purchaseManualZip || undefined,
+              city: purchaseManualCity || undefined,
+              country: purchaseManualCountry || undefined,
+              phone: purchaseManualPhone || undefined,
+              email: purchaseManualEmail || undefined,
+            },
+          }
+        : {
+            sellerId: purchaseSellerId,
+          }),
+    };
+
+    try {
+      const pdfRes = await fetch(`${baseUrl}/api/documents/generate-purchase-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(payload),
+      });
+      if (!pdfRes.ok) throw new Error("PDF-Erstellung fehlgeschlagen");
+
+      const blob = await pdfRes.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      try {
+        const htmlRes = await fetch(`${baseUrl}/api/documents/generate-purchase-html`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        if (htmlRes.ok) {
+          const { data } = await htmlRes.json();
+          await saveHtmlDocument(id, data.html, filename.replace(".pdf", ".html"), docName);
+        }
+      } catch {
+        // Ignore HTML save errors after successful PDF creation.
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
+      toast.success("Ankaufvertrag als PDF gespeichert");
+      setPurchaseDialogOpen(false);
+    } catch {
+      toast.error("Fehler beim Erstellen des Ankaufvertrags");
+    } finally {
+      setPurchaseLoading(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -434,6 +522,24 @@ export default function VehicleDetail() {
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => {
+                  setPurchaseSellerSource("customer");
+                  setPurchaseSellerId("");
+                  setPurchaseManualFirstName("");
+                  setPurchaseManualLastName("");
+                  setPurchaseManualCompany("");
+                  setPurchaseManualAddress("");
+                  setPurchaseManualZip("");
+                  setPurchaseManualCity("");
+                  setPurchaseManualCountry("");
+                  setPurchaseManualPhone("");
+                  setPurchaseManualEmail("");
+                  setPurchaseDialogOpen(true);
+                }}
+              >
+                Ankaufvertrag
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
                   setContractCustomerId("");
                   setContractDialogOpen(true);
                 }}
@@ -517,6 +623,193 @@ export default function VehicleDetail() {
         open={addCostOpen}
         onOpenChange={setAddCostOpen}
       />
+
+      {/* Ankaufvertrag dialog */}
+      <Dialog open={purchaseDialogOpen} onOpenChange={setPurchaseDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Ankaufvertrag erstellen</DialogTitle>
+            <DialogDescription>
+              Wählen Sie den Verkäufer aus oder geben Sie ihn manuell ein.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-3">
+              <Label>Verkäufer</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={purchaseSellerSource === "customer" ? "default" : "outline"}
+                  onClick={() => {
+                    setPurchaseSellerSource("customer");
+                    setPurchaseSellerId("");
+                  }}
+                >
+                  Kunde
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={purchaseSellerSource === "supplier" ? "default" : "outline"}
+                  onClick={() => {
+                    setPurchaseSellerSource("supplier");
+                    setPurchaseSellerId("");
+                  }}
+                >
+                  Lieferant
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={purchaseSellerSource === "manual" ? "default" : "outline"}
+                  onClick={() => {
+                    setPurchaseSellerSource("manual");
+                    setPurchaseSellerId("");
+                  }}
+                >
+                  Manuell eingeben
+                </Button>
+              </div>
+
+              {purchaseSellerSource === "customer" ? (
+                <Select value={purchaseSellerId} onValueChange={setPurchaseSellerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Kunden auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contractCustomers?.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.firstName} {c.lastName}
+                        {c.company ? ` – ${c.company}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : purchaseSellerSource === "supplier" ? (
+                <Select value={purchaseSellerId} onValueChange={setPurchaseSellerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Lieferanten auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vermSuppliers?.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name}
+                        {s.contactPerson ? ` – ${s.contactPerson}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vorname *</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Max"
+                        value={purchaseManualFirstName}
+                        onChange={(e) => setPurchaseManualFirstName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Nachname *</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Mustermann"
+                        value={purchaseManualLastName}
+                        onChange={(e) => setPurchaseManualLastName(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Firma (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Musterfirma GmbH"
+                        value={purchaseManualCompany}
+                        onChange={(e) => setPurchaseManualCompany(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Adresse (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Musterstraße 1"
+                        value={purchaseManualAddress}
+                        onChange={(e) => setPurchaseManualAddress(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">PLZ (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="12345"
+                        value={purchaseManualZip}
+                        onChange={(e) => setPurchaseManualZip(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Stadt (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Berlin"
+                        value={purchaseManualCity}
+                        onChange={(e) => setPurchaseManualCity(e.target.value)}
+                      />
+                    </div>
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Land (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="Deutschland"
+                        value={purchaseManualCountry}
+                        onChange={(e) => setPurchaseManualCountry(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Telefon (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="+49 ..."
+                        value={purchaseManualPhone}
+                        onChange={(e) => setPurchaseManualPhone(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">E-Mail (optional)</Label>
+                      <Input
+                        className="h-8 text-sm"
+                        placeholder="max@example.com"
+                        value={purchaseManualEmail}
+                        onChange={(e) => setPurchaseManualEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurchaseDialogOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button
+              disabled={
+                purchaseLoading ||
+                (purchaseSellerSource === "manual"
+                  ? (!purchaseManualFirstName || !purchaseManualLastName)
+                  : !purchaseSellerId)
+              }
+              onClick={handlePurchaseContractDownload}
+            >
+              {purchaseLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              PDF herunterladen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Kaufvertrag customer dialog */}
       <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
