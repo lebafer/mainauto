@@ -134,8 +134,12 @@ function getDealerFooterHtml(): string {
   `;
 }
 
-function getDealerHeaderHtml(): string {
-  const logoHtml = getLogoImgHtml("dealer-logo");
+function getLogoImgHtml(className: string, logoSrc: string = LOGO_DATA_URI): string {
+  return `<img src="${logoSrc}" alt="MainAuto" class="${className}" />`;
+}
+
+function getDealerHeaderHtml(logoSrc: string = LOGO_DATA_URI): string {
+  const logoHtml = getLogoImgHtml("dealer-logo", logoSrc);
 
   return `
     <div class="dealer-header">
@@ -150,8 +154,23 @@ function getDealerHeaderHtml(): string {
   `;
 }
 
-function getLogoImgHtml(className: string): string {
-  return `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="${className}" />`;
+function resolveDocumentLogoSrc(c: { req: { header: (name: string) => string | undefined } }): string {
+  const origin = c.req.header("origin");
+  const referer = c.req.header("referer");
+
+  if (origin && /^https?:\/\//i.test(origin)) {
+    return `${origin.replace(/\/$/, "")}/mainauto-logo.png`;
+  }
+
+  if (referer) {
+    try {
+      return `${new URL(referer).origin}/mainauto-logo.png`;
+    } catch {
+      return LOGO_DATA_URI;
+    }
+  }
+
+  return LOGO_DATA_URI;
 }
 
 function getPartyCityLine(party: Pick<DocumentParty, "zip" | "city" | "country">): string {
@@ -347,6 +366,8 @@ function generateOffer(
     email: string | null;
     phone: string | null;
   } | null
+  ,
+  logoSrc: string = LOGO_DATA_URI
 ): string {
   const gross = calculateGross(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
   const tax = calculateTaxAmount(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
@@ -358,7 +379,7 @@ function generateOffer(
 <div class="page">
   <div class="header">
     <div class="header-brand">
-      ${getLogoImgHtml("header-logo")}
+      ${getLogoImgHtml("header-logo", logoSrc)}
       <div>
         <h1>Angebot</h1>
         <p>Fahrzeugangebot</p>
@@ -435,7 +456,7 @@ function generatePriceTag(vehicle: {
   taxRate: number;
   marginTaxed: boolean;
   features: string | null;
-}): string {
+}, logoSrc: string = LOGO_DATA_URI): string {
   const gross = calculateGross(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
 
   return `<!DOCTYPE html>
@@ -463,7 +484,7 @@ function generatePriceTag(vehicle: {
 </head>
 <body>
 <div class="price-tag">
-  <div class="brand-strip">${getLogoImgHtml("brand-logo")}</div>
+  <div class="brand-strip">${getLogoImgHtml("brand-logo", logoSrc)}</div>
   <div class="vehicle-name">${vehicle.brand} ${vehicle.model}</div>
   <div class="vehicle-year">Baujahr ${vehicle.year}</div>
 
@@ -607,6 +628,8 @@ function generateContract(
     phone2: string | null;
     taxId: string | null;
   }
+  ,
+  logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
   const todayFormatted = formatDateDE(today);
@@ -784,7 +807,7 @@ function generateContract(
 <body>
 <div class="page">
 
-  ${getDealerHeaderHtml()}
+  ${getDealerHeaderHtml(logoSrc)}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-internalref">Interne Nr. ${vehicle.vehicleNumber}&nbsp;&nbsp;&nbsp;Export</div>
@@ -888,6 +911,8 @@ function generatePurchaseContract(
     notes: string | null;
   },
   seller: DocumentParty
+  ,
+  logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
   const todayFormatted = formatDateDE(today);
@@ -1008,7 +1033,7 @@ function generatePurchaseContract(
 </head>
 <body>
 <div class="page">
-  ${getDealerHeaderHtml()}
+  ${getDealerHeaderHtml(logoSrc)}
 
   <div class="doc-head">
     <div>
@@ -1078,7 +1103,7 @@ function generatePurchaseContract(
 
   <div class="signature-row">
     <div class="signature-box">Miltenberg, ${todayFormatted}</div>
-    <div class="signature-box center">${getLogoImgHtml("signature-logo")}</div>
+    <div class="signature-box center">${getLogoImgHtml("signature-logo", logoSrc)}</div>
     <div class="signature-box"></div>
   </div>
   <div class="signature-labels">
@@ -1099,6 +1124,7 @@ documentsRouter.post(
   zValidator("json", DocumentGenerateSchema),
   async (c) => {
     const { type, vehicleId, customerId } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
 
     const vehicle = await prisma.vehicle.findUnique({
       where: { id: vehicleId },
@@ -1122,10 +1148,10 @@ documentsRouter.post(
 
     switch (type) {
       case "offer":
-        html = generateOffer(vehicle, customer);
+        html = generateOffer(vehicle, customer, logoSrc);
         break;
       case "price-tag":
-        html = generatePriceTag(vehicle);
+        html = generatePriceTag(vehicle, logoSrc);
         break;
       case "contract":
         if (!customer) {
@@ -1134,7 +1160,7 @@ documentsRouter.post(
             400
           );
         }
-        html = generateContract(vehicle, customer);
+        html = generateContract(vehicle, customer, logoSrc);
         break;
       default:
         return c.json({ error: { message: "Invalid document type", code: "BAD_REQUEST" } }, 400);
@@ -1150,6 +1176,7 @@ documentsRouter.post(
   zValidator("json", DocumentGenerateSchema),
   async (c) => {
     const { type, vehicleId, customerId } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
 
     if (type !== "contract") {
       return c.json({ error: { message: "PDF generation only supported for contract", code: "BAD_REQUEST" } }, 400);
@@ -1169,7 +1196,7 @@ documentsRouter.post(
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateContract(vehicle, customer);
+    const html = generateContract(vehicle, customer, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1189,6 +1216,7 @@ documentsRouter.post(
   zValidator("json", PurchaseContractGenerateSchema),
   async (c) => {
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
 
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) {
@@ -1200,7 +1228,7 @@ documentsRouter.post(
       return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generatePurchaseContract(vehicle, seller);
+    const html = generatePurchaseContract(vehicle, seller, logoSrc);
     return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
   }
 );
@@ -1210,6 +1238,7 @@ documentsRouter.post(
   zValidator("json", PurchaseContractGenerateSchema),
   async (c) => {
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
 
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) {
@@ -1221,7 +1250,7 @@ documentsRouter.post(
       return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generatePurchaseContract(vehicle, seller);
+    const html = generatePurchaseContract(vehicle, seller, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1273,6 +1302,8 @@ function generateGelangensbestaetigung(
     passportNumber: string;
     passportValidUntil: string;
   }
+  ,
+  logoSrc: string = LOGO_DATA_URI
 ): string {
   // Build customer name line
   const customerName = customer.company
@@ -1369,7 +1400,7 @@ function generateGelangensbestaetigung(
 <div class="page">
 
   <div class="doc-header">
-    ${getLogoImgHtml("doc-logo")}
+    ${getLogoImgHtml("doc-logo", logoSrc)}
     <div class="doc-head-copy">
       <div class="top-note">After signature, please send this document back to seller. &nbsp;|&nbsp; Bitte senden Sie dieses Dokument unterschrieben zur&uuml;ck an den Verk&auml;ufer.</div>
       <div class="doc-title-en">Delivery receipt</div>
@@ -1460,6 +1491,7 @@ documentsRouter.post(
   "/generate-gelangensbestaetigung",
   async (c) => {
     const body = await c.req.json();
+    const logoSrc = resolveDocumentLogoSrc(c);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
 
     if (!vehicleId || !customerId) {
@@ -1479,7 +1511,7 @@ documentsRouter.post(
       passportValidUntil:
         passportValidUntil ??
         (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
-    });
+    }, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1498,6 +1530,7 @@ documentsRouter.post(
   "/generate-gelangensbestaetigung-html",
   async (c) => {
     const body = await c.req.json();
+    const logoSrc = resolveDocumentLogoSrc(c);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
@@ -1510,7 +1543,7 @@ documentsRouter.post(
       passportValidUntil:
         passportValidUntil ??
         (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
-    });
+    }, logoSrc);
     return c.json({ data: { html } });
   }
 );
@@ -1570,6 +1603,8 @@ function generateVermittlungsvertrag(
     phone: string | null;
     taxId: string | null;
   }
+  ,
+  logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
   const todayFormatted = formatDateDE(today);
@@ -1723,7 +1758,7 @@ function generateVermittlungsvertrag(
 <body>
 <div class="page">
 
-  ${getDealerHeaderHtml()}
+  ${getDealerHeaderHtml(logoSrc)}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-subtitle">Vermittlungsvertrag</div>
@@ -1813,6 +1848,7 @@ function generateVermittlungsvertrag(
 // POST /api/documents/generate-vermittlung-pdf
 documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
   const body = await c.req.json();
+  const logoSrc = resolveDocumentLogoSrc(c);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -1881,7 +1917,7 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
     return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
   }
 
-  const html = generateVermittlungsvertrag(vehicle, buyer, seller);
+  const html = generateVermittlungsvertrag(vehicle, buyer, seller, logoSrc);
 
   try {
     const pdfBuffer = await htmlToPdf(html);
@@ -1905,6 +1941,7 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
 // POST /api/documents/generate-vermittlung-html (for saving)
 documentsRouter.post("/generate-vermittlung-html", async (c) => {
   const body = await c.req.json();
+  const logoSrc = resolveDocumentLogoSrc(c);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -1967,7 +2004,7 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
     return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
   }
 
-  const html = generateVermittlungsvertrag(vehicle, buyer, seller);
+  const html = generateVermittlungsvertrag(vehicle, buyer, seller, logoSrc);
   return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
 });
 
