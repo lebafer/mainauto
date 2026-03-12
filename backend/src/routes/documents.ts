@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
 import { DocumentGenerateSchema, PurchaseContractGenerateSchema } from "../types";
-import { readFileSync } from "node:fs";
 import { access } from "node:fs/promises";
 import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
@@ -111,16 +110,7 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
-const LOGO_DATA_URI = (() => {
-  try {
-    const logoUrl = new URL("../../../webapp/public/mainauto-logo.png", import.meta.url);
-    const buffer = readFileSync(logoUrl);
-    return `data:image/png;base64,${buffer.toString("base64")}`;
-  } catch (error) {
-    console.warn("[documents] logo_load_failed", error);
-    return null;
-  }
-})();
+const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
 
 interface DocumentParty {
   firstName: string;
@@ -145,9 +135,7 @@ function getDealerFooterHtml(): string {
 }
 
 function getDealerHeaderHtml(): string {
-  const logoHtml = LOGO_DATA_URI
-    ? `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="dealer-logo" />`
-    : "";
+  const logoHtml = getLogoImgHtml("dealer-logo");
 
   return `
     <div class="dealer-header">
@@ -160,6 +148,10 @@ function getDealerHeaderHtml(): string {
       </div>
     </div>
   `;
+}
+
+function getLogoImgHtml(className: string): string {
+  return `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="${className}" />`;
 }
 
 function getPartyCityLine(party: Pick<DocumentParty, "zip" | "city" | "country">): string {
@@ -306,6 +298,8 @@ function baseStyles(): string {
       body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; font-size: 12pt; color: #222; line-height: 1.5; }
       .page { width: 210mm; min-height: 297mm; padding: 20mm; margin: 0 auto; background: white; }
       .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 2px solid #333; padding-bottom: 15px; }
+      .header-brand { display: flex; align-items: flex-start; gap: 10px; }
+      .header-logo { width: 84px; height: auto; object-fit: contain; flex-shrink: 0; }
       .header h1 { font-size: 22pt; color: #333; }
       .header .date { font-size: 10pt; color: #666; }
       .section { margin-bottom: 20px; }
@@ -363,9 +357,12 @@ function generateOffer(
 <body>
 <div class="page">
   <div class="header">
-    <div>
-      <h1>Angebot</h1>
-      <p>Fahrzeugangebot</p>
+    <div class="header-brand">
+      ${getLogoImgHtml("header-logo")}
+      <div>
+        <h1>Angebot</h1>
+        <p>Fahrzeugangebot</p>
+      </div>
     </div>
     <div class="date">Datum: ${formatDate(new Date())}</div>
   </div>
@@ -448,6 +445,8 @@ function generatePriceTag(vehicle: {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'Segoe UI', Arial, Helvetica, sans-serif; }
   .price-tag { width: 210mm; padding: 25mm; margin: 0 auto; background: white; }
+  .brand-strip { display: flex; align-items: center; justify-content: flex-start; margin-bottom: 18px; }
+  .brand-logo { width: 92px; height: auto; object-fit: contain; }
   .vehicle-name { font-size: 28pt; font-weight: bold; color: #222; margin-bottom: 10px; }
   .vehicle-year { font-size: 16pt; color: #555; margin-bottom: 20px; }
   .details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 25px; }
@@ -464,6 +463,7 @@ function generatePriceTag(vehicle: {
 </head>
 <body>
 <div class="price-tag">
+  <div class="brand-strip">${getLogoImgHtml("brand-logo")}</div>
   <div class="vehicle-name">${vehicle.brand} ${vehicle.model}</div>
   <div class="vehicle-year">Baujahr ${vehicle.year}</div>
 
@@ -716,7 +716,7 @@ function generateContract(
   /* Dealer header */
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
@@ -966,7 +966,7 @@ function generatePurchaseContract(
   .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
   .dealer-header { margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 12pt; font-weight: bold; color: #111; }
   .dealer-sub { font-size: 8pt; color: #333; margin-top: 3px; line-height: 1.45; }
   .doc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; background: #efefef; padding: 6px 8px; margin-bottom: 10px; }
@@ -997,7 +997,7 @@ function generatePurchaseContract(
   .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; align-items: end; }
   .signature-box { min-height: 34px; border: 1px solid #888; background: #efefef; padding: 4px 6px; font-size: 8pt; display: flex; align-items: flex-end; }
   .signature-box.center { justify-content: center; align-items: center; }
-  .signature-logo { max-width: 88px; max-height: 24px; object-fit: contain; }
+  .signature-logo { max-width: 72px; max-height: 24px; object-fit: contain; }
   .signature-labels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 8pt; margin-top: 2px; }
   .doc-footer { margin-top: 12px; text-align: center; font-size: 7pt; line-height: 1.5; color: #333; }
   @media print {
@@ -1078,7 +1078,7 @@ function generatePurchaseContract(
 
   <div class="signature-row">
     <div class="signature-box">Miltenberg, ${todayFormatted}</div>
-    <div class="signature-box center">${LOGO_DATA_URI ? `<img src="${LOGO_DATA_URI}" alt="MainAuto" class="signature-logo" />` : ""}</div>
+    <div class="signature-box center">${getLogoImgHtml("signature-logo")}</div>
     <div class="signature-box"></div>
   </div>
   <div class="signature-labels">
@@ -1322,6 +1322,9 @@ function generateGelangensbestaetigung(
   body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #000; line-height: 1.5; background: #fff; }
   .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
 
+  .doc-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 8px; }
+  .doc-logo { width: 88px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .doc-head-copy { flex: 1; }
   .top-note { font-size: 8pt; color: #555; text-align: center; margin-bottom: 10px; font-style: italic; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
 
   .doc-title-en { font-size: 15pt; font-weight: bold; text-align: center; margin-bottom: 2px; }
@@ -1365,11 +1368,15 @@ function generateGelangensbestaetigung(
 <body>
 <div class="page">
 
-  <div class="top-note">After signature, please send this document back to seller. &nbsp;|&nbsp; Bitte senden Sie dieses Dokument unterschrieben zur&uuml;ck an den Verk&auml;ufer.</div>
-
-  <div class="doc-title-en">Delivery receipt</div>
-  <div class="doc-title-de">Lieferschein / Gelangensbest&auml;tigung</div>
-  <div class="doc-subtitle">(Export to EU Member State) &nbsp;/&nbsp; (Export in EU-Mitgliedsstaat)</div>
+  <div class="doc-header">
+    ${getLogoImgHtml("doc-logo")}
+    <div class="doc-head-copy">
+      <div class="top-note">After signature, please send this document back to seller. &nbsp;|&nbsp; Bitte senden Sie dieses Dokument unterschrieben zur&uuml;ck an den Verk&auml;ufer.</div>
+      <div class="doc-title-en">Delivery receipt</div>
+      <div class="doc-title-de">Lieferschein / Gelangensbest&auml;tigung</div>
+      <div class="doc-subtitle">(Export to EU Member State) &nbsp;/&nbsp; (Export in EU-Mitgliedsstaat)</div>
+    </div>
+  </div>
 
   <div class="customer-header">${customerOneLiner}</div>
 
@@ -1664,7 +1671,7 @@ function generateVermittlungsvertrag(
 
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 118px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
