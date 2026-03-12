@@ -322,6 +322,8 @@ export function VehicleForm({
 }: VehicleFormProps) {
   const [purchaseGrossDisplay, setPurchaseGrossDisplay] = useState("");
   const [sellingGrossDisplay, setSellingGrossDisplay] = useState("");
+  const [isEditingPurchaseGross, setIsEditingPurchaseGross] = useState(false);
+  const [isEditingSellingGross, setIsEditingSellingGross] = useState(false);
   const [showAddBrand, setShowAddBrand] = useState(false);
   const [newBrandInput, setNewBrandInput] = useState("");
   const [showAddColor, setShowAddColor] = useState(false);
@@ -670,6 +672,10 @@ export function VehicleForm({
 
   // Keep gross displays in sync with net price changes
   useEffect(() => {
+    if (isEditingPurchaseGross) {
+      return;
+    }
+
     if (isFormFieldEmpty(watchedPurchasePrice)) {
       setPurchaseGrossDisplay("");
       return;
@@ -677,9 +683,13 @@ export function VehicleForm({
 
     const gross = calculateGrossPrice(numericPurchasePrice, watchedTaxRate, watchedMarginTaxed);
     setPurchaseGrossDisplay(gross.toFixed(2));
-  }, [numericPurchasePrice, watchedPurchasePrice, watchedTaxRate, watchedMarginTaxed]);
+  }, [isEditingPurchaseGross, numericPurchasePrice, watchedPurchasePrice, watchedTaxRate, watchedMarginTaxed]);
 
   useEffect(() => {
+    if (isEditingSellingGross) {
+      return;
+    }
+
     if (isFormFieldEmpty(watchedSellingPrice)) {
       setSellingGrossDisplay("");
       return;
@@ -687,7 +697,7 @@ export function VehicleForm({
 
     const gross = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
     setSellingGrossDisplay(gross.toFixed(2));
-  }, [numericSellingPrice, watchedSellingPrice, watchedTaxRate, watchedMarginTaxed]);
+  }, [isEditingSellingGross, numericSellingPrice, watchedSellingPrice, watchedTaxRate, watchedMarginTaxed]);
 
   function handlePurchaseNetChange(nettoStr: string) {
     if (nettoStr.trim() === "") {
@@ -702,6 +712,7 @@ export function VehicleForm({
   }
 
   function handlePurchaseGrossChange(grossStr: string) {
+    setIsEditingPurchaseGross(true);
     setPurchaseGrossDisplay(grossStr);
     if (grossStr.trim() === "") {
       form.setValue("purchasePrice", "" as unknown as number, { shouldValidate: true });
@@ -718,6 +729,18 @@ export function VehicleForm({
     });
   }
 
+  function handlePurchaseGrossBlur() {
+    setIsEditingPurchaseGross(false);
+
+    if (isFormFieldEmpty(watchedPurchasePrice)) {
+      setPurchaseGrossDisplay("");
+      return;
+    }
+
+    const gross = calculateGrossPrice(numericPurchasePrice, watchedTaxRate, watchedMarginTaxed);
+    setPurchaseGrossDisplay(gross.toFixed(2));
+  }
+
   function handleSellingNetChange(nettoStr: string) {
     if (nettoStr.trim() === "") {
       form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
@@ -731,6 +754,7 @@ export function VehicleForm({
   }
 
   function handleSellingGrossChange(grossStr: string) {
+    setIsEditingSellingGross(true);
     setSellingGrossDisplay(grossStr);
     if (grossStr.trim() === "") {
       form.setValue("sellingPrice", "" as unknown as number, { shouldValidate: true });
@@ -745,6 +769,18 @@ export function VehicleForm({
       shouldValidate: true,
       shouldDirty: true,
     });
+  }
+
+  function handleSellingGrossBlur() {
+    setIsEditingSellingGross(false);
+
+    if (isFormFieldEmpty(watchedSellingPrice)) {
+      setSellingGrossDisplay("");
+      return;
+    }
+
+    const gross = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
+    setSellingGrossDisplay(gross.toFixed(2));
   }
 
   // PS <-> kW auto-calculation
@@ -2004,6 +2040,8 @@ export function VehicleForm({
                     placeholder="0.00"
                     value={purchaseGrossDisplay}
                     onChange={(e) => handlePurchaseGrossChange(e.target.value)}
+                    onFocus={() => setIsEditingPurchaseGross(true)}
+                    onBlur={handlePurchaseGrossBlur}
                   />
                 </FormControl>
                 <p className="text-xs text-muted-foreground">
@@ -2065,6 +2103,8 @@ export function VehicleForm({
                       placeholder="0.00"
                       value={sellingGrossDisplay}
                       onChange={(e) => handleSellingGrossChange(e.target.value)}
+                      onFocus={() => setIsEditingSellingGross(true)}
+                      onBlur={handleSellingGrossBlur}
                       className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
                     />
                   </FormControl>
