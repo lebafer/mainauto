@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { HandoverProtocol } from "../types";
 
 const DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
@@ -12,11 +10,7 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
-const DAMAGE_SKETCH_FILE = join(import.meta.dir, "../../../webapp/public/car_vector.png");
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
-const DAMAGE_SKETCH_DATA_URI = existsSync(DAMAGE_SKETCH_FILE)
-  ? `data:image/png;base64,${readFileSync(DAMAGE_SKETCH_FILE).toString("base64")}`
-  : "";
 
 interface VehicleSnapshot {
   vehicleNumber: string;
@@ -161,7 +155,7 @@ function getDealerFooterHtml(): string {
   `;
 }
 
-function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"]): string {
+function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"], sketchSrc: string): string {
   const markerHtml = markers
     .map((marker) => {
       const cx = marker.x;
@@ -172,7 +166,7 @@ function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"]): strin
 
   return `
     <div class="damage-sketch-canvas" aria-hidden="true">
-      <img src="${DAMAGE_SKETCH_DATA_URI}" alt="" class="damage-sketch-image" />
+      <img src="${escapeHtml(sketchSrc)}" alt="" class="damage-sketch-image" />
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="damage-marker-layer">
         ${markerHtml}
       </svg>
@@ -285,7 +279,8 @@ export function buildDefaultHandoverProtocol(
 
 export function generateHandoverProtocolHtml(
   data: HandoverProtocol,
-  logoSrc: string = LOGO_DATA_URI
+  logoSrc: string = LOGO_DATA_URI,
+  sketchSrc: string = "/car.png"
 ): string {
   const keyCount = data.items.keys.count !== null && data.items.keys.count !== undefined
     ? ` <span class="inline-note">Anzahl ${escapeHtml(String(data.items.keys.count))}</span>`
@@ -497,7 +492,7 @@ export function generateHandoverProtocolHtml(
     <div class="sketch-grid">
       <div class="sketch-shell">
         <div class="sketch-label">Fahrzeugskizze</div>
-        ${renderSketchHtml(data.damage.markers)}
+        ${renderSketchHtml(data.damage.markers, sketchSrc)}
       </div>
     </div>
     <div class="damage-remark">

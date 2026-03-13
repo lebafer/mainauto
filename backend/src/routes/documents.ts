@@ -178,6 +178,28 @@ function resolveDocumentLogoSrc(c: { req: { header: (name: string) => string | u
   return LOGO_DATA_URI;
 }
 
+function resolveDocumentPublicAssetSrc(
+  c: { req: { header: (name: string) => string | undefined } },
+  filename: string
+): string {
+  const origin = c.req.header("origin");
+  const referer = c.req.header("referer");
+
+  if (origin && /^https?:\/\//i.test(origin)) {
+    return `${origin.replace(/\/$/, "")}/${filename}`;
+  }
+
+  if (referer) {
+    try {
+      return `${new URL(referer).origin}/${filename}`;
+    } catch {
+      return `/${filename}`;
+    }
+  }
+
+  return `/${filename}`;
+}
+
 function getPartyCityLine(party: Pick<DocumentParty, "zip" | "city" | "country">): string {
   const base = [party.zip, party.city].filter(Boolean).join(" ");
   if (party.country) {
@@ -2019,13 +2041,14 @@ documentsRouter.post(
   async (c) => {
     const { vehicleId, data } = c.req.valid("json");
     const logoSrc = resolveDocumentLogoSrc(c);
+    const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateHandoverProtocolHtml(data, logoSrc);
+    const html = generateHandoverProtocolHtml(data, logoSrc, sketchSrc);
     return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
   }
 );
@@ -2036,13 +2059,14 @@ documentsRouter.post(
   async (c) => {
     const { vehicleId, data } = c.req.valid("json");
     const logoSrc = resolveDocumentLogoSrc(c);
+    const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateHandoverProtocolHtml(data, logoSrc);
+    const html = generateHandoverProtocolHtml(data, logoSrc, sketchSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
