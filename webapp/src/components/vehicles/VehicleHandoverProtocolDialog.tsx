@@ -766,12 +766,12 @@ export function VehicleHandoverProtocolDialog({
     <>
       {isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>
-          <DrawerContent className="max-h-[92vh]">
+          <DrawerContent className="flex max-h-[92vh] flex-col">
             <DrawerHeader className="border-b px-4 pb-4">
               <DrawerTitle>{headerTitle}</DrawerTitle>
               <DrawerDescription>{headerDescription}</DrawerDescription>
             </DrawerHeader>
-            <div className="overflow-y-auto px-4 py-4">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
               {handoverQuery.isLoading ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -787,12 +787,12 @@ export function VehicleHandoverProtocolDialog({
         </Drawer>
       ) : (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-          <DialogContent className="max-h-[92vh] max-w-6xl overflow-hidden p-0">
+          <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
             <DialogHeader className="border-b px-6 py-5">
               <DialogTitle>{headerTitle}</DialogTitle>
               <DialogDescription>{headerDescription}</DialogDescription>
             </DialogHeader>
-            <div className="overflow-y-auto px-6 py-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
               {handoverQuery.isLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
