@@ -116,6 +116,7 @@ model Vehicle {
   customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
   supplierId      String?   // Linked supplier (Lieferant, DB relation)
   supplierRel     Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  handoverProtocol VehicleHandoverProtocol?
   images          VehicleImage[]
   documents       VehicleDocument[]
   sales           Sale[]
@@ -192,6 +193,15 @@ model VehicleDocument {
   vehicleId String
   vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+}
+
+model VehicleHandoverProtocol {
+  id        String   @id @default(cuid())
+  vehicleId String   @unique
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Customer {

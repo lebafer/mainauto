@@ -67,6 +67,7 @@ import { VehicleImagesTab } from "@/components/vehicles/VehicleImagesTab";
 import { VehicleDocumentsTab } from "@/components/vehicles/VehicleDocumentsTab";
 import { AddCostDialog } from "@/components/vehicles/AddCostDialog";
 import { WorkLogTab } from "@/components/vehicles/WorkLogTab";
+import { VehicleHandoverProtocolDialog } from "@/components/vehicles/VehicleHandoverProtocolDialog";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -160,6 +161,7 @@ export default function VehicleDetail() {
   const defaultTab = (location.state as { defaultTab?: string } | null)?.defaultTab ?? "images";
   const [sellOpen, setSellOpen] = useState(false);
   const [addCostOpen, setAddCostOpen] = useState(false);
+  const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
@@ -493,6 +495,14 @@ export default function VehicleDetail() {
               Bearbeiten
             </Link>
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHandoverDialogOpen(true)}
+          >
+            <Receipt className="mr-2 h-4 w-4" />
+            Übergabeprotokoll erstellen
+          </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -622,6 +632,12 @@ export default function VehicleDetail() {
         vehicleId={vehicle.id}
         open={addCostOpen}
         onOpenChange={setAddCostOpen}
+      />
+
+      <VehicleHandoverProtocolDialog
+        vehicle={vehicle}
+        open={handoverDialogOpen}
+        onOpenChange={setHandoverDialogOpen}
       />
 
       {/* Ankaufvertrag dialog */}

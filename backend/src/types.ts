@@ -294,6 +294,206 @@ export const PurchaseContractGenerateSchema = z.object({
 
 export type PurchaseContractGenerate = z.infer<typeof PurchaseContractGenerateSchema>;
 
+// ─── Handover Protocol Schemas ───────────────────────────────
+
+const OptionalNonNegativeIntegerSchema = z.preprocess((value) => {
+  if (value === "" || value === undefined || value === null) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : value;
+  }
+
+  return value;
+}, z.number().int().min(0).nullable());
+
+export const HandoverProtocolExteriorStateSchema = z.enum([
+  "washed",
+  "lightly_soiled",
+  "heavily_soiled",
+]).or(z.literal(""));
+
+export const HandoverProtocolInteriorStateSchema = z.enum([
+  "clean",
+  "lightly_soiled",
+  "heavily_soiled",
+]).or(z.literal(""));
+
+export const HandoverProtocolFuelLevelSchema = z.enum([
+  "empty",
+  "quarter",
+  "half",
+  "three_quarters",
+  "full",
+]).or(z.literal(""));
+
+export const HandoverProtocolWheelConditionSchema = z.enum([
+  "new",
+  "like_new",
+  "used",
+  "worn",
+]).or(z.literal(""));
+
+export const HandoverProtocolWheelSetSchema = z.object({
+  summer: z.boolean().default(false),
+  winter: z.boolean().default(false),
+  allSeason: z.boolean().default(false),
+  alloy: z.boolean().default(false),
+  steel: z.boolean().default(false),
+  spareWheel: z.boolean().default(false),
+  condition: HandoverProtocolWheelConditionSchema.default(""),
+});
+
+export const HandoverProtocolPartySchema = z.object({
+  name: z.string().default(""),
+  company: z.string().default(""),
+  street: z.string().default(""),
+  postalCodeCity: z.string().default(""),
+  email: z.string().default(""),
+  phone: z.string().default(""),
+});
+
+export const HandoverProtocolDamageViewSchema = z.enum(["left-front", "right-rear"]);
+
+export const HandoverProtocolDamageMarkerSchema = z.object({
+  id: z.string().default(""),
+  view: HandoverProtocolDamageViewSchema,
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+});
+
+export const HandoverProtocolSchema = z.object({
+  vehicle: z.object({
+    licensePlate: z.string().default(""),
+    manufacturerModelType: z.string().default(""),
+    color: z.string().default(""),
+    fuelType: z.string().default(""),
+    mileage: z.string().default(""),
+    vin: z.string().default(""),
+    internalVehicleNumber: z.string().default(""),
+  }).default({
+    licensePlate: "",
+    manufacturerModelType: "",
+    color: "",
+    fuelType: "",
+    mileage: "",
+    vin: "",
+    internalVehicleNumber: "",
+  }),
+  handover: z.object({
+    date: z.string().default(""),
+    time: z.string().default(""),
+    location: z.string().default(""),
+  }).default({
+    date: "",
+    time: "",
+    location: "",
+  }),
+  giver: HandoverProtocolPartySchema.default({
+    name: "",
+    company: "",
+    street: "",
+    postalCodeCity: "",
+    email: "",
+    phone: "",
+  }),
+  receiverCustomerId: z.string().nullable().default(null),
+  receiver: HandoverProtocolPartySchema.default({
+    name: "",
+    company: "",
+    street: "",
+    postalCodeCity: "",
+    email: "",
+    phone: "",
+  }),
+  condition: z.object({
+    exterior: HandoverProtocolExteriorStateSchema.default(""),
+    interior: HandoverProtocolInteriorStateSchema.default(""),
+    fuelLevel: HandoverProtocolFuelLevelSchema.default(""),
+  }).default({
+    exterior: "",
+    interior: "",
+    fuelLevel: "",
+  }),
+  items: z.object({
+    keys: z.object({
+      checked: z.boolean().default(false),
+      count: OptionalNonNegativeIntegerSchema.default(null),
+    }),
+    serviceBook: z.boolean().default(false),
+    vehicleFolder: z.boolean().default(false),
+    chargingCableType2: z.boolean().default(false),
+    chargingCableSchuko: z.boolean().default(false),
+    registrationPart1: z.boolean().default(false),
+    registrationPart2: z.boolean().default(false),
+    cocCertificate: z.boolean().default(false),
+    parkingHeaterRemote: z.boolean().default(false),
+    warningTriangle: z.boolean().default(false),
+    safetyVest: z.boolean().default(false),
+    firstAidKit: z.boolean().default(false),
+    other: z.string().default(""),
+  }).default({
+    keys: {
+      checked: false,
+      count: null,
+    },
+    serviceBook: false,
+    vehicleFolder: false,
+    chargingCableType2: false,
+    chargingCableSchuko: false,
+    registrationPart1: false,
+    registrationPart2: false,
+    cocCertificate: false,
+    parkingHeaterRemote: false,
+    warningTriangle: false,
+    safetyVest: false,
+    firstAidKit: false,
+    other: "",
+  }),
+  mountedWheels: HandoverProtocolWheelSetSchema.default({
+    summer: false,
+    winter: false,
+    allSeason: false,
+    alloy: false,
+    steel: false,
+    spareWheel: false,
+    condition: "",
+  }),
+  includedWheels: HandoverProtocolWheelSetSchema.default({
+    summer: false,
+    winter: false,
+    allSeason: false,
+    alloy: false,
+    steel: false,
+    spareWheel: false,
+    condition: "",
+  }),
+  damage: z.object({
+    markers: z.array(HandoverProtocolDamageMarkerSchema).default([]),
+    remark: z.string().default(""),
+  }).default({
+    markers: [],
+    remark: "",
+  }),
+});
+
+export const HandoverProtocolLoadResponseSchema = z.object({
+  exists: z.boolean(),
+  updatedAt: z.string().nullable(),
+  data: HandoverProtocolSchema,
+});
+
+export const HandoverProtocolDocumentGenerateSchema = z.object({
+  vehicleId: z.string().min(1, "Vehicle ID is required"),
+  data: HandoverProtocolSchema,
+});
+
+export type HandoverProtocol = z.infer<typeof HandoverProtocolSchema>;
+export type HandoverProtocolLoadResponse = z.infer<typeof HandoverProtocolLoadResponseSchema>;
+export type HandoverProtocolDocumentGenerate = z.infer<typeof HandoverProtocolDocumentGenerateSchema>;
+
 // ─── WorkLog Schemas ──────────────────────────────────────────
 
 export const WorkLogItemCreateSchema = z.object({
