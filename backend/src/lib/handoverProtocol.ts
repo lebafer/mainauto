@@ -333,7 +333,7 @@ export function generateHandoverProtocolHtml(
   .damage-marker-dot { position: absolute; width: 16px; height: 16px; border-radius: 999px; border: 2px solid #be123c; background: rgba(244, 63, 94, 0.12); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18); transform: translate(-50%, -50%); }
   .damage-remark { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 34px; break-inside: avoid; page-break-inside: avoid; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 48px; break-inside: avoid; page-break-inside: avoid; }
   .signature-line { border-top: 1px solid #111; padding-top: 5px; font-size: 8.5pt; color: #444; }
   .doc-footer { border-top: 1.5px solid #111; margin-top: 16px; padding-top: 6px; font-size: 7.5pt; color: #444; text-align: center; line-height: 1.6; }
   @media print {
