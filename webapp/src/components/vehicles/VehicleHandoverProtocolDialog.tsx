@@ -102,13 +102,16 @@ const DOCUMENT_CHECKBOXES = [
   { name: "items.vehicleFolder" as const, label: "Bordmappe" },
   { name: "items.chargingCableType2" as const, label: "Ladekabel Typ 2" },
   { name: "items.chargingCableSchuko" as const, label: "Ladekabel Schuko" },
-  { name: "items.registrationPart1" as const, label: "Zulassungsbescheinigung Teil 1" },
-  { name: "items.registrationPart2" as const, label: "Zulassungsbescheinigung Teil 2" },
-  { name: "items.cocCertificate" as const, label: "COC-Zertifikat" },
   { name: "items.parkingHeaterRemote" as const, label: "Fernbedienung Standheizung" },
   { name: "items.warningTriangle" as const, label: "Warndreieck" },
   { name: "items.safetyVest" as const, label: "Warnweste" },
   { name: "items.firstAidKit" as const, label: "Verbandkasten" },
+] as const;
+
+const VEHICLE_DOCUMENT_CHECKBOXES = [
+  { name: "items.registrationPart1" as const, label: "Zulassungsbescheinigung Teil 1" },
+  { name: "items.registrationPart2" as const, label: "Zulassungsbescheinigung Teil 2" },
+  { name: "items.cocCertificate" as const, label: "COC-Zertifikat" },
 ] as const;
 
 const WHEEL_CHECKBOXES = [
@@ -126,6 +129,13 @@ const DAMAGE_VIEWS = [
 ] as const;
 
 type DamageView = HandoverProtocol["damage"]["markers"][number]["view"];
+
+const WHEEL_CONDITION_OPTIONS = [
+  { value: "new", label: "neu" },
+  { value: "like_new", label: "neuwertig" },
+  { value: "used", label: "gebraucht" },
+  { value: "worn", label: "abgefahren" },
+] as const;
 
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank");
@@ -253,26 +263,36 @@ function DamageSketchArtwork({ view }: { view: DamageView }) {
   if (view === "left-front") {
     return (
       <svg viewBox="0 0 100 60" className="h-full w-full" aria-hidden="true">
-        <path d="M17 39 L24 24 L40 18 L64 18 L80 24 L87 34 L84 43 L16 43 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
-        <path d="M30 23 L39 16 L58 16 L69 23" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-        <path d="M21 34 L83 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-        <path d="M44 19 L44 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-        <path d="M64 21 L60 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-        <circle cx="31" cy="43" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
-        <circle cx="73" cy="43" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+        <path d="M10 41 L12 33 L18 29 L27 27 L40 18 L58 13 L72 14 L84 20 L90 30 L89 40 L86 46 L75 46 L71 39 L40 39 L33 46 L21 46 L16 41 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
+        <path d="M27 27 L44 15 L67 15 L78 22 L82 30" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M41 18 L55 19 L66 25 L67 39" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M55 19 L53 39" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M18 31 L31 32" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M70 25 L89 28" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M24 39 L10 41" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M13 35 L20 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M69 31 L87 33" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M44 15 L50 11 L61 11 L67 14" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <circle cx="27" cy="46" r="8" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+        <circle cx="74" cy="46" r="8" className="fill-white stroke-slate-400" strokeWidth="1.2" />
       </svg>
     );
   }
 
   return (
     <svg viewBox="0 0 100 60" className="h-full w-full" aria-hidden="true">
-      <path d="M13 35 L22 25 L41 19 L67 19 L81 25 L87 39 L83 44 L15 44 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
-      <path d="M28 24 L38 16 L61 16 L72 24" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-      <path d="M18 35 L82 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-      <path d="M37 20 L37 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-      <path d="M59 20 L63 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
-      <circle cx="30" cy="44" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
-      <circle cx="72" cy="44" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+      <path d="M12 41 L11 31 L19 28 L28 18 L43 14 L60 15 L72 21 L84 23 L90 32 L89 42 L82 47 L68 47 L62 39 L29 39 L24 47 L13 47 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
+      <path d="M28 19 L42 10 L56 10 L69 17 L74 24" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M22 27 L39 30 L56 30 L73 26" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M45 15 L42 30" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M59 17 L58 39" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M14 35 L11 41" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M76 24 L88 26" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M18 28 L14 23" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M48 13 L51 9 L61 9 L66 12" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M12 34 L20 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <circle cx="29" cy="47" r="8" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+      <circle cx="74" cy="47" r="8" className="fill-white stroke-slate-400" strokeWidth="1.2" />
     </svg>
   );
 }
@@ -403,28 +423,19 @@ function WheelSection({
         ))}
       </div>
       <Separator className="my-4" />
-      <div className="grid gap-4 md:grid-cols-2">
-        <TextField
-          label="vorne links (mm)"
-          value={wheelSet.treadDepth.frontLeft}
-          onChange={(value) => form.setValue(`${path}.treadDepth.frontLeft`, value, { shouldDirty: true })}
-        />
-        <TextField
-          label="vorne rechts (mm)"
-          value={wheelSet.treadDepth.frontRight}
-          onChange={(value) => form.setValue(`${path}.treadDepth.frontRight`, value, { shouldDirty: true })}
-        />
-        <TextField
-          label="hinten links (mm)"
-          value={wheelSet.treadDepth.rearLeft}
-          onChange={(value) => form.setValue(`${path}.treadDepth.rearLeft`, value, { shouldDirty: true })}
-        />
-        <TextField
-          label="hinten rechts (mm)"
-          value={wheelSet.treadDepth.rearRight}
-          onChange={(value) => form.setValue(`${path}.treadDepth.rearRight`, value, { shouldDirty: true })}
-        />
-      </div>
+      <Controller
+        control={form.control}
+        name={`${path}.condition`}
+        render={({ field }) => (
+          <ChoiceGroup
+            label="Zustand"
+            value={field.value}
+            onChange={field.onChange}
+            options={WHEEL_CONDITION_OPTIONS}
+            columnsClassName="md:grid-cols-2"
+          />
+        )}
+      />
     </Section>
   );
 }
@@ -779,6 +790,22 @@ export function VehicleHandoverProtocolDialog({
                   />
                 )}
               />
+            </div>
+            <div className="grid gap-3">
+              {VEHICLE_DOCUMENT_CHECKBOXES.map((item) => (
+                <Controller
+                  key={item.name}
+                  control={form.control}
+                  name={item.name}
+                  render={({ field }) => (
+                    <CheckboxField
+                      checked={field.value}
+                      label={item.label}
+                      onCheckedChange={(checked) => field.onChange(checked)}
+                    />
+                  )}
+                />
+              ))}
             </div>
             {DOCUMENT_CHECKBOXES.map((item) => (
               <Controller

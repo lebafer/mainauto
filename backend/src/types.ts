@@ -329,12 +329,12 @@ export const HandoverProtocolFuelLevelSchema = z.enum([
   "full",
 ]).or(z.literal(""));
 
-export const HandoverProtocolTreadDepthSchema = z.object({
-  frontLeft: z.string().default(""),
-  frontRight: z.string().default(""),
-  rearLeft: z.string().default(""),
-  rearRight: z.string().default(""),
-});
+export const HandoverProtocolWheelConditionSchema = z.enum([
+  "new",
+  "like_new",
+  "used",
+  "worn",
+]).or(z.literal(""));
 
 export const HandoverProtocolWheelSetSchema = z.object({
   summer: z.boolean().default(false),
@@ -343,12 +343,7 @@ export const HandoverProtocolWheelSetSchema = z.object({
   alloy: z.boolean().default(false),
   steel: z.boolean().default(false),
   spareWheel: z.boolean().default(false),
-  treadDepth: HandoverProtocolTreadDepthSchema.default({
-    frontLeft: "",
-    frontRight: "",
-    rearLeft: "",
-    rearRight: "",
-  }),
+  condition: HandoverProtocolWheelConditionSchema.default(""),
 });
 
 export const HandoverProtocolPartySchema = z.object({
@@ -464,12 +459,7 @@ export const HandoverProtocolSchema = z.object({
     alloy: false,
     steel: false,
     spareWheel: false,
-    treadDepth: {
-      frontLeft: "",
-      frontRight: "",
-      rearLeft: "",
-      rearRight: "",
-    },
+    condition: "",
   }),
   includedWheels: HandoverProtocolWheelSetSchema.default({
     summer: false,
@@ -478,12 +468,7 @@ export const HandoverProtocolSchema = z.object({
     alloy: false,
     steel: false,
     spareWheel: false,
-    treadDepth: {
-      frontLeft: "",
-      frontRight: "",
-      rearLeft: "",
-      rearRight: "",
-    },
+    condition: "",
   }),
   damage: z.object({
     markers: z.array(HandoverProtocolDamageMarkerSchema).default([]),

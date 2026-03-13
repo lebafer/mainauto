@@ -70,10 +70,6 @@ function checkItem(label: string, checked: boolean, extra = ""): string {
   `;
 }
 
-function tireValue(value: string): string {
-  return value ? `${escapeHtml(value)} mm` : "____ mm";
-}
-
 function describeExterior(value: HandoverProtocol["condition"]["exterior"]): string {
   switch (value) {
     case "washed":
@@ -117,6 +113,21 @@ function describeFuelLevel(value: HandoverProtocol["condition"]["fuelLevel"]): s
   }
 }
 
+function describeWheelCondition(value: HandoverProtocol["mountedWheels"]["condition"]): string {
+  switch (value) {
+    case "new":
+      return "neu";
+    case "like_new":
+      return "neuwertig";
+    case "used":
+      return "gebraucht";
+    case "worn":
+      return "abgefahren";
+    default:
+      return "";
+  }
+}
+
 function getLogoImgHtml(className: string, logoSrc: string = LOGO_DATA_URI): string {
   return `<img src="${logoSrc}" alt="MainAuto" class="${className}" />`;
 }
@@ -147,24 +158,38 @@ function getDealerFooterHtml(): string {
 function renderSketchPath(view: "left-front" | "right-rear"): string {
   if (view === "left-front") {
     return `
-      <path d="M17 39 L24 24 L40 18 L64 18 L80 24 L87 34 L84 43 L16 43 Z" class="car-fill" />
-      <path d="M30 23 L39 16 L58 16 L69 23" class="car-line" />
-      <path d="M21 34 L83 34" class="car-line" />
-      <path d="M44 19 L44 34" class="car-line" />
-      <path d="M64 21 L60 34" class="car-line" />
-      <circle cx="31" cy="43" r="7" class="wheel-line" />
-      <circle cx="73" cy="43" r="7" class="wheel-line" />
+      <path d="M10 41 L12 33 L18 29 L27 27 L40 18 L58 13 L72 14 L84 20 L90 30 L89 40 L86 46 L75 46 L71 39 L40 39 L33 46 L21 46 L16 41 Z" class="car-fill" />
+      <path d="M27 27 L44 15 L67 15 L78 22 L82 30" class="car-line" />
+      <path d="M41 18 L55 19 L66 25 L67 39" class="car-line" />
+      <path d="M55 19 L53 39" class="car-line" />
+      <path d="M18 31 L31 32" class="car-line" />
+      <path d="M70 25 L89 28" class="car-line" />
+      <path d="M24 39 L10 41" class="car-line" />
+      <path d="M13 35 L20 35" class="car-line" />
+      <path d="M69 31 L87 33" class="car-line" />
+      <path d="M44 15 L50 11 L61 11 L67 14" class="car-line" />
+      <circle cx="27" cy="46" r="8" class="wheel-line" />
+      <circle cx="74" cy="46" r="8" class="wheel-line" />
+      <path d="M20 46 L34 46" class="car-line" />
+      <path d="M66 46 L82 46" class="car-line" />
     `;
   }
 
   return `
-    <path d="M13 35 L22 25 L41 19 L67 19 L81 25 L87 39 L83 44 L15 44 Z" class="car-fill" />
-    <path d="M28 24 L38 16 L61 16 L72 24" class="car-line" />
-    <path d="M18 35 L82 35" class="car-line" />
-    <path d="M37 20 L37 35" class="car-line" />
-    <path d="M59 20 L63 35" class="car-line" />
-    <circle cx="30" cy="44" r="7" class="wheel-line" />
-    <circle cx="72" cy="44" r="7" class="wheel-line" />
+    <path d="M12 41 L11 31 L19 28 L28 18 L43 14 L60 15 L72 21 L84 23 L90 32 L89 42 L82 47 L68 47 L62 39 L29 39 L24 47 L13 47 Z" class="car-fill" />
+    <path d="M28 19 L42 10 L56 10 L69 17 L74 24" class="car-line" />
+    <path d="M22 27 L39 30 L56 30 L73 26" class="car-line" />
+    <path d="M45 15 L42 30" class="car-line" />
+    <path d="M59 17 L58 39" class="car-line" />
+    <path d="M14 35 L11 41" class="car-line" />
+    <path d="M76 24 L88 26" class="car-line" />
+    <path d="M18 28 L14 23" class="car-line" />
+    <path d="M48 13 L51 9 L61 9 L66 12" class="car-line" />
+    <path d="M12 34 L20 34" class="car-line" />
+    <circle cx="29" cy="47" r="8" class="wheel-line" />
+    <circle cx="74" cy="47" r="8" class="wheel-line" />
+    <path d="M21 47 L37 47" class="car-line" />
+    <path d="M66 47 L82 47" class="car-line" />
   `;
 }
 
@@ -274,12 +299,7 @@ export function buildDefaultHandoverProtocol(
       alloy: false,
       steel: false,
       spareWheel: false,
-      treadDepth: {
-        frontLeft: "",
-        frontRight: "",
-        rearLeft: "",
-        rearRight: "",
-      },
+      condition: "",
     },
     includedWheels: {
       summer: false,
@@ -288,12 +308,7 @@ export function buildDefaultHandoverProtocol(
       alloy: false,
       steel: false,
       spareWheel: false,
-      treadDepth: {
-        frontLeft: "",
-        frontRight: "",
-        rearLeft: "",
-        rearRight: "",
-      },
+      condition: "",
     },
     damage: {
       markers: [],
@@ -349,7 +364,7 @@ export function generateHandoverProtocolHtml(
   .wheels-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .wheel-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; }
   .wheel-options { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-bottom: 8px; }
-  .tread-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
+  .wheel-condition { margin-top: 10px; }
   .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
   .damage-note { font-size: 8.5pt; color: #555; margin-bottom: 8px; }
   .sketch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
@@ -362,7 +377,7 @@ export function generateHandoverProtocolHtml(
   .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
   .damage-remark { margin-top: 10px; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 18px; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 34px; }
   .signature-line { border-top: 1px solid #111; padding-top: 5px; font-size: 8.5pt; color: #444; }
   .doc-footer { border-top: 1.5px solid #111; margin-top: 16px; padding-top: 6px; font-size: 7.5pt; color: #444; text-align: center; line-height: 1.6; }
   @media print {
@@ -480,11 +495,8 @@ export function generateHandoverProtocolHtml(
         ${checkItem("Ganzjahresreifen", data.mountedWheels.allSeason)}
         ${checkItem("Reserverad", data.mountedWheels.spareWheel)}
       </div>
-      <div class="tread-grid">
-        ${fieldRow("vorne links", tireValue(data.mountedWheels.treadDepth.frontLeft), true)}
-        ${fieldRow("vorne rechts", tireValue(data.mountedWheels.treadDepth.frontRight), true)}
-        ${fieldRow("hinten links", tireValue(data.mountedWheels.treadDepth.rearLeft), true)}
-        ${fieldRow("hinten rechts", tireValue(data.mountedWheels.treadDepth.rearRight), true)}
+      <div class="wheel-condition">
+        ${fieldRow("Zustand", describeWheelCondition(data.mountedWheels.condition), true)}
       </div>
     </div>
     <div class="wheel-box">
@@ -497,11 +509,8 @@ export function generateHandoverProtocolHtml(
         ${checkItem("Ganzjahresreifen", data.includedWheels.allSeason)}
         ${checkItem("Reserverad", data.includedWheels.spareWheel)}
       </div>
-      <div class="tread-grid">
-        ${fieldRow("vorne links", tireValue(data.includedWheels.treadDepth.frontLeft), true)}
-        ${fieldRow("vorne rechts", tireValue(data.includedWheels.treadDepth.frontRight), true)}
-        ${fieldRow("hinten links", tireValue(data.includedWheels.treadDepth.rearLeft), true)}
-        ${fieldRow("hinten rechts", tireValue(data.includedWheels.treadDepth.rearRight), true)}
+      <div class="wheel-condition">
+        ${fieldRow("Zustand", describeWheelCondition(data.includedWheels.condition), true)}
       </div>
     </div>
   </div>
