@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join } from "node:path";
 import type { HandoverProtocol } from "../types";
 
 const DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
@@ -12,7 +12,7 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
-const DAMAGE_SKETCH_FILE = resolve(process.cwd(), "../webapp/public/car_vector.png");
+const DAMAGE_SKETCH_FILE = join(import.meta.dir, "../../webapp/public/car_vector.png");
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
 const DAMAGE_SKETCH_DATA_URI = existsSync(DAMAGE_SKETCH_FILE)
   ? `data:image/png;base64,${readFileSync(DAMAGE_SKETCH_FILE).toString("base64")}`
@@ -313,42 +313,51 @@ export function generateHandoverProtocolHtml(
   .info-banner-badge { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.12em; color: #667085; font-weight: bold; }
   .info-banner-copy { font-size: 9pt; color: #344054; line-height: 1.45; }
   .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .section { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; }
+  .section { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; break-inside: avoid; page-break-inside: avoid; }
   .section-title { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: #b42318; margin-bottom: 8px; }
   .field-row { display: grid; grid-template-columns: 112px 1fr; align-items: end; gap: 8px; margin-bottom: 5px; font-size: 9pt; }
   .field-row-small { grid-template-columns: 95px 1fr; }
   .field-label { color: #444; font-weight: 600; }
   .field-value { border-bottom: 1.4px solid #efb0aa; min-height: 16px; display: block; padding-bottom: 2px; }
   .state-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
-  .state-card { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; min-height: 86px; }
+  .state-card { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; min-height: 86px; break-inside: avoid; page-break-inside: avoid; }
   .state-label { font-size: 8.5pt; color: #555; margin-bottom: 6px; }
   .state-value { font-size: 10pt; font-weight: bold; }
-  .items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; }
   .check-list { display: grid; gap: 5px; }
   .check-item { display: flex; align-items: center; gap: 7px; font-size: 9pt; line-height: 1.35; }
   .checkbox { width: 14px; height: 14px; border: 1.5px solid #444; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; flex: 0 0 14px; }
   .inline-note { font-size: 8.5pt; color: #555; }
-  .wheels-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .wheel-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; }
+  .wheels-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; }
+  .wheel-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; break-inside: avoid; page-break-inside: avoid; }
   .wheel-options { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; margin-bottom: 8px; }
   .wheel-condition { margin-top: 10px; }
-  .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
+  .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; }
   .damage-note { font-size: 8.5pt; color: #555; margin-bottom: 8px; }
-  .sketch-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
-  .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; break-inside: avoid; }
+  .sketch-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; break-inside: avoid; page-break-inside: avoid; }
+  .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; break-inside: avoid; page-break-inside: avoid; }
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
   .damage-sketch-canvas { position: relative; width: 100%; height: 220px; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
   .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.92; }
   .damage-marker-layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
-  .damage-remark { margin-top: 10px; }
+  .damage-remark { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
-  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 34px; }
+  .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 34px; break-inside: avoid; page-break-inside: avoid; }
   .signature-line { border-top: 1px solid #111; padding-top: 5px; font-size: 8.5pt; color: #444; }
   .doc-footer { border-top: 1.5px solid #111; margin-top: 16px; padding-top: 6px; font-size: 7.5pt; color: #444; text-align: center; line-height: 1.6; }
   @media print {
     body { background: #fff; }
     .page { width: auto; min-height: auto; padding: 0; margin: 0; }
+    .section-grid,
+    .state-grid,
+    .items-grid,
+    .wheels-grid,
+    .sketch-grid,
+    .signatures {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
   }
 </style>
 </head>
