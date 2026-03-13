@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma";
 import { env } from "../env";
 import {
+  HandoverProtocolSchema,
   VehicleCreateSchema,
   VehicleUpdateSchema,
   VehicleCostCreateSchema,
@@ -15,6 +16,7 @@ import {
   type VehicleBriefDocumentType,
   type VehicleBriefExtractFields,
 } from "../types";
+import { buildDefaultHandoverProtocol } from "../lib/handoverProtocol";
 import { join } from "path";
 import { mkdir, mkdtemp, rm, unlink, writeFile } from "fs/promises";
 import { randomUUID } from "crypto";
@@ -838,6 +840,70 @@ vehiclesRouter.get("/:id", async (c) => {
 
   return c.json({ data: vehicle });
 });
+
+// GET /api/vehicles/:id/handover-protocol - get saved handover protocol or defaults
+vehiclesRouter.get("/:id/handover-protocol", async (c) => {
+  const id = c.req.param("id");
+
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id },
+    include: {
+      customer: true,
+      handoverProtocol: true,
+    },
+  });
+
+  if (!vehicle) {
+    return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+  }
+
+  const defaults = buildDefaultHandoverProtocol(vehicle, vehicle.customer);
+  const parsedStored = vehicle.handoverProtocol
+    ? HandoverProtocolSchema.parse(vehicle.handoverProtocol.data)
+    : null;
+
+  return c.json({
+    data: {
+      exists: !!vehicle.handoverProtocol,
+      updatedAt: vehicle.handoverProtocol?.updatedAt.toISOString() ?? null,
+      data: parsedStored ?? defaults,
+    },
+  });
+});
+
+// PUT /api/vehicles/:id/handover-protocol - upsert handover protocol
+vehiclesRouter.put(
+  "/:id/handover-protocol",
+  zValidator("json", HandoverProtocolSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id } });
+    if (!vehicle) {
+      return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const handoverProtocol = await prisma.vehicleHandoverProtocol.upsert({
+      where: { vehicleId: id },
+      create: {
+        vehicleId: id,
+        data,
+      },
+      update: {
+        data,
+      },
+    });
+
+    return c.json({
+      data: {
+        exists: true,
+        updatedAt: handoverProtocol.updatedAt.toISOString(),
+        data: HandoverProtocolSchema.parse(handoverProtocol.data),
+      },
+    });
+  }
+);
 
 // POST /api/vehicles - create vehicle
 vehiclesRouter.post(

@@ -1,11 +1,16 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
-import { DocumentGenerateSchema, PurchaseContractGenerateSchema } from "../types";
+import {
+  DocumentGenerateSchema,
+  HandoverProtocolDocumentGenerateSchema,
+  PurchaseContractGenerateSchema,
+} from "../types";
 import { access } from "node:fs/promises";
 import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
+import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -2007,5 +2012,49 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
   const html = generateVermittlungsvertrag(vehicle, buyer, seller, logoSrc);
   return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
 });
+
+documentsRouter.post(
+  "/generate-handover-protocol-html",
+  zValidator("json", HandoverProtocolDocumentGenerateSchema),
+  async (c) => {
+    const { vehicleId, data } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const html = generateHandoverProtocolHtml(data, logoSrc);
+    return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
+  }
+);
+
+documentsRouter.post(
+  "/generate-handover-protocol-pdf",
+  zValidator("json", HandoverProtocolDocumentGenerateSchema),
+  async (c) => {
+    const { vehicleId, data } = c.req.valid("json");
+    const logoSrc = resolveDocumentLogoSrc(c);
+
+    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    if (!vehicle) {
+      return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    const html = generateHandoverProtocolHtml(data, logoSrc);
+
+    try {
+      const pdfBuffer = await htmlToPdf(html);
+      c.header("Content-Type", "application/pdf");
+      c.header("Content-Disposition", `attachment; filename="Uebergabeprotokoll_${vehicle.vehicleNumber}.pdf"`);
+      c.header("X-Vehicle-Number", vehicle.vehicleNumber);
+      return c.body(pdfBuffer as unknown as ReadableStream);
+    } catch (error) {
+      console.error("[documents] handover_protocol_pdf_generation_failed", { vehicleId, error });
+      return c.json({ error: { message: "Fehler beim Erstellen des Dokuments", code: "PDF_GENERATION_FAILED" } }, 500);
+    }
+  }
+);
 
 export { documentsRouter };
