@@ -10,6 +10,10 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
+const DAMAGE_SKETCH_ASSETS = {
+  "left-front": "https://freepngimg.com/svg/image/car/174396-car-outline-vector-illustration.svg",
+  "right-rear": "https://freepngimg.com/svg/image/car/174401-car-outline-vector-graphics.svg",
+} as const;
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
 
 interface VehicleSnapshot {
@@ -155,62 +159,26 @@ function getDealerFooterHtml(): string {
   `;
 }
 
-function renderSketchPath(view: "left-front" | "right-rear"): string {
-  if (view === "left-front") {
-    return `
-      <path d="M10 41 L12 33 L18 29 L27 27 L40 18 L58 13 L72 14 L84 20 L90 30 L89 40 L86 46 L75 46 L71 39 L40 39 L33 46 L21 46 L16 41 Z" class="car-fill" />
-      <path d="M27 27 L44 15 L67 15 L78 22 L82 30" class="car-line" />
-      <path d="M41 18 L55 19 L66 25 L67 39" class="car-line" />
-      <path d="M55 19 L53 39" class="car-line" />
-      <path d="M18 31 L31 32" class="car-line" />
-      <path d="M70 25 L89 28" class="car-line" />
-      <path d="M24 39 L10 41" class="car-line" />
-      <path d="M13 35 L20 35" class="car-line" />
-      <path d="M69 31 L87 33" class="car-line" />
-      <path d="M44 15 L50 11 L61 11 L67 14" class="car-line" />
-      <circle cx="27" cy="46" r="8" class="wheel-line" />
-      <circle cx="74" cy="46" r="8" class="wheel-line" />
-      <path d="M20 46 L34 46" class="car-line" />
-      <path d="M66 46 L82 46" class="car-line" />
-    `;
-  }
-
-  return `
-    <path d="M12 41 L11 31 L19 28 L28 18 L43 14 L60 15 L72 21 L84 23 L90 32 L89 42 L82 47 L68 47 L62 39 L29 39 L24 47 L13 47 Z" class="car-fill" />
-    <path d="M28 19 L42 10 L56 10 L69 17 L74 24" class="car-line" />
-    <path d="M22 27 L39 30 L56 30 L73 26" class="car-line" />
-    <path d="M45 15 L42 30" class="car-line" />
-    <path d="M59 17 L58 39" class="car-line" />
-    <path d="M14 35 L11 41" class="car-line" />
-    <path d="M76 24 L88 26" class="car-line" />
-    <path d="M18 28 L14 23" class="car-line" />
-    <path d="M48 13 L51 9 L61 9 L66 12" class="car-line" />
-    <path d="M12 34 L20 34" class="car-line" />
-    <circle cx="29" cy="47" r="8" class="wheel-line" />
-    <circle cx="74" cy="47" r="8" class="wheel-line" />
-    <path d="M21 47 L37 47" class="car-line" />
-    <path d="M66 47 L82 47" class="car-line" />
-  `;
-}
-
-function renderSketchSvg(
+function renderSketchHtml(
   view: "left-front" | "right-rear",
   markers: HandoverProtocol["damage"]["markers"]
 ): string {
-  const markerSvg = markers
+  const markerHtml = markers
     .filter((marker) => marker.view === view)
     .map((marker) => {
       const cx = marker.x;
-      const cy = marker.y * 0.6;
-      return `<circle cx="${cx}" cy="${cy}" r="3.6" class="damage-marker" />`;
+      const cy = marker.y;
+      return `<circle cx="${cx}" cy="${cy}" r="2.9" class="damage-marker" />`;
     })
     .join("");
 
   return `
-    <svg viewBox="0 0 100 60" aria-hidden="true" class="damage-sketch-svg">
-      ${renderSketchPath(view)}
-      ${markerSvg}
-    </svg>
+    <div class="damage-sketch-canvas" aria-hidden="true">
+      <img src="${DAMAGE_SKETCH_ASSETS[view]}" alt="" class="damage-sketch-image" />
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="damage-marker-layer">
+        ${markerHtml}
+      </svg>
+    </div>
   `;
 }
 
@@ -331,6 +299,7 @@ export function generateHandoverProtocolHtml(
 <meta charset="UTF-8">
 <title>Übergabeprotokoll</title>
 <style>
+  @page { margin: 14mm 14mm 16mm; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #161616; background: #fff; }
   .page { width: 210mm; min-height: 297mm; padding: 12mm 14mm 14mm; margin: 0 auto; background: #fff; }
@@ -368,12 +337,11 @@ export function generateHandoverProtocolHtml(
   .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
   .damage-note { font-size: 8.5pt; color: #555; margin-bottom: 8px; }
   .sketch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
-  .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; }
+  .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; break-inside: avoid; }
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
-  .damage-sketch-svg { width: 100%; height: 108px; display: block; }
-  .car-fill { fill: #f8fafc; stroke: #98a2b3; stroke-width: 1.2; }
-  .car-line { fill: none; stroke: #98a2b3; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
-  .wheel-line { fill: #fff; stroke: #98a2b3; stroke-width: 1.2; }
+  .damage-sketch-canvas { position: relative; width: 100%; height: 142px; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
+  .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.86; filter: grayscale(1) contrast(0.9) brightness(0.96); }
+  .damage-marker-layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
   .damage-remark { margin-top: 10px; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
@@ -381,7 +349,8 @@ export function generateHandoverProtocolHtml(
   .signature-line { border-top: 1px solid #111; padding-top: 5px; font-size: 8.5pt; color: #444; }
   .doc-footer { border-top: 1.5px solid #111; margin-top: 16px; padding-top: 6px; font-size: 7.5pt; color: #444; text-align: center; line-height: 1.6; }
   @media print {
-    .page { padding: 10mm 12mm 12mm; }
+    body { background: #fff; }
+    .page { width: auto; min-height: auto; padding: 0; margin: 0; }
   }
 </style>
 </head>
@@ -521,11 +490,11 @@ export function generateHandoverProtocolHtml(
     <div class="sketch-grid">
       <div class="sketch-shell">
         <div class="sketch-label">Skizze links / vorne</div>
-        ${renderSketchSvg("left-front", data.damage.markers)}
+        ${renderSketchHtml("left-front", data.damage.markers)}
       </div>
       <div class="sketch-shell">
         <div class="sketch-label">Skizze rechts / hinten</div>
-        ${renderSketchSvg("right-rear", data.damage.markers)}
+        ${renderSketchHtml("right-rear", data.damage.markers)}
       </div>
     </div>
     <div class="damage-remark">
