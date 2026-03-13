@@ -360,11 +360,21 @@ export const HandoverProtocolPartySchema = z.object({
   phone: z.string().default(""),
 });
 
+export const HandoverProtocolDamageViewSchema = z.enum(["left-front", "right-rear"]);
+
+export const HandoverProtocolDamageMarkerSchema = z.object({
+  id: z.string().default(""),
+  view: HandoverProtocolDamageViewSchema,
+  x: z.number().min(0).max(100),
+  y: z.number().min(0).max(100),
+});
+
 export const HandoverProtocolSchema = z.object({
   vehicle: z.object({
     licensePlate: z.string().default(""),
     manufacturerModelType: z.string().default(""),
     color: z.string().default(""),
+    fuelType: z.string().default(""),
     mileage: z.string().default(""),
     vin: z.string().default(""),
     internalVehicleNumber: z.string().default(""),
@@ -372,6 +382,7 @@ export const HandoverProtocolSchema = z.object({
     licensePlate: "",
     manufacturerModelType: "",
     color: "",
+    fuelType: "",
     mileage: "",
     vin: "",
     internalVehicleNumber: "",
@@ -380,12 +391,10 @@ export const HandoverProtocolSchema = z.object({
     date: z.string().default(""),
     time: z.string().default(""),
     location: z.string().default(""),
-    fuelType: z.string().default(""),
   }).default({
     date: "",
     time: "",
     location: "",
-    fuelType: "",
   }),
   giver: HandoverProtocolPartySchema.default({
     name: "",
@@ -477,16 +486,11 @@ export const HandoverProtocolSchema = z.object({
     },
   }),
   damage: z.object({
-    photosIncluded: z.boolean().default(false),
-  }).default({
-    photosIncluded: false,
-  }),
-  notes: z.object({
+    markers: z.array(HandoverProtocolDamageMarkerSchema).default([]),
     remark: z.string().default(""),
-    additionalInformation: z.string().default(""),
   }).default({
+    markers: [],
     remark: "",
-    additionalInformation: "",
   }),
 });
 

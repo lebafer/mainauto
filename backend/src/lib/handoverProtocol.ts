@@ -144,6 +144,51 @@ function getDealerFooterHtml(): string {
   `;
 }
 
+function renderSketchPath(view: "left-front" | "right-rear"): string {
+  if (view === "left-front") {
+    return `
+      <path d="M17 39 L24 24 L40 18 L64 18 L80 24 L87 34 L84 43 L16 43 Z" class="car-fill" />
+      <path d="M30 23 L39 16 L58 16 L69 23" class="car-line" />
+      <path d="M21 34 L83 34" class="car-line" />
+      <path d="M44 19 L44 34" class="car-line" />
+      <path d="M64 21 L60 34" class="car-line" />
+      <circle cx="31" cy="43" r="7" class="wheel-line" />
+      <circle cx="73" cy="43" r="7" class="wheel-line" />
+    `;
+  }
+
+  return `
+    <path d="M13 35 L22 25 L41 19 L67 19 L81 25 L87 39 L83 44 L15 44 Z" class="car-fill" />
+    <path d="M28 24 L38 16 L61 16 L72 24" class="car-line" />
+    <path d="M18 35 L82 35" class="car-line" />
+    <path d="M37 20 L37 35" class="car-line" />
+    <path d="M59 20 L63 35" class="car-line" />
+    <circle cx="30" cy="44" r="7" class="wheel-line" />
+    <circle cx="72" cy="44" r="7" class="wheel-line" />
+  `;
+}
+
+function renderSketchSvg(
+  view: "left-front" | "right-rear",
+  markers: HandoverProtocol["damage"]["markers"]
+): string {
+  const markerSvg = markers
+    .filter((marker) => marker.view === view)
+    .map((marker) => {
+      const cx = marker.x;
+      const cy = marker.y * 0.6;
+      return `<circle cx="${cx}" cy="${cy}" r="3.6" class="damage-marker" />`;
+    })
+    .join("");
+
+  return `
+    <svg viewBox="0 0 100 60" aria-hidden="true" class="damage-sketch-svg">
+      ${renderSketchPath(view)}
+      ${markerSvg}
+    </svg>
+  `;
+}
+
 export function resolveDocumentLogoSrc(c: { req: { header: (name: string) => string | undefined } }): string {
   const origin = c.req.header("origin");
   const referer = c.req.header("referer");
@@ -172,6 +217,7 @@ export function buildDefaultHandoverProtocol(
       licensePlate: "",
       manufacturerModelType: [vehicle.brand, vehicle.model].filter(Boolean).join(" "),
       color: vehicle.color ?? "",
+      fuelType: vehicle.fuelType ?? "",
       mileage: vehicle.mileage ? vehicle.mileage.toLocaleString("de-DE") : "",
       vin: vehicle.vin ?? "",
       internalVehicleNumber: vehicle.vehicleNumber,
@@ -180,7 +226,6 @@ export function buildDefaultHandoverProtocol(
       date: "",
       time: "",
       location: "",
-      fuelType: vehicle.fuelType ?? "",
     },
     giver: {
       name: "MainAuto Miltenberg",
@@ -251,11 +296,8 @@ export function buildDefaultHandoverProtocol(
       },
     },
     damage: {
-      photosIncluded: false,
-    },
-    notes: {
+      markers: [],
       remark: "",
-      additionalInformation: "",
     },
   };
 }
@@ -285,6 +327,9 @@ export function generateHandoverProtocolHtml(
   .doc-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
   .doc-title { font-size: 16pt; font-weight: bold; }
   .internal-number { font-size: 8.5pt; color: #666; }
+  .info-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 9px 11px; border: 1px solid #d7dbe1; background: #f4f6f8; border-radius: 12px; }
+  .info-banner-badge { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.12em; color: #667085; font-weight: bold; }
+  .info-banner-copy { font-size: 9pt; color: #344054; line-height: 1.45; }
   .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
   .section { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; }
   .section-title { font-size: 9.5pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.08em; color: #b42318; margin-bottom: 8px; }
@@ -308,9 +353,14 @@ export function generateHandoverProtocolHtml(
   .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
   .damage-note { font-size: 8.5pt; color: #555; margin-bottom: 8px; }
   .sketch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
-  .sketch { border: 1.2px dashed #c7c7c7; border-radius: 12px; min-height: 105px; display: flex; align-items: center; justify-content: center; color: #999; font-size: 8.5pt; }
-  .notes-grid { display: grid; grid-template-columns: 1fr; gap: 10px; margin-bottom: 14px; }
-  .note-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; min-height: 72px; }
+  .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; }
+  .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
+  .damage-sketch-svg { width: 100%; height: 108px; display: block; }
+  .car-fill { fill: #f8fafc; stroke: #98a2b3; stroke-width: 1.2; }
+  .car-line { fill: none; stroke: #98a2b3; stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+  .wheel-line { fill: #fff; stroke: #98a2b3; stroke-width: 1.2; }
+  .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
+  .damage-remark { margin-top: 10px; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 18px; }
   .signature-line { border-top: 1px solid #111; padding-top: 5px; font-size: 8.5pt; color: #444; }
@@ -327,6 +377,10 @@ export function generateHandoverProtocolHtml(
     <div class="doc-title">Übergabeprotokoll</div>
     <div class="internal-number">Interne Fahrzeugnummer: ${valueOrBlank(data.vehicle.internalVehicleNumber)}</div>
   </div>
+  <div class="info-banner">
+    <div class="info-banner-badge">Fahrzeuginfo</div>
+    <div class="info-banner-copy">VIN: ${valueOrBlank(data.vehicle.vin)} &nbsp;&bull;&nbsp; Interne Fahrzeugnummer: ${valueOrBlank(data.vehicle.internalVehicleNumber)}</div>
+  </div>
 
   <div class="section-grid">
     <div class="section">
@@ -334,6 +388,7 @@ export function generateHandoverProtocolHtml(
       ${fieldRow("Kennzeichen", data.vehicle.licensePlate)}
       ${fieldRow("Hersteller / Modell / Typ", data.vehicle.manufacturerModelType)}
       ${fieldRow("Farbe", data.vehicle.color)}
+      ${fieldRow("Kraftstoffart", data.vehicle.fuelType)}
       ${fieldRow("Kilometerstand", data.vehicle.mileage)}
       ${fieldRow("VIN", data.vehicle.vin)}
     </div>
@@ -342,7 +397,6 @@ export function generateHandoverProtocolHtml(
       ${fieldRow("Datum Übergabe", data.handover.date)}
       ${fieldRow("Uhrzeit Übergabe", data.handover.time)}
       ${fieldRow("Ort der Übergabe", data.handover.location)}
-      ${fieldRow("Kraftstoffart", data.handover.fuelType)}
     </div>
   </div>
 
@@ -454,22 +508,20 @@ export function generateHandoverProtocolHtml(
 
   <div class="damage-box">
     <div class="section-title">Beschädigungen</div>
-    <div class="damage-note">(Symbole: R = Riss, D = Delle, F = Fehlteil, K = Kratzer, G = Gebrochen, S = Steinschlag)</div>
-    <div class="check-item">${checkbox(data.damage.photosIncluded)}<span>Fotos anbei</span></div>
+    <div class="damage-note">Digitale Marker aus dem Übergabeprotokoll</div>
     <div class="sketch-grid">
-      <div class="sketch">Skizze links / vorne</div>
-      <div class="sketch">Skizze rechts / hinten</div>
+      <div class="sketch-shell">
+        <div class="sketch-label">Skizze links / vorne</div>
+        ${renderSketchSvg("left-front", data.damage.markers)}
+      </div>
+      <div class="sketch-shell">
+        <div class="sketch-label">Skizze rechts / hinten</div>
+        ${renderSketchSvg("right-rear", data.damage.markers)}
+      </div>
     </div>
-  </div>
-
-  <div class="notes-grid">
-    <div class="section">
-      <div class="section-title">Bemerkung</div>
-      <div class="note-value">${valueOrBlank(data.notes.remark)}</div>
-    </div>
-    <div class="section">
-      <div class="section-title">Zusätzliche Informationen</div>
-      <div class="note-value">${valueOrBlank(data.notes.additionalInformation)}</div>
+    <div class="damage-remark">
+      <div class="section-title">Bemerkung zu Beschädigungen</div>
+      <div class="note-value">${valueOrBlank(data.damage.remark)}</div>
     </div>
   </div>
 

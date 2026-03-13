@@ -120,6 +120,13 @@ const WHEEL_CHECKBOXES = [
   { name: "spareWheel" as const, label: "Reserverad" },
 ] as const;
 
+const DAMAGE_VIEWS = [
+  { value: "left-front" as const, label: "Skizze links / vorne" },
+  { value: "right-rear" as const, label: "Skizze rechts / hinten" },
+] as const;
+
+type DamageView = HandoverProtocol["damage"]["markers"][number]["view"];
+
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank");
   if (!win) {
@@ -199,31 +206,126 @@ function ChoiceGroup({
   value,
   onChange,
   options,
+  columnsClassName,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: ReadonlyArray<{ value: string; label: string }>;
+  columnsClassName?: string;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/20 p-4">
       <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{label}</Label>
-      <RadioGroup value={value} onValueChange={onChange} className="grid gap-2 md:grid-cols-3">
+      <RadioGroup
+        value={value}
+        onValueChange={onChange}
+        className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", columnsClassName)}
+      >
         {options.map((option) => (
           <label
             key={option.value}
             className={cn(
-              "flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm transition-colors",
+              "flex min-h-[52px] cursor-pointer items-center gap-3 rounded-xl border px-3 py-3 text-sm transition-colors",
               value === option.value
                 ? "border-rose-500 bg-rose-50 text-rose-900"
                 : "border-border/70 bg-background hover:border-rose-300 hover:bg-rose-50/40"
             )}
           >
             <RadioGroupItem value={option.value} />
-            <span>{option.label}</span>
+            <span className="break-words leading-snug">{option.label}</span>
           </label>
         ))}
       </RadioGroup>
+    </div>
+  );
+}
+
+function createMarkerId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `marker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function DamageSketchArtwork({ view }: { view: DamageView }) {
+  if (view === "left-front") {
+    return (
+      <svg viewBox="0 0 100 60" className="h-full w-full" aria-hidden="true">
+        <path d="M17 39 L24 24 L40 18 L64 18 L80 24 L87 34 L84 43 L16 43 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
+        <path d="M30 23 L39 16 L58 16 L69 23" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M21 34 L83 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M44 19 L44 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <path d="M64 21 L60 34" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+        <circle cx="31" cy="43" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+        <circle cx="73" cy="43" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 100 60" className="h-full w-full" aria-hidden="true">
+      <path d="M13 35 L22 25 L41 19 L67 19 L81 25 L87 39 L83 44 L15 44 Z" className="fill-slate-50 stroke-slate-400" strokeWidth="1.2" />
+      <path d="M28 24 L38 16 L61 16 L72 24" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M18 35 L82 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M37 20 L37 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <path d="M59 20 L63 35" className="fill-none stroke-slate-400" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.1" />
+      <circle cx="30" cy="44" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+      <circle cx="72" cy="44" r="7" className="fill-white stroke-slate-400" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function DamageSketch({
+  view,
+  label,
+  markers,
+  onAddMarker,
+  onRemoveMarker,
+}: {
+  view: DamageView;
+  label: string;
+  markers: HandoverProtocol["damage"]["markers"];
+  onAddMarker: (view: DamageView, x: number, y: number) => void;
+  onRemoveMarker: (id: string) => void;
+}) {
+  const viewMarkers = markers.filter((marker) => marker.view === view);
+
+  function handleSketchClick(event: React.MouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * 100;
+    const y = ((event.clientY - rect.top) / rect.height) * 100;
+    onAddMarker(view, Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
+      <div
+        onClick={handleSketchClick}
+        className="relative aspect-[5/3] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border/70 bg-muted/20 p-4 transition-colors hover:border-rose-300 hover:bg-rose-50/20"
+      >
+        <DamageSketchArtwork view={view} />
+        {viewMarkers.map((marker) => (
+          <button
+            key={marker.id}
+            type="button"
+            className="absolute h-4 w-4 rounded-full border-2 border-rose-700 bg-rose-500/20 shadow-sm"
+            style={{
+              left: `${marker.x}%`,
+              top: `${marker.y}%`,
+              transform: "translate(-50%, -50%)",
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRemoveMarker(marker.id);
+            }}
+            aria-label="Schadensmarker entfernen"
+          />
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">Klick setzt einen Marker. Klick auf einen Marker entfernt ihn.</p>
     </div>
   );
 }
@@ -480,6 +582,22 @@ export function VehicleHandoverProtocolDialog({
     onOpenChange(nextOpen);
   }
 
+  function addDamageMarker(view: DamageView, x: number, y: number) {
+    form.setValue(
+      "damage.markers",
+      [...protocol.damage.markers, { id: createMarkerId(), view, x, y }],
+      { shouldDirty: true }
+    );
+  }
+
+  function removeDamageMarker(id: string) {
+    form.setValue(
+      "damage.markers",
+      protocol.damage.markers.filter((marker) => marker.id !== id),
+      { shouldDirty: true }
+    );
+  }
+
   const protocol = form.watch();
 
   const content = (
@@ -489,11 +607,11 @@ export function VehicleHandoverProtocolDialog({
           title="Fahrzeugdaten"
           description="Die interne Fahrzeugnummer und VIN werden automatisch übernommen, bleiben aber editierbar."
         >
-          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-3 text-sm text-rose-900">
-            <CarFront className="h-4 w-4 shrink-0" />
+          <div className="mb-4 flex items-center gap-3 rounded-2xl border border-border/70 bg-muted/35 px-4 py-3 text-sm text-foreground">
+            <CarFront className="h-4 w-4 shrink-0 text-muted-foreground" />
             <div>
               <div className="font-medium">Interne Fahrzeugnummer: {protocol.vehicle.internalVehicleNumber || vehicle.vehicleNumber}</div>
-              <div className="text-xs text-rose-800/80">VIN: {protocol.vehicle.vin || vehicle.vin || "nicht hinterlegt"}</div>
+              <div className="text-xs text-muted-foreground">VIN: {protocol.vehicle.vin || vehicle.vin || "nicht hinterlegt"}</div>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -511,6 +629,11 @@ export function VehicleHandoverProtocolDialog({
               label="Farbe"
               value={protocol.vehicle.color}
               onChange={(value) => form.setValue("vehicle.color", value, { shouldDirty: true })}
+            />
+            <TextField
+              label="Kraftstoffart"
+              value={protocol.vehicle.fuelType}
+              onChange={(value) => form.setValue("vehicle.fuelType", value, { shouldDirty: true })}
             />
             <TextField
               label="Kilometerstand"
@@ -548,11 +671,6 @@ export function VehicleHandoverProtocolDialog({
               label="Ort der Übergabe"
               value={protocol.handover.location}
               onChange={(value) => form.setValue("handover.location", value, { shouldDirty: true })}
-            />
-            <TextField
-              label="Kraftstoffart"
-              value={protocol.handover.fuelType}
-              onChange={(value) => form.setValue("handover.fuelType", value, { shouldDirty: true })}
             />
           </div>
         </Section>
@@ -593,26 +711,44 @@ export function VehicleHandoverProtocolDialog({
         <PartyFields title="Daten des Übernehmenden" path="receiver" form={form} />
 
         <Section title="Fahrzeugzustand">
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             <Controller
               control={form.control}
               name="condition.exterior"
               render={({ field }) => (
-                <ChoiceGroup label="Außen" value={field.value} onChange={field.onChange} options={EXTERIOR_OPTIONS} />
+                <ChoiceGroup
+                  label="Außen"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={EXTERIOR_OPTIONS}
+                  columnsClassName="lg:grid-cols-1"
+                />
               )}
             />
             <Controller
               control={form.control}
               name="condition.interior"
               render={({ field }) => (
-                <ChoiceGroup label="Innenraum" value={field.value} onChange={field.onChange} options={INTERIOR_OPTIONS} />
+                <ChoiceGroup
+                  label="Innenraum"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={INTERIOR_OPTIONS}
+                  columnsClassName="lg:grid-cols-1"
+                />
               )}
             />
             <Controller
               control={form.control}
               name="condition.fuelLevel"
               render={({ field }) => (
-                <ChoiceGroup label="Tankfüllung" value={field.value} onChange={field.onChange} options={FUEL_LEVEL_OPTIONS} />
+                <ChoiceGroup
+                  label="Tankfüllung"
+                  value={field.value}
+                  onChange={field.onChange}
+                  options={FUEL_LEVEL_OPTIONS}
+                  columnsClassName="lg:grid-cols-2"
+                />
               )}
             />
           </div>
@@ -682,58 +818,35 @@ export function VehicleHandoverProtocolDialog({
           <WheelSection title="Mit abgegebene Reifen / Felgen" path="includedWheels" form={form} />
         </div>
 
-        <Section title="Beschädigungen" description="Die PDF enthält leere Skizzenflächen für handschriftliche Markierungen im Ausdruck.">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_1fr] md:items-start">
-            <Controller
-              control={form.control}
-              name="damage.photosIncluded"
-              render={({ field }) => (
-                <CheckboxField
-                  checked={field.value}
-                  label="Fotos anbei"
-                  onCheckedChange={(checked) => field.onChange(checked)}
+        <Section title="Beschädigungen" description="Klick auf eine Skizze setzt einen Marker. Ein Klick auf einen bestehenden Marker entfernt ihn wieder.">
+          <div className="grid gap-4 xl:grid-cols-2">
+            {DAMAGE_VIEWS.map((view) => (
+              <DamageSketch
+                key={view.value}
+                view={view.value}
+                label={view.label}
+                markers={protocol.damage.markers}
+                onAddMarker={addDamageMarker}
+                onRemoveMarker={removeDamageMarker}
+              />
+            ))}
+          </div>
+          <Separator className="my-4" />
+          <Controller
+            control={form.control}
+            name="damage.remark"
+            render={({ field }) => (
+              <div className="space-y-2">
+                <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Bemerkung zu Beschädigungen</Label>
+                <Textarea
+                  value={field.value}
+                  onChange={field.onChange}
+                  className="min-h-[120px]"
+                  placeholder="Beschreiben Sie hier die markierten Beschädigungen"
                 />
-              )}
-            />
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-border bg-muted/30 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Skizze links / vorne
               </div>
-              <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-border bg-muted/30 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Skizze rechts / hinten
-              </div>
-            </div>
-          </div>
-        </Section>
-
-        <Section title="Zusatzfelder">
-          <div className="grid gap-4">
-            <Controller
-              control={form.control}
-              name="notes.remark"
-              render={({ field }) => (
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Bemerkung</Label>
-                  <Textarea value={field.value} onChange={field.onChange} className="min-h-[110px]" />
-                </div>
-              )}
-            />
-            <Controller
-              control={form.control}
-              name="notes.additionalInformation"
-              render={({ field }) => (
-                <div className="space-y-2">
-                  <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Zusätzliche Informationen</Label>
-                  <Textarea
-                    value={field.value}
-                    onChange={field.onChange}
-                    className="min-h-[120px]"
-                    placeholder="Informationen, die der Kunde zusätzlich erhalten hat"
-                  />
-                </div>
-              )}
-            />
-          </div>
+            )}
+          />
         </Section>
       </div>
     </>
