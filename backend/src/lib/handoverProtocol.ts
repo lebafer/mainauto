@@ -158,18 +158,14 @@ function getDealerFooterHtml(): string {
 function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"], sketchSrc: string): string {
   const markerHtml = markers
     .map((marker) => {
-      const cx = marker.x;
-      const cy = marker.y;
-      return `<circle cx="${cx}" cy="${cy}" r="2.9" class="damage-marker" />`;
+      return `<span class="damage-marker-dot" style="left:${marker.x}%; top:${marker.y}%"></span>`;
     })
     .join("");
 
   return `
     <div class="damage-sketch-canvas" aria-hidden="true">
       <img src="${escapeHtml(sketchSrc)}" alt="" class="damage-sketch-image" />
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="damage-marker-layer">
-        ${markerHtml}
-      </svg>
+      ${markerHtml}
     </div>
   `;
 }
@@ -334,8 +330,7 @@ export function generateHandoverProtocolHtml(
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
   .damage-sketch-canvas { position: relative; width: 100%; aspect-ratio: 1151 / 750; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
   .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 1; }
-  .damage-marker-layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
+  .damage-marker-dot { position: absolute; width: 16px; height: 16px; border-radius: 999px; border: 2px solid #be123c; background: rgba(244, 63, 94, 0.12); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18); transform: translate(-50%, -50%); }
   .damage-remark { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 34px; break-inside: avoid; page-break-inside: avoid; }
