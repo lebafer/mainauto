@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { HandoverProtocol } from "../types";
 
 const DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
@@ -10,11 +12,11 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
-const DAMAGE_SKETCH_ASSETS = {
-  "left-front": "https://freepngimg.com/svg/image/car/174396-car-outline-vector-illustration.svg",
-  "right-rear": "https://freepngimg.com/svg/image/car/174401-car-outline-vector-graphics.svg",
-} as const;
+const DAMAGE_SKETCH_FILE = resolve(process.cwd(), "../webapp/public/car_vector.png");
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
+const DAMAGE_SKETCH_DATA_URI = existsSync(DAMAGE_SKETCH_FILE)
+  ? `data:image/png;base64,${readFileSync(DAMAGE_SKETCH_FILE).toString("base64")}`
+  : "";
 
 interface VehicleSnapshot {
   vehicleNumber: string;
@@ -159,12 +161,8 @@ function getDealerFooterHtml(): string {
   `;
 }
 
-function renderSketchHtml(
-  view: "left-front" | "right-rear",
-  markers: HandoverProtocol["damage"]["markers"]
-): string {
+function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"]): string {
   const markerHtml = markers
-    .filter((marker) => marker.view === view)
     .map((marker) => {
       const cx = marker.x;
       const cy = marker.y;
@@ -174,7 +172,7 @@ function renderSketchHtml(
 
   return `
     <div class="damage-sketch-canvas" aria-hidden="true">
-      <img src="${DAMAGE_SKETCH_ASSETS[view]}" alt="" class="damage-sketch-image" />
+      <img src="${DAMAGE_SKETCH_DATA_URI}" alt="" class="damage-sketch-image" />
       <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="damage-marker-layer">
         ${markerHtml}
       </svg>
@@ -336,11 +334,11 @@ export function generateHandoverProtocolHtml(
   .wheel-condition { margin-top: 10px; }
   .damage-box { border: 1px solid #d7d7d7; border-radius: 10px; padding: 10px; margin-bottom: 12px; }
   .damage-note { font-size: 8.5pt; color: #555; margin-bottom: 8px; }
-  .sketch-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+  .sketch-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
   .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; break-inside: avoid; }
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
-  .damage-sketch-canvas { position: relative; width: 100%; height: 142px; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
-  .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 0.86; filter: grayscale(1) contrast(0.9) brightness(0.96); }
+  .damage-sketch-canvas { position: relative; width: 100%; height: 220px; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
+  .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.92; }
   .damage-marker-layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
   .damage-remark { margin-top: 10px; }
@@ -489,12 +487,8 @@ export function generateHandoverProtocolHtml(
     <div class="damage-note">Digitale Marker aus dem Übergabeprotokoll</div>
     <div class="sketch-grid">
       <div class="sketch-shell">
-        <div class="sketch-label">Skizze links / vorne</div>
-        ${renderSketchHtml("left-front", data.damage.markers)}
-      </div>
-      <div class="sketch-shell">
-        <div class="sketch-label">Skizze rechts / hinten</div>
-        ${renderSketchHtml("right-rear", data.damage.markers)}
+        <div class="sketch-label">Fahrzeugskizze</div>
+        ${renderSketchHtml(data.damage.markers)}
       </div>
     </div>
     <div class="damage-remark">

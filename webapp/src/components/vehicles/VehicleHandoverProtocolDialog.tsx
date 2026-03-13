@@ -123,17 +123,8 @@ const WHEEL_CHECKBOXES = [
   { name: "spareWheel" as const, label: "Reserverad" },
 ] as const;
 
-const DAMAGE_VIEWS = [
-  { value: "left-front" as const, label: "Skizze links / vorne" },
-  { value: "right-rear" as const, label: "Skizze rechts / hinten" },
-] as const;
-
 type DamageView = HandoverProtocol["damage"]["markers"][number]["view"];
-
-const DAMAGE_SKETCH_ASSETS: Record<DamageView, string> = {
-  "left-front": "https://freepngimg.com/svg/image/car/174396-car-outline-vector-illustration.svg",
-  "right-rear": "https://freepngimg.com/svg/image/car/174401-car-outline-vector-graphics.svg",
-};
+const DAMAGE_SKETCH_ASSET = "/car_vector.png";
 
 const WHEEL_CONDITION_OPTIONS = [
   { value: "new", label: "neu" },
@@ -265,25 +256,21 @@ function createMarkerId() {
 }
 
 function DamageSketch({
-  view,
   label,
   markers,
   onAddMarker,
   onRemoveMarker,
 }: {
-  view: DamageView;
   label: string;
   markers: HandoverProtocol["damage"]["markers"];
-  onAddMarker: (view: DamageView, x: number, y: number) => void;
+  onAddMarker: (x: number, y: number) => void;
   onRemoveMarker: (id: string) => void;
 }) {
-  const viewMarkers = markers.filter((marker) => marker.view === view);
-
   function handleSketchClick(event: React.MouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 100;
     const y = ((event.clientY - rect.top) / rect.height) * 100;
-    onAddMarker(view, Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
+    onAddMarker(Math.max(0, Math.min(100, x)), Math.max(0, Math.min(100, y)));
   }
 
   return (
@@ -291,15 +278,15 @@ function DamageSketch({
       <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{label}</div>
       <div
         onClick={handleSketchClick}
-        className="relative aspect-[1052/744] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-slate-100 to-slate-200 transition-colors hover:border-rose-300 hover:bg-rose-50/20"
+        className="relative aspect-[1151/750] w-full cursor-crosshair overflow-hidden rounded-2xl border border-border/70 bg-gradient-to-b from-slate-100 to-slate-200 transition-colors hover:border-rose-300 hover:bg-rose-50/20"
       >
         <img
-          src={DAMAGE_SKETCH_ASSETS[view]}
+          src={DAMAGE_SKETCH_ASSET}
           alt=""
-          className="pointer-events-none absolute inset-0 h-full w-full select-none object-fill opacity-85 grayscale [filter:grayscale(1)_contrast(0.92)_brightness(0.96)]"
+          className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain opacity-100"
           draggable={false}
         />
-        {viewMarkers.map((marker) => (
+        {markers.map((marker) => (
           <button
             key={marker.id}
             type="button"
@@ -565,10 +552,10 @@ export function VehicleHandoverProtocolDialog({
     onOpenChange(nextOpen);
   }
 
-  function addDamageMarker(view: DamageView, x: number, y: number) {
+  function addDamageMarker(x: number, y: number) {
     form.setValue(
       "damage.markers",
-      [...protocol.damage.markers, { id: createMarkerId(), view, x, y }],
+      [...protocol.damage.markers, { id: createMarkerId(), view: "left-front" as DamageView, x, y }],
       { shouldDirty: true }
     );
   }
@@ -817,18 +804,14 @@ export function VehicleHandoverProtocolDialog({
           <WheelSection title="Mit abgegebene Reifen / Felgen" path="includedWheels" form={form} />
         </div>
 
-        <Section title="Beschädigungen" description="Klick auf eine Skizze setzt einen Marker. Ein Klick auf einen bestehenden Marker entfernt ihn wieder.">
-          <div className="grid gap-4 xl:grid-cols-2">
-            {DAMAGE_VIEWS.map((view) => (
-              <DamageSketch
-                key={view.value}
-                view={view.value}
-                label={view.label}
-                markers={protocol.damage.markers}
-                onAddMarker={addDamageMarker}
-                onRemoveMarker={removeDamageMarker}
-              />
-            ))}
+        <Section title="Beschädigungen" description="Klick auf die Fahrzeugskizze setzt einen Marker. Ein Klick auf einen bestehenden Marker entfernt ihn wieder.">
+          <div className="grid gap-4">
+            <DamageSketch
+              label="Fahrzeugskizze"
+              markers={protocol.damage.markers}
+              onAddMarker={addDamageMarker}
+              onRemoveMarker={removeDamageMarker}
+            />
           </div>
           <Separator className="my-4" />
           <Controller
