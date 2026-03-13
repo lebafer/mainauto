@@ -12,7 +12,7 @@ const DEALER_TAX_ID = "DE196691148";
 const DEALER_BANK = "Sparkasse Odenwaldkreis";
 const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
 const DEALER_BIC = "HELADEF1ERB";
-const DAMAGE_SKETCH_FILE = join(import.meta.dir, "../../webapp/public/car_vector.png");
+const DAMAGE_SKETCH_FILE = join(import.meta.dir, "../../../webapp/public/car_vector.png");
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
 const DAMAGE_SKETCH_DATA_URI = existsSync(DAMAGE_SKETCH_FILE)
   ? `data:image/png;base64,${readFileSync(DAMAGE_SKETCH_FILE).toString("base64")}`
