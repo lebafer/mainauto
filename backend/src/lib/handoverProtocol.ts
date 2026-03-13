@@ -332,8 +332,8 @@ export function generateHandoverProtocolHtml(
   .sketch-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; break-inside: avoid; page-break-inside: avoid; }
   .sketch-shell { border: 1px solid #d7d7d7; border-radius: 12px; padding: 8px; background: #fafafa; break-inside: avoid; page-break-inside: avoid; }
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
-  .damage-sketch-canvas { position: relative; width: 100%; height: 220px; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
-  .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0.92; }
+  .damage-sketch-canvas { position: relative; width: 100%; aspect-ratio: 1151 / 750; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
+  .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 1; }
   .damage-marker-layer { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .damage-marker { fill: rgba(225, 29, 72, 0.15); stroke: #be123c; stroke-width: 1.2; }
   .damage-remark { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
