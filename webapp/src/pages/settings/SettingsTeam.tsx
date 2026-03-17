@@ -52,7 +52,6 @@ type TeamMemberEditForm = {
   password: string;
   role: TeamRole;
   isActive: boolean;
-  isDefault: boolean;
 };
 
 const ROLE_LABELS: Record<TeamRole, string> = {
@@ -69,7 +68,6 @@ function createEditForm(member: TeamMember): TeamMemberEditForm {
     password: "",
     role: member.role,
     isActive: member.isActive,
-    isDefault: member.isDefault,
   };
 }
 
@@ -224,7 +222,6 @@ export default function SettingsTeam() {
                     </div>
                     <div className="mt-2 text-sm text-muted-foreground">
                       Rolle: {ROLE_LABELS[member.role]} • {member.isActive ? "Aktiv" : "Inaktiv"}
-                      {member.isDefault ? " • Standard" : ""}
                     </div>
                   </div>
 
@@ -249,14 +246,6 @@ export default function SettingsTeam() {
                         onCheckedChange={(checked) => quickUpdate(member.id, { isActive: checked })}
                       />
                       <span className="text-sm">Aktiv</span>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={member.isDefault}
-                        onCheckedChange={(checked) => quickUpdate(member.id, { isDefault: checked })}
-                      />
-                      <span className="text-sm">Standard</span>
                     </div>
 
                     <Button type="button" variant="outline" onClick={() => openEditDialog(member)}>
@@ -376,19 +365,6 @@ export default function SettingsTeam() {
                   }
                 />
               </div>
-
-              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                <div>
-                  <div className="text-sm font-medium">Standard</div>
-                  <div className="text-xs text-muted-foreground">Voreinstellung für diesen Nutzer</div>
-                </div>
-                <Switch
-                  checked={editForm.isDefault}
-                  onCheckedChange={(checked) =>
-                    setEditForm((current) => (current ? { ...current, isDefault: checked } : current))
-                  }
-                />
-              </div>
             </div>
           ) : null}
 
@@ -414,7 +390,6 @@ export default function SettingsTeam() {
                   username: editForm.username || null,
                   role: editForm.role,
                   isActive: editForm.isActive,
-                  isDefault: editForm.isDefault,
                 };
 
                 if (editForm.password.trim()) {
