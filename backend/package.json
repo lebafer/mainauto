@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "admin:upsert": "bun run scripts/upsert-superadmin.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
