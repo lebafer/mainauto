@@ -20,7 +20,13 @@ const pageTitles: Record<string, string> = {
   "/vehicles/new": "Neues Fahrzeug",
   "/customers": "Kunden",
   "/customers/new": "Neuer Kunde",
-  "/sales": "Verkaufe",
+  "/sales": "Verkäufe",
+  "/suppliers": "Lieferanten",
+  "/suppliers/new": "Neuer Lieferant",
+  "/finances": "Finanzen",
+  "/settings/dealer": "Händler-Einstellungen",
+  "/settings/team": "Teamverwaltung",
+  "/admin/dealers": "Super-Admin",
 };
 
 function getPageTitle(pathname: string): { parent?: string; current: string } {

@@ -24,6 +24,7 @@ import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { getCurrentDealer, getCurrentDealerId, requireEntitlement } from "../lib/request-context";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -714,6 +715,11 @@ async function extractWithOpenAi(files: File[]): Promise<{
 
 // POST /api/vehicles/extract-brief - extract vehicle fields from uploaded brief
 vehiclesRouter.post("/extract-brief", async (c) => {
+  const forbidden = requireEntitlement(c, "ai_brief_extraction");
+  if (forbidden) {
+    return forbidden;
+  }
+
   if (!env.OPENAI_API_KEY) {
     return c.json(
       { error: { message: "OpenAI API key fehlt auf dem Server", code: "OPENAI_NOT_CONFIGURED" } },
@@ -779,10 +785,11 @@ vehiclesRouter.post("/extract-brief", async (c) => {
 
 // GET /api/vehicles - list all vehicles with optional filters
 vehiclesRouter.get("/", async (c) => {
+  const dealerId = getCurrentDealerId(c);
   const status = c.req.query("status");
   const search = c.req.query("search");
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { dealerId };
 
   if (status) {
     where.status = status;
@@ -817,9 +824,10 @@ vehiclesRouter.get("/", async (c) => {
 // GET /api/vehicles/:id - get single vehicle with relations
 vehiclesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const vehicle = await prisma.vehicle.findUnique({
-    where: { id },
+  const vehicle = await prisma.vehicle.findFirst({
+    where: { id, dealerId },
     include: {
       images: { orderBy: vehicleImageOrderBy },
       documents: { orderBy: { createdAt: "desc" } },
@@ -844,9 +852,11 @@ vehiclesRouter.get("/:id", async (c) => {
 // GET /api/vehicles/:id/handover-protocol - get saved handover protocol or defaults
 vehiclesRouter.get("/:id/handover-protocol", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
+  const dealer = getCurrentDealer(c);
 
-  const vehicle = await prisma.vehicle.findUnique({
-    where: { id },
+  const vehicle = await prisma.vehicle.findFirst({
+    where: { id, dealerId },
     include: {
       customer: true,
       handoverProtocol: true,
@@ -857,7 +867,20 @@ vehiclesRouter.get("/:id/handover-protocol", async (c) => {
     return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
   }
 
-  const defaults = buildDefaultHandoverProtocol(vehicle, vehicle.customer);
+  const defaults = buildDefaultHandoverProtocol(vehicle, vehicle.customer, {
+    name: dealer.settings?.legalName || dealer.name,
+    addressLine1: dealer.settings?.addressLine1 || "",
+    cityLine: [dealer.settings?.zip, dealer.settings?.city].filter(Boolean).join(" "),
+    website: dealer.settings?.website || "",
+    email: dealer.settings?.email || "",
+    phone: dealer.settings?.phone || "",
+    taxId: dealer.settings?.taxId || "",
+    legalRepresentative: dealer.settings?.legalRepresentative || "",
+    bankName: dealer.settings?.bankName || "",
+    iban: dealer.settings?.iban || "",
+    bic: dealer.settings?.bic || "",
+    logoUrl: dealer.settings?.logoUrl || null,
+  });
   const parsedStored = vehicle.handoverProtocol
     ? HandoverProtocolSchema.parse(vehicle.handoverProtocol.data)
     : null;
@@ -877,9 +900,10 @@ vehiclesRouter.put(
   zValidator("json", HandoverProtocolSchema),
   async (c) => {
     const id = c.req.param("id");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
@@ -887,6 +911,7 @@ vehiclesRouter.put(
     const handoverProtocol = await prisma.vehicleHandoverProtocol.upsert({
       where: { vehicleId: id },
       create: {
+        dealerId,
         vehicleId: id,
         data,
       },
@@ -910,7 +935,26 @@ vehiclesRouter.post(
   "/",
   zValidator("json", VehicleCreateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
+
+    if (data.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: data.customerId, dealerId },
+      });
+      if (!customer) {
+        return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
+      }
+    }
+
+    if (data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: data.supplierId, dealerId },
+      });
+      if (!supplier) {
+        return c.json({ error: { message: "Supplier not found", code: "NOT_FOUND" } }, 404);
+      }
+    }
 
     // Convert power (number) to string for Prisma, strip empty strings
     const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
@@ -968,7 +1012,10 @@ vehiclesRouter.post(
 
     try {
       const vehicle = await prisma.vehicle.create({
-        data: vehicleData,
+        data: {
+          dealerId,
+          ...vehicleData,
+        },
         include: {
           images: true,
           customer: true,
@@ -994,11 +1041,30 @@ vehiclesRouter.put(
   zValidator("json", VehicleUpdateSchema),
   async (c) => {
     const id = c.req.param("id");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.vehicle.findUnique({ where: { id } });
+    const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+    }
+
+    if (data.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: data.customerId, dealerId },
+      });
+      if (!customer) {
+        return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
+      }
+    }
+
+    if (data.supplierId) {
+      const supplier = await prisma.supplier.findFirst({
+        where: { id: data.supplierId, dealerId },
+      });
+      if (!supplier) {
+        return c.json({ error: { message: "Supplier not found", code: "NOT_FOUND" } }, 404);
+      }
     }
 
     // Handle nullable customerId: convert null to disconnect
@@ -1068,9 +1134,10 @@ vehiclesRouter.put(
 // DELETE /api/vehicles/:id - delete vehicle
 vehiclesRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.vehicle.findUnique({
-    where: { id },
+  const existing = await prisma.vehicle.findFirst({
+    where: { id, dealerId },
     include: { images: true, documents: true },
   });
 
@@ -1104,8 +1171,9 @@ vehiclesRouter.delete("/:id", async (c) => {
 // POST /api/vehicles/:id/images - upload image
 vehiclesRouter.post("/:id/images", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.vehicle.findUnique({ where: { id } });
+  const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
   if (!existing) {
     return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1118,7 +1186,7 @@ vehiclesRouter.post("/:id/images", async (c) => {
     return c.json({ error: { message: "No file provided", code: "BAD_REQUEST" } }, 400);
   }
 
-  const existingImagesCount = await prisma.vehicleImage.count({ where: { vehicleId: id } });
+  const existingImagesCount = await prisma.vehicleImage.count({ where: { vehicleId: id, dealerId } });
   const isPrimary = requestedPrimary || existingImagesCount === 0;
 
   const ext = file.name.split(".").pop() || "jpg";
@@ -1132,13 +1200,14 @@ vehiclesRouter.post("/:id/images", async (c) => {
   // If this image is set as primary, unset others
   if (isPrimary) {
     await prisma.vehicleImage.updateMany({
-      where: { vehicleId: id },
+      where: { vehicleId: id, dealerId },
       data: { isPrimary: false },
     });
   }
 
   const image = await prisma.vehicleImage.create({
     data: {
+      dealerId,
       url: `/api/uploads/${fileName}`,
       fileName,
       isPrimary,
@@ -1153,9 +1222,10 @@ vehiclesRouter.post("/:id/images", async (c) => {
 vehiclesRouter.patch("/:id/images/:imageId/primary", async (c) => {
   const id = c.req.param("id");
   const imageId = c.req.param("imageId");
+  const dealerId = getCurrentDealerId(c);
 
   const image = await prisma.vehicleImage.findFirst({
-    where: { id: imageId, vehicleId: id },
+    where: { id: imageId, vehicleId: id, dealerId },
   });
 
   if (!image) {
@@ -1164,7 +1234,7 @@ vehiclesRouter.patch("/:id/images/:imageId/primary", async (c) => {
 
   await prisma.$transaction([
     prisma.vehicleImage.updateMany({
-      where: { vehicleId: id },
+      where: { vehicleId: id, dealerId },
       data: { isPrimary: false },
     }),
     prisma.vehicleImage.update({
@@ -1181,8 +1251,9 @@ vehiclesRouter.patch("/:id/images/:imageId/primary", async (c) => {
 vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
   const vehicleId = c.req.param("id");
   const imageId = c.req.param("imageId");
+  const dealerId = getCurrentDealerId(c);
 
-  const image = await prisma.vehicleImage.findUnique({ where: { id: imageId } });
+  const image = await prisma.vehicleImage.findFirst({ where: { id: imageId, dealerId } });
   if (!image) {
     return c.json({ error: { message: "Image not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1199,7 +1270,7 @@ vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
 
   if (image.isPrimary) {
     const fallbackImage = await prisma.vehicleImage.findFirst({
-      where: { vehicleId },
+      where: { vehicleId, dealerId },
       orderBy: { createdAt: "asc" },
     });
 
@@ -1217,8 +1288,9 @@ vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
 // POST /api/vehicles/:id/documents - upload document
 vehiclesRouter.post("/:id/documents", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.vehicle.findUnique({ where: { id } });
+  const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
   if (!existing) {
     return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1241,6 +1313,7 @@ vehiclesRouter.post("/:id/documents", async (c) => {
 
   const doc = await prisma.vehicleDocument.create({
     data: {
+      dealerId,
       name,
       url: `/api/uploads/${fileName}`,
       fileName,
@@ -1255,8 +1328,9 @@ vehiclesRouter.post("/:id/documents", async (c) => {
 // DELETE /api/vehicles/:id/documents/:docId - delete document
 vehiclesRouter.delete("/:id/documents/:docId", async (c) => {
   const docId = c.req.param("docId");
+  const dealerId = getCurrentDealerId(c);
 
-  const doc = await prisma.vehicleDocument.findUnique({ where: { id: docId } });
+  const doc = await prisma.vehicleDocument.findFirst({ where: { id: docId, dealerId } });
   if (!doc) {
     return c.json({ error: { message: "Document not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1280,15 +1354,17 @@ vehiclesRouter.post(
   zValidator("json", VehicleCostCreateSchema),
   async (c) => {
     const id = c.req.param("id");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.vehicle.findUnique({ where: { id } });
+    const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
     const cost = await prisma.vehicleCost.create({
       data: {
+        dealerId,
         vehicleId: id,
         costType: data.costType,
         amount: data.amount,
@@ -1303,8 +1379,9 @@ vehiclesRouter.post(
 // DELETE /api/vehicles/:id/costs/:costId - delete a cost
 vehiclesRouter.delete("/:id/costs/:costId", async (c) => {
   const costId = c.req.param("costId");
+  const dealerId = getCurrentDealerId(c);
 
-  const cost = await prisma.vehicleCost.findUnique({ where: { id: costId } });
+  const cost = await prisma.vehicleCost.findFirst({ where: { id: costId, dealerId } });
   if (!cost) {
     return c.json({ error: { message: "Cost not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1320,15 +1397,17 @@ vehiclesRouter.post(
   zValidator("json", WorkLogItemCreateSchema),
   async (c) => {
     const id = c.req.param("id");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.vehicle.findUnique({ where: { id } });
+    const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
     const item = await prisma.workLogItem.create({
       data: {
+        dealerId,
         vehicleId: id,
         description: data.description,
         status: data.status ?? "open",
@@ -1347,9 +1426,10 @@ vehiclesRouter.put(
   zValidator("json", WorkLogItemUpdateSchema),
   async (c) => {
     const itemId = c.req.param("itemId");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.workLogItem.findUnique({ where: { id: itemId } });
+    const existing = await prisma.workLogItem.findFirst({ where: { id: itemId, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "WorkLog item not found", code: "NOT_FOUND" } }, 404);
     }
@@ -1370,8 +1450,9 @@ vehiclesRouter.put(
 // DELETE /api/vehicles/:id/worklog/:itemId - delete work log item
 vehiclesRouter.delete("/:id/worklog/:itemId", async (c) => {
   const itemId = c.req.param("itemId");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.workLogItem.findUnique({ where: { id: itemId } });
+  const existing = await prisma.workLogItem.findFirst({ where: { id: itemId, dealerId } });
   if (!existing) {
     return c.json({ error: { message: "WorkLog item not found", code: "NOT_FOUND" } }, 404);
   }

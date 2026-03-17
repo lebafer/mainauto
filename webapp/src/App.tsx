@@ -28,6 +28,9 @@ const SupplierNew = lazy(() => import("@/pages/suppliers/SupplierNew"));
 const SupplierDetail = lazy(() => import("@/pages/suppliers/SupplierDetail"));
 const SupplierEdit = lazy(() => import("@/pages/suppliers/SupplierEdit"));
 const Finances = lazy(() => import("@/pages/Finances"));
+const SettingsDealer = lazy(() => import("@/pages/settings/SettingsDealer"));
+const SettingsTeam = lazy(() => import("@/pages/settings/SettingsTeam"));
+const AdminDealers = lazy(() => import("@/pages/admin/AdminDealers"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -227,6 +230,39 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <Finances />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/settings/dealer"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsDealer />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/settings/team"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsTeam />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin/dealers"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <AdminDealers />
                     </AppLayout>
                   </ProtectedRoute>
                 }

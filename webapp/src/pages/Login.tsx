@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { User, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,21 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [branding, setBranding] = useState<{
+    dealer?: { name?: string | null };
+    dealerSettings?: { logoUrl?: string | null; primaryColor?: string | null };
+  } | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("ma_last_branding");
+      if (!stored) return;
+      setBranding(JSON.parse(stored));
+    } catch {
+      // ignore malformed branding cache
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,23 +71,41 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-muted/50 p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.15),transparent)]" />
+      <div
+        className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(245,158,11,0.18),transparent)]"
+        style={{
+          background: `radial-gradient(ellipse 80% 50% at 50% -20%, ${branding?.dealerSettings?.primaryColor ?? "rgba(245,158,11,0.18)"}, transparent)`,
+        }}
+      />
 
       <Card className="relative z-10 w-full max-w-md border-border/50 shadow-2xl">
         <CardHeader className="space-y-4 text-center">
           <div className="mx-auto">
-            <img
-              src="/mainauto-logo-light.png"
-              alt="MainAuto Logo"
-              className="h-20 w-auto object-contain mx-auto dark:hidden"
-            />
-            <img
-              src="/mainauto-logo-dark.png"
-              alt="MainAuto Logo"
-              className="h-20 w-auto object-contain mx-auto hidden dark:block"
-            />
+            {branding?.dealerSettings?.logoUrl ? (
+              <img
+                src={branding.dealerSettings.logoUrl}
+                alt={branding.dealer?.name ?? "Dealer Logo"}
+                className="h-20 w-auto object-contain mx-auto"
+              />
+            ) : (
+              <>
+                <img
+                  src="/mainauto-logo-light.png"
+                  alt="MainAuto Logo"
+                  className="h-20 w-auto object-contain mx-auto dark:hidden"
+                />
+                <img
+                  src="/mainauto-logo-dark.png"
+                  alt="MainAuto Logo"
+                  className="h-20 w-auto object-contain mx-auto hidden dark:block"
+                />
+              </>
+            )}
           </div>
           <div>
+            {branding?.dealer?.name ? (
+              <div className="text-lg font-semibold">{branding.dealer.name}</div>
+            ) : null}
             <CardDescription className="mt-1.5 text-base">
               Melden Sie sich mit Ihren Zugangsdaten an
             </CardDescription>

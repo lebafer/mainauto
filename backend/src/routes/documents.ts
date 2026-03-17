@@ -11,6 +11,8 @@ import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
+import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
+import { getCurrentDealer, getCurrentDealerId } from "../lib/request-context";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -105,17 +107,27 @@ async function htmlToPdf(html: string): Promise<Uint8Array> {
 }
 
 const documentsRouter = new Hono();
-const DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
-const DEALER_ADDRESS = "Mainzer Str. 10 + 37";
-const DEALER_CITY = "63897 Miltenberg";
-const DEALER_WEB = "www.mainauto.eu";
-const DEALER_EMAIL = "mainauto@gmail.com";
-const DEALER_PHONE = "+49(0)9371-5054245";
-const DEALER_TAX_ID = "DE196691148";
-const DEALER_BANK = "Sparkasse Odenwaldkreis";
-const DEALER_IBAN = "DE 59 5085 1952 0000 1147 77";
-const DEALER_BIC = "HELADEF1ERB";
 const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
+
+interface DealerDocumentProfile {
+  name: string;
+  addressLine1: string;
+  cityLine: string;
+  country: string;
+  website: string;
+  email: string;
+  phone: string;
+  taxId: string;
+  legalRepresentative: string;
+  bankName: string;
+  iban: string;
+  bic: string;
+  logoUrl: string | null;
+  documentFooterText: string;
+  documentLegalText: string;
+  purchaseTerms: string;
+  saleTerms: string;
+}
 
 interface DocumentParty {
   firstName: string;
@@ -130,36 +142,71 @@ interface DocumentParty {
   taxId: string | null;
 }
 
-function getDealerFooterHtml(): string {
+function getDealerDocumentProfile(c: { get: (name: string) => unknown }): DealerDocumentProfile {
+  const dealer = getCurrentDealer(c as never);
+  const settings = dealer.settings;
+  const cityLine = [settings?.zip ?? DEFAULT_DEALER_SETTINGS.zip, settings?.city ?? DEFAULT_DEALER_SETTINGS.city]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    name: settings?.legalName || dealer.name,
+    addressLine1: settings?.addressLine1 || DEFAULT_DEALER_SETTINGS.addressLine1,
+    cityLine: cityLine || `${DEFAULT_DEALER_SETTINGS.zip} ${DEFAULT_DEALER_SETTINGS.city}`,
+    country: settings?.country || DEFAULT_DEALER_SETTINGS.country,
+    website: settings?.website || DEFAULT_DEALER_SETTINGS.website,
+    email: settings?.email || DEFAULT_DEALER_SETTINGS.email,
+    phone: settings?.phone || DEFAULT_DEALER_SETTINGS.phone,
+    taxId: settings?.taxId || DEFAULT_DEALER_SETTINGS.taxId,
+    legalRepresentative: settings?.legalRepresentative || DEFAULT_DEALER_SETTINGS.legalRepresentative,
+    bankName: settings?.bankName || DEFAULT_DEALER_SETTINGS.bankName,
+    iban: settings?.iban || DEFAULT_DEALER_SETTINGS.iban,
+    bic: settings?.bic || DEFAULT_DEALER_SETTINGS.bic,
+    logoUrl: settings?.logoUrl || null,
+    documentFooterText: settings?.documentFooterText || DEFAULT_DEALER_SETTINGS.documentFooterText,
+    documentLegalText: settings?.documentLegalText || DEFAULT_DEALER_SETTINGS.documentLegalText,
+    purchaseTerms: settings?.purchaseTerms || DEFAULT_DEALER_SETTINGS.purchaseTerms,
+    saleTerms: settings?.saleTerms || DEFAULT_DEALER_SETTINGS.saleTerms,
+  };
+}
+
+function getDealerFooterHtml(profile: DealerDocumentProfile): string {
   return `
-    ${DEALER_NAME} &bull; ${DEALER_ADDRESS} &bull; ${DEALER_CITY}<br>
-    E-Mail: ${DEALER_EMAIL} &bull; Tel. ${DEALER_PHONE} &bull; Web: ${DEALER_WEB}<br>
-    ${DEALER_BANK} &bull; IBAN: ${DEALER_IBAN} &bull; BIC: ${DEALER_BIC}<br>
-    USt-IdNr. ${DEALER_TAX_ID} &bull; Vertretungsberechtigt: Manuel Rui Fernandes
+    ${profile.documentFooterText}<br>
+    E-Mail: ${profile.email} &bull; Tel. ${profile.phone} &bull; Web: ${profile.website}<br>
+    ${profile.bankName} &bull; IBAN: ${profile.iban} &bull; BIC: ${profile.bic}<br>
+    ${profile.documentLegalText || `USt-IdNr. ${profile.taxId} &bull; Vertretungsberechtigt: ${profile.legalRepresentative}`}
   `;
 }
 
-function getLogoImgHtml(className: string, logoSrc: string = LOGO_DATA_URI): string {
-  return `<img src="${logoSrc}" alt="MainAuto" class="${className}" />`;
+function getLogoImgHtml(className: string, logoSrc: string = LOGO_DATA_URI, alt: string = DEFAULT_DEALER_SETTINGS.legalName): string {
+  return `<img src="${logoSrc}" alt="${alt}" class="${className}" />`;
 }
 
-function getDealerHeaderHtml(logoSrc: string = LOGO_DATA_URI): string {
-  const logoHtml = getLogoImgHtml("dealer-logo", logoSrc);
+function getDealerHeaderHtml(profile: DealerDocumentProfile, logoSrc: string = LOGO_DATA_URI): string {
+  const logoHtml = getLogoImgHtml("dealer-logo", logoSrc, profile.name);
 
   return `
     <div class="dealer-header">
       <div class="dealer-brand">
         ${logoHtml}
         <div>
-          <div class="dealer-name">${DEALER_NAME}</div>
-          <div class="dealer-sub">${DEALER_ADDRESS} &bull; ${DEALER_CITY} &bull; Tel. ${DEALER_PHONE} &bull; Web: ${DEALER_WEB} &bull; Mail: ${DEALER_EMAIL} &bull; USt-IdNr. ${DEALER_TAX_ID}</div>
+          <div class="dealer-name">${profile.name}</div>
+          <div class="dealer-sub">${profile.addressLine1} &bull; ${profile.cityLine} &bull; Tel. ${profile.phone} &bull; Web: ${profile.website} &bull; Mail: ${profile.email} &bull; USt-IdNr. ${profile.taxId}</div>
         </div>
       </div>
     </div>
   `;
 }
 
-function resolveDocumentLogoSrc(c: { req: { header: (name: string) => string | undefined } }): string {
+function resolveDocumentLogoSrc(
+  c: { req: { header: (name: string) => string | undefined } },
+  profile?: DealerDocumentProfile
+): string {
+  if (profile?.logoUrl) {
+    return profile.logoUrl;
+  }
+
   const origin = c.req.header("origin");
   const referer = c.req.header("referer");
 
@@ -206,6 +253,11 @@ function getPartyCityLine(party: Pick<DocumentParty, "zip" | "city" | "country">
     return base ? `${base} / ${party.country}` : party.country;
   }
   return base;
+}
+
+function getDealerSignatureCity(profile: DealerDocumentProfile): string {
+  const parts = profile.cityLine.split(" ").filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join(" ") : profile.cityLine;
 }
 
 function normalizePartyFromCustomer(customer: {
@@ -266,6 +318,7 @@ function normalizePartyFromSupplier(supplier: {
 }
 
 async function resolveParty(
+  dealerId: string,
   source: "customer" | "supplier" | "manual",
   id?: string,
   manualParty?: Partial<DocumentParty>
@@ -294,11 +347,11 @@ async function resolveParty(
   }
 
   if (source === "customer") {
-    const customer = await prisma.customer.findUnique({ where: { id } });
+    const customer = await prisma.customer.findFirst({ where: { id, dealerId } });
     return customer ? normalizePartyFromCustomer(customer) : null;
   }
 
-  const supplier = await prisma.supplier.findUnique({ where: { id } });
+  const supplier = await prisma.supplier.findFirst({ where: { id, dealerId } });
   return supplier ? normalizePartyFromSupplier(supplier) : null;
 }
 
@@ -656,6 +709,7 @@ function generateContract(
     taxId: string | null;
   }
   ,
+  dealerProfile: DealerDocumentProfile,
   logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
@@ -834,7 +888,7 @@ function generateContract(
 <body>
 <div class="page">
 
-  ${getDealerHeaderHtml(logoSrc)}
+  ${getDealerHeaderHtml(dealerProfile, logoSrc)}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-internalref">Interne Nr. ${vehicle.vehicleNumber}&nbsp;&nbsp;&nbsp;Export</div>
@@ -842,11 +896,11 @@ function generateContract(
   <div class="parties">
     <div class="party-block">
       <div class="party-block-title">Verk&auml;ufer</div>
-      <div>${DEALER_NAME}</div>
-      <div>${DEALER_ADDRESS}</div>
-      <div>${DEALER_CITY}</div>
-      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}</div>
-      <div>Mail: ${DEALER_EMAIL}, USt-IdNr. ${DEALER_TAX_ID}</div>
+      <div>${dealerProfile.name}</div>
+      <div>${dealerProfile.addressLine1}</div>
+      <div>${dealerProfile.cityLine}</div>
+      <div>Tel. ${dealerProfile.phone}, Web: ${dealerProfile.website}</div>
+      <div>Mail: ${dealerProfile.email}, USt-IdNr. ${dealerProfile.taxId}</div>
     </div>
     <div class="party-block">
       <div class="party-block-title">K&auml;ufer</div>
@@ -900,9 +954,9 @@ function generateContract(
       <div class="sig-line">Unterschrift Verk&auml;ufer</div>
     </div>
   </div>
-  <div class="sig-city">Miltenberg, ${todayFormatted}</div>
+  <div class="sig-city">${getDealerSignatureCity(dealerProfile)}, ${todayFormatted}</div>
 
-  <div class="doc-footer">${getDealerFooterHtml()}</div>
+  <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
 
 </div>
 </body>
@@ -937,8 +991,8 @@ function generatePurchaseContract(
     dealerPrice: number | null;
     notes: string | null;
   },
-  seller: DocumentParty
-  ,
+  seller: DocumentParty,
+  dealerProfile: DealerDocumentProfile,
   logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
@@ -1060,7 +1114,7 @@ function generatePurchaseContract(
 </head>
 <body>
 <div class="page">
-  ${getDealerHeaderHtml(logoSrc)}
+  ${getDealerHeaderHtml(dealerProfile, logoSrc)}
 
   <div class="doc-head">
     <div>
@@ -1073,9 +1127,9 @@ function generatePurchaseContract(
   <div class="party-section">
     <div class="party-label">K&auml;ufer</div>
     <div class="party-content">
-      <strong>${DEALER_NAME}</strong>
-      <div>${DEALER_ADDRESS}, ${DEALER_CITY}</div>
-      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}, Mail: ${DEALER_EMAIL}</div>
+      <strong>${dealerProfile.name}</strong>
+      <div>${dealerProfile.addressLine1}, ${dealerProfile.cityLine}</div>
+      <div>Tel. ${dealerProfile.phone}, Web: ${dealerProfile.website}, Mail: ${dealerProfile.email}</div>
     </div>
 
     <div class="party-label">Verk&auml;ufer</div>
@@ -1139,7 +1193,7 @@ function generatePurchaseContract(
     <div>Unterschrift Verk&auml;ufer</div>
   </div>
 
-  <div class="doc-footer">${getDealerFooterHtml()}</div>
+  <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
 </div>
 </body>
 </html>`;
@@ -1150,11 +1204,13 @@ documentsRouter.post(
   "/generate",
   zValidator("json", DocumentGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { type, vehicleId, customerId } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
 
-    const vehicle = await prisma.vehicle.findUnique({
-      where: { id: vehicleId },
+    const vehicle = await prisma.vehicle.findFirst({
+      where: { id: vehicleId, dealerId },
     });
 
     if (!vehicle) {
@@ -1163,8 +1219,8 @@ documentsRouter.post(
 
     let customer = null;
     if (customerId) {
-      customer = await prisma.customer.findUnique({
-        where: { id: customerId },
+      customer = await prisma.customer.findFirst({
+        where: { id: customerId, dealerId },
       });
       if (!customer) {
         return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
@@ -1187,7 +1243,7 @@ documentsRouter.post(
             400
           );
         }
-        html = generateContract(vehicle, customer, logoSrc);
+        html = generateContract(vehicle, customer, dealerProfile, logoSrc);
         break;
       default:
         return c.json({ error: { message: "Invalid document type", code: "BAD_REQUEST" } }, 400);
@@ -1202,14 +1258,16 @@ documentsRouter.post(
   "/generate-pdf",
   zValidator("json", DocumentGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { type, vehicleId, customerId } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
 
     if (type !== "contract") {
       return c.json({ error: { message: "PDF generation only supported for contract", code: "BAD_REQUEST" } }, 400);
     }
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
@@ -1218,12 +1276,12 @@ documentsRouter.post(
       return c.json({ error: { message: "Customer is required for contract", code: "BAD_REQUEST" } }, 400);
     }
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, dealerId } });
     if (!customer) {
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateContract(vehicle, customer, logoSrc);
+    const html = generateContract(vehicle, customer, dealerProfile, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1242,20 +1300,22 @@ documentsRouter.post(
   "/generate-purchase-html",
   zValidator("json", PurchaseContractGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const seller = await resolveParty(sellerSource, sellerId, manualSeller);
+    const seller = await resolveParty(dealerId, sellerSource, sellerId, manualSeller);
     if (!seller) {
       return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generatePurchaseContract(vehicle, seller, logoSrc);
+    const html = generatePurchaseContract(vehicle, seller, dealerProfile, logoSrc);
     return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
   }
 );
@@ -1264,20 +1324,22 @@ documentsRouter.post(
   "/generate-purchase-pdf",
   zValidator("json", PurchaseContractGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const seller = await resolveParty(sellerSource, sellerId, manualSeller);
+    const seller = await resolveParty(dealerId, sellerSource, sellerId, manualSeller);
     if (!seller) {
       return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generatePurchaseContract(vehicle, seller, logoSrc);
+    const html = generatePurchaseContract(vehicle, seller, dealerProfile, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1328,8 +1390,8 @@ function generateGelangensbestaetigung(
     passportType: string;
     passportNumber: string;
     passportValidUntil: string;
-  }
-  ,
+  },
+  dealerProfile: DealerDocumentProfile,
   logoSrc: string = LOGO_DATA_URI
 ): string {
   // Build customer name line
@@ -1427,7 +1489,7 @@ function generateGelangensbestaetigung(
 <div class="page">
 
   <div class="doc-header">
-    ${getLogoImgHtml("doc-logo", logoSrc)}
+    ${getLogoImgHtml("doc-logo", logoSrc, dealerProfile.name)}
     <div class="doc-head-copy">
       <div class="top-note">After signature, please send this document back to seller. &nbsp;|&nbsp; Bitte senden Sie dieses Dokument unterschrieben zur&uuml;ck an den Verk&auml;ufer.</div>
       <div class="doc-title-en">Delivery receipt</div>
@@ -1440,13 +1502,13 @@ function generateGelangensbestaetigung(
 
   <div class="two-col">
     <div class="seller-block">
-      <div class="name">MainAuto Miltenberg Manuel Rui Fernandes</div>
-      <div>Mainzer Str. 10 + 37</div>
-      <div>63897 Miltenberg</div>
-      <div>GERMANY</div>
-      <div>Phone / Tel. +49(0)9371-5054245</div>
+      <div class="name">${dealerProfile.name}</div>
+      <div>${dealerProfile.addressLine1}</div>
+      <div>${dealerProfile.cityLine}</div>
+      <div>${dealerProfile.country.toUpperCase()}</div>
+      <div>Phone / Tel. ${dealerProfile.phone}</div>
       <div>Fax</div>
-      <div>Tax-No. / USt-IdNr. DE196691148</div>
+      <div>Tax-No. / USt-IdNr. ${dealerProfile.taxId}</div>
     </div>
   </div>
 
@@ -1502,10 +1564,7 @@ function generateGelangensbestaetigung(
   </div>
 
   <div class="doc-footer">
-    MainAuto Miltenberg Manuel Rui Fernandes &bull; Mainzer Str. 10 + 37 &bull; 63897 Miltenberg<br>
-    E-Mail: mainauto@gmail.com &bull; Tel. +49(0)9371-5054245<br>
-    Sparkasse Odenwaldkreis &bull; IBAN: DE 59 5085 1952 0000 1147 77 &bull; BIC: HELADEF1ERB<br>
-    USt-IdNr. DE196691148 &bull; Vertretungsberechtigt: Manuel Rui Fernandes
+    ${getDealerFooterHtml(dealerProfile)}
   </div>
 
 </div>
@@ -1517,18 +1576,20 @@ function generateGelangensbestaetigung(
 documentsRouter.post(
   "/generate-gelangensbestaetigung",
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const body = await c.req.json();
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
 
     if (!vehicleId || !customerId) {
       return c.json({ error: { message: "vehicleId and customerId required", code: "BAD_REQUEST" } }, 400);
     }
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
 
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, dealerId } });
     if (!customer) return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
 
     const html = generateGelangensbestaetigung(vehicle, customer, {
@@ -1538,7 +1599,7 @@ documentsRouter.post(
       passportValidUntil:
         passportValidUntil ??
         (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
-    }, logoSrc);
+    }, dealerProfile, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);
@@ -1556,12 +1617,14 @@ documentsRouter.post(
 documentsRouter.post(
   "/generate-gelangensbestaetigung-html",
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const body = await c.req.json();
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
-    const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, dealerId } });
     if (!customer) return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     const html = generateGelangensbestaetigung(vehicle, customer, {
       dateOfReceipt: dateOfReceipt ?? "",
@@ -1570,7 +1633,7 @@ documentsRouter.post(
       passportValidUntil:
         passportValidUntil ??
         (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
-    }, logoSrc);
+    }, dealerProfile, logoSrc);
     return c.json({ data: { html } });
   }
 );
@@ -1629,8 +1692,8 @@ function generateVermittlungsvertrag(
     email: string | null;
     phone: string | null;
     taxId: string | null;
-  }
-  ,
+  },
+  dealerProfile: DealerDocumentProfile,
   logoSrc: string = LOGO_DATA_URI
 ): string {
   const today = new Date();
@@ -1785,7 +1848,7 @@ function generateVermittlungsvertrag(
 <body>
 <div class="page">
 
-  ${getDealerHeaderHtml(logoSrc)}
+  ${getDealerHeaderHtml(dealerProfile, logoSrc)}
 
   <div class="doc-title">Verbindliche Bestellung eines gebrauchten Kraftfahrzeuges</div>
   <div class="doc-subtitle">Vermittlungsvertrag</div>
@@ -1794,11 +1857,11 @@ function generateVermittlungsvertrag(
   <div class="parties">
     <div class="party-block">
       <div class="party-block-title">Vermittler</div>
-      <div><strong>${DEALER_NAME}</strong></div>
-      <div>${DEALER_ADDRESS}</div>
-      <div>${DEALER_CITY}</div>
-      <div>Tel. ${DEALER_PHONE}, Web: ${DEALER_WEB}</div>
-      <div>Mail: ${DEALER_EMAIL}, USt-IdNr. ${DEALER_TAX_ID}</div>
+      <div><strong>${dealerProfile.name}</strong></div>
+      <div>${dealerProfile.addressLine1}</div>
+      <div>${dealerProfile.cityLine}</div>
+      <div>Tel. ${dealerProfile.phone}, Web: ${dealerProfile.website}</div>
+      <div>Mail: ${dealerProfile.email}, USt-IdNr. ${dealerProfile.taxId}</div>
     </div>
     <div class="party-block">
       <div class="party-block-title">Verk&auml;ufer</div>
@@ -1849,7 +1912,7 @@ function generateVermittlungsvertrag(
 
   <p class="legal-text">Hiermit bestellt der K&auml;ufer folgendes gebrauchte Kraftfahrzeug unter Ausschluss jeglicher Gew&auml;hrleistung f&uuml;r Sach- und Rechtsm&auml;ngel sofern er nicht eine Garantie f&uuml;r die Beschaffenheit der Sache &uuml;bernommen hat, zu den Umseitigen und, soweit vorhandenen, zu den in der Anlage beigef&uuml;gten, bzw. in einem Verkaufsraum ausliegenden Gesch&auml;ftsbedingungen. Der Ausschluss der Sachm&auml;ngelhaftung gilt nicht bei der Vermittlung eines Verkaufs von einem Unternehmer in Aus&uuml;bung seiner unternehmerischen T&auml;tigkeit an einen Verbraucher. In diesem Fall erfolgt der Verkauf unter Reduzierung der Verj&auml;hrungsfrist f&uuml;r Sach- und Rechtsm&auml;ngel auf ein Jahr.</p>
 
-  <p class="legal-text">Per &Uuml;berweisung auf Konto: DE55673900000058463000 &nbsp;&bull;&nbsp; Fahrzeug bleibt bis zu endg&uuml;ltigen Zahlung Eigentum des Verk&auml;ufers.</p>
+  <p class="legal-text">Per &Uuml;berweisung auf Konto: ${dealerProfile.iban} &nbsp;&bull;&nbsp; Fahrzeug bleibt bis zu endg&uuml;ltigen Zahlung Eigentum des Verk&auml;ufers.</p>
 
   <p class="legal-text">Der Verk&auml;ufer versichert die Richtigkeit der in diesem Vertrag niedergelegten Angaben &uuml;ber das Fahrzeug. Der Lieferzeitpunkt ist, wenn keine anderen Vereinbarungen getroffen wurden, das Datum des Ankaufs. Bei Minderj&auml;hrigen muss der Kaufvertrag durch den gesetzlichen Vertreter unterschrieben werden. Mit seiner Unterschrift best&auml;tigt der Verm&auml;ttler die Annahme der Bestellung.</p>
 
@@ -1863,9 +1926,9 @@ function generateVermittlungsvertrag(
       <div class="sig-line">Unterschrift Vermittler</div>
     </div>
   </div>
-  <div class="sig-city">Miltenberg, ${todayFormatted}</div>
+  <div class="sig-city">${getDealerSignatureCity(dealerProfile)}, ${todayFormatted}</div>
 
-  <div class="doc-footer">${getDealerFooterHtml()}</div>
+  <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
 
 </div>
 </body>
@@ -1874,8 +1937,10 @@ function generateVermittlungsvertrag(
 
 // POST /api/documents/generate-vermittlung-pdf
 documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
+  const dealerId = getCurrentDealerId(c);
+  const dealerProfile = getDealerDocumentProfile(c);
   const body = await c.req.json();
-  const logoSrc = resolveDocumentLogoSrc(c);
+  const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -1889,62 +1954,26 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
     return c.json({ error: { message: "vehicleId and buyerId required", code: "BAD_REQUEST" } }, 400);
   }
 
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
   if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
 
   // Resolve buyer
-  let buyer: { firstName: string; lastName: string; company: string | null; address: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; taxId: string | null } | null = null;
-  if (buyerType === "customer") {
-    const c2 = await prisma.customer.findUnique({ where: { id: buyerId } });
-    if (!c2) return c.json({ error: { message: "Buyer (customer) not found", code: "NOT_FOUND" } }, 404);
-    buyer = { firstName: c2.firstName, lastName: c2.lastName, company: c2.company, address: c2.address, city: c2.city, zip: c2.zip, country: c2.country, email: c2.email, phone: c2.phone, taxId: c2.taxId };
-  } else {
-    const s = await prisma.supplier.findUnique({ where: { id: buyerId } });
-    if (!s) return c.json({ error: { message: "Buyer (supplier) not found", code: "NOT_FOUND" } }, 404);
-    const nameParts = (s.contactPerson ?? s.name).split(" ");
-    buyer = {
-      firstName: nameParts[0] ?? s.name,
-      lastName: nameParts.slice(1).join(" ") || "",
-      company: s.supplierType === "gewerblich" ? s.name : null,
-      address: s.street ?? s.address ?? null,
-      city: s.city ?? null,
-      zip: s.zip ?? null,
-      country: s.country ?? null,
-      email: s.email ?? null,
-      phone: s.phone ?? null,
-      taxId: null,
-    };
-  }
+  const buyer = await resolveParty(dealerId, buyerType, buyerId);
+  if (!buyer) return c.json({ error: { message: "Buyer not found", code: "NOT_FOUND" } }, 404);
 
   // Resolve seller
-  let seller: { firstName: string; lastName: string; company: string | null; address: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; taxId: string | null } | null = null;
-  if (sellerId && sellerType === "customer") {
-    const c3 = await prisma.customer.findUnique({ where: { id: sellerId } });
-    if (!c3) return c.json({ error: { message: "Seller (customer) not found", code: "NOT_FOUND" } }, 404);
-    seller = { firstName: c3.firstName, lastName: c3.lastName, company: c3.company, address: c3.address, city: c3.city, zip: c3.zip, country: c3.country, email: c3.email, phone: c3.phone, taxId: c3.taxId };
-  } else if (sellerId && sellerType === "supplier") {
-    const s = await prisma.supplier.findUnique({ where: { id: sellerId } });
-    if (!s) return c.json({ error: { message: "Seller (supplier) not found", code: "NOT_FOUND" } }, 404);
-    const nameParts = (s.contactPerson ?? s.name).split(" ");
-    seller = {
-      firstName: nameParts[0] ?? s.name,
-      lastName: nameParts.slice(1).join(" ") || "",
-      company: s.supplierType === "gewerblich" ? s.name : null,
-      address: s.street ?? s.address ?? null,
-      city: s.city ?? null,
-      zip: s.zip ?? null,
-      country: s.country ?? null,
-      email: s.email ?? null,
-      phone: s.phone ?? null,
-      taxId: null,
-    };
+  let seller = null;
+  if (sellerId && sellerType) {
+    seller = await resolveParty(dealerId, sellerType, sellerId);
   } else if (manualSeller) {
-    seller = { firstName: manualSeller.firstName, lastName: manualSeller.lastName, company: manualSeller.company ?? null, address: manualSeller.address ?? null, city: manualSeller.city ?? null, zip: manualSeller.zip ?? null, country: manualSeller.country ?? null, email: manualSeller.email ?? null, phone: manualSeller.phone ?? null, taxId: manualSeller.taxId ?? null };
+    seller = await resolveParty(dealerId, "manual", undefined, manualSeller);
   } else {
     return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
   }
 
-  const html = generateVermittlungsvertrag(vehicle, buyer, seller, logoSrc);
+  if (!seller) return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
+
+  const html = generateVermittlungsvertrag(vehicle, buyer, seller, dealerProfile, logoSrc);
 
   try {
     const pdfBuffer = await htmlToPdf(html);
@@ -1967,8 +1996,10 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
 
 // POST /api/documents/generate-vermittlung-html (for saving)
 documentsRouter.post("/generate-vermittlung-html", async (c) => {
+  const dealerId = getCurrentDealerId(c);
+  const dealerProfile = getDealerDocumentProfile(c);
   const body = await c.req.json();
-  const logoSrc = resolveDocumentLogoSrc(c);
+  const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -1978,60 +2009,24 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
     manualSeller?: { firstName: string; lastName: string; company?: string; address?: string; city?: string; zip?: string; country?: string; phone?: string; email?: string; taxId?: string };
   };
 
-  const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
   if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
 
-  let buyer: { firstName: string; lastName: string; company: string | null; address: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; taxId: string | null } | null = null;
-  if (buyerType === "customer") {
-    const c2 = await prisma.customer.findUnique({ where: { id: buyerId } });
-    if (!c2) return c.json({ error: { message: "Buyer not found", code: "NOT_FOUND" } }, 404);
-    buyer = { firstName: c2.firstName, lastName: c2.lastName, company: c2.company, address: c2.address, city: c2.city, zip: c2.zip, country: c2.country, email: c2.email, phone: c2.phone, taxId: c2.taxId };
-  } else {
-    const s = await prisma.supplier.findUnique({ where: { id: buyerId } });
-    if (!s) return c.json({ error: { message: "Buyer not found", code: "NOT_FOUND" } }, 404);
-    const nameParts = (s.contactPerson ?? s.name).split(" ");
-    buyer = {
-      firstName: nameParts[0] ?? s.name,
-      lastName: nameParts.slice(1).join(" ") || "",
-      company: s.supplierType === "gewerblich" ? s.name : null,
-      address: s.street ?? s.address ?? null,
-      city: s.city ?? null,
-      zip: s.zip ?? null,
-      country: s.country ?? null,
-      email: s.email ?? null,
-      phone: s.phone ?? null,
-      taxId: null,
-    };
-  }
+  const buyer = await resolveParty(dealerId, buyerType, buyerId);
+  if (!buyer) return c.json({ error: { message: "Buyer not found", code: "NOT_FOUND" } }, 404);
 
-  let seller: { firstName: string; lastName: string; company: string | null; address: string | null; city: string | null; zip: string | null; country: string | null; email: string | null; phone: string | null; taxId: string | null } | null = null;
-  if (sellerId && sellerType === "customer") {
-    const c3 = await prisma.customer.findUnique({ where: { id: sellerId } });
-    if (!c3) return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
-    seller = { firstName: c3.firstName, lastName: c3.lastName, company: c3.company, address: c3.address, city: c3.city, zip: c3.zip, country: c3.country, email: c3.email, phone: c3.phone, taxId: c3.taxId };
-  } else if (sellerId && sellerType === "supplier") {
-    const s = await prisma.supplier.findUnique({ where: { id: sellerId } });
-    if (!s) return c.json({ error: { message: "Seller not found", code: "NOT_FOUND" } }, 404);
-    const nameParts = (s.contactPerson ?? s.name).split(" ");
-    seller = {
-      firstName: nameParts[0] ?? s.name,
-      lastName: nameParts.slice(1).join(" ") || "",
-      company: s.supplierType === "gewerblich" ? s.name : null,
-      address: s.street ?? s.address ?? null,
-      city: s.city ?? null,
-      zip: s.zip ?? null,
-      country: s.country ?? null,
-      email: s.email ?? null,
-      phone: s.phone ?? null,
-      taxId: null,
-    };
+  let seller = null;
+  if (sellerId && sellerType) {
+    seller = await resolveParty(dealerId, sellerType, sellerId);
   } else if (manualSeller) {
-    seller = { firstName: manualSeller.firstName, lastName: manualSeller.lastName, company: manualSeller.company ?? null, address: manualSeller.address ?? null, city: manualSeller.city ?? null, zip: manualSeller.zip ?? null, country: manualSeller.country ?? null, email: manualSeller.email ?? null, phone: manualSeller.phone ?? null, taxId: manualSeller.taxId ?? null };
+    seller = await resolveParty(dealerId, "manual", undefined, manualSeller);
   } else {
     return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
   }
 
-  const html = generateVermittlungsvertrag(vehicle, buyer, seller, logoSrc);
+  if (!seller) return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
+
+  const html = generateVermittlungsvertrag(vehicle, buyer, seller, dealerProfile, logoSrc);
   return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
 });
 
@@ -2039,16 +2034,31 @@ documentsRouter.post(
   "/generate-handover-protocol-html",
   zValidator("json", HandoverProtocolDocumentGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, data } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
     const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateHandoverProtocolHtml(data, logoSrc, sketchSrc);
+    const html = generateHandoverProtocolHtml(data, {
+      name: dealerProfile.name,
+      addressLine1: dealerProfile.addressLine1,
+      cityLine: dealerProfile.cityLine,
+      website: dealerProfile.website,
+      email: dealerProfile.email,
+      phone: dealerProfile.phone,
+      taxId: dealerProfile.taxId,
+      legalRepresentative: dealerProfile.legalRepresentative,
+      bankName: dealerProfile.bankName,
+      iban: dealerProfile.iban,
+      bic: dealerProfile.bic,
+      logoUrl: dealerProfile.logoUrl,
+    }, logoSrc, sketchSrc);
     return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
   }
 );
@@ -2057,16 +2067,31 @@ documentsRouter.post(
   "/generate-handover-protocol-pdf",
   zValidator("json", HandoverProtocolDocumentGenerateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, data } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c);
+    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
     const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
-    const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
+    const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateHandoverProtocolHtml(data, logoSrc, sketchSrc);
+    const html = generateHandoverProtocolHtml(data, {
+      name: dealerProfile.name,
+      addressLine1: dealerProfile.addressLine1,
+      cityLine: dealerProfile.cityLine,
+      website: dealerProfile.website,
+      email: dealerProfile.email,
+      phone: dealerProfile.phone,
+      taxId: dealerProfile.taxId,
+      legalRepresentative: dealerProfile.legalRepresentative,
+      bankName: dealerProfile.bankName,
+      iban: dealerProfile.iban,
+      bic: dealerProfile.bic,
+      logoUrl: dealerProfile.logoUrl,
+    }, logoSrc, sketchSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);

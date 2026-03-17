@@ -1,5 +1,163 @@
 import { z } from "zod";
 
+// ─── Dealer / SaaS Schemas ───────────────────────────────────
+
+export const PlatformRoleSchema = z.enum(["user", "platform_super_admin"]);
+export const DealerStatusSchema = z.enum(["active", "suspended", "inactive"]);
+export const DealerMembershipRoleSchema = z.enum(["dealer_owner", "dealer_admin", "staff"]);
+export const DealerSubscriptionStatusSchema = z.enum([
+  "active",
+  "trialing",
+  "past_due",
+  "suspended",
+  "canceled",
+]);
+
+export const FeatureEntitlementsSchema = z.record(z.string(), z.boolean()).default({});
+
+export const DealerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  status: DealerStatusSchema,
+  isDefault: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const DealerSettingsSchema = z.object({
+  dealerId: z.string(),
+  legalName: z.string().nullable().optional(),
+  addressLine1: z.string().nullable().optional(),
+  zip: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
+  taxId: z.string().nullable().optional(),
+  legalRepresentative: z.string().nullable().optional(),
+  bankName: z.string().nullable().optional(),
+  iban: z.string().nullable().optional(),
+  bic: z.string().nullable().optional(),
+  logoUrl: z.string().nullable().optional(),
+  primaryColor: z.string().nullable().optional(),
+  accentColor: z.string().nullable().optional(),
+  documentFooterText: z.string().nullable().optional(),
+  documentLegalText: z.string().nullable().optional(),
+  purchaseTerms: z.string().nullable().optional(),
+  saleTerms: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const DealerMembershipSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  userId: z.string(),
+  role: DealerMembershipRoleSchema,
+  isDefault: z.boolean(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const PlanSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  description: z.string().nullable().optional(),
+  monthlyPriceCents: z.number().int(),
+  featureEntitlements: FeatureEntitlementsSchema,
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const DealerSubscriptionSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  planId: z.string(),
+  status: DealerSubscriptionStatusSchema,
+  featureOverrides: FeatureEntitlementsSchema.optional(),
+  billingNotes: z.string().nullable().optional(),
+  startsAt: z.string(),
+  endsAt: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  plan: PlanSchema.optional(),
+});
+
+export const DealerSettingsUpdateSchema = DealerSettingsSchema.omit({
+  dealerId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
+export const AdminDealerCreateSchema = z.object({
+  name: z.string().min(2, "Name ist erforderlich"),
+  slug: z.string().trim().min(2).optional(),
+  status: DealerStatusSchema.default("active"),
+  owner: z.object({
+    name: z.string().min(2, "Name ist erforderlich"),
+    email: z.string().email("Gueltige E-Mail erforderlich"),
+    username: z.string().min(3, "Benutzername ist erforderlich"),
+    password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+  }),
+});
+
+export const AdminDealerUpdateSchema = z.object({
+  name: z.string().min(2).optional(),
+  slug: z.string().trim().min(2).optional(),
+  status: DealerStatusSchema.optional(),
+});
+
+export const DealerTeamMemberCreateSchema = z.object({
+  name: z.string().min(2, "Name ist erforderlich"),
+  email: z.string().email("Gueltige E-Mail erforderlich"),
+  username: z.string().min(3, "Benutzername ist erforderlich"),
+  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+  role: DealerMembershipRoleSchema.default("staff"),
+});
+
+export const DealerTeamRoleUpdateSchema = z.object({
+  role: DealerMembershipRoleSchema,
+  isActive: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+});
+
+export const DealerSubscriptionUpdateSchema = z.object({
+  planId: z.string().min(1, "Plan ist erforderlich"),
+  status: DealerSubscriptionStatusSchema.default("active"),
+  featureOverrides: FeatureEntitlementsSchema.optional(),
+  billingNotes: z.string().optional(),
+  endsAt: z.string().nullable().optional(),
+});
+
+export const SessionContextSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string(),
+    username: z.string().nullable().optional(),
+    image: z.string().nullable().optional(),
+    platformRole: PlatformRoleSchema.default("user"),
+  }),
+  dealer: DealerSchema.nullable(),
+  dealerRole: DealerMembershipRoleSchema.nullable(),
+  dealerSettings: DealerSettingsSchema.nullable(),
+  entitlements: FeatureEntitlementsSchema,
+  subscription: DealerSubscriptionSchema.nullable().optional(),
+});
+
+export type FeatureEntitlements = z.infer<typeof FeatureEntitlementsSchema>;
+export type Dealer = z.infer<typeof DealerSchema>;
+export type DealerSettings = z.infer<typeof DealerSettingsSchema>;
+export type DealerMembership = z.infer<typeof DealerMembershipSchema>;
+export type Plan = z.infer<typeof PlanSchema>;
+export type DealerSubscription = z.infer<typeof DealerSubscriptionSchema>;
+export type SessionContext = z.infer<typeof SessionContextSchema>;
+
 // ─── Vehicle Schemas ─────────────────────────────────────────
 
 export const VehicleCreateSchema = z.object({

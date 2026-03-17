@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { prisma } from "../prisma";
+import { getCurrentDealerId } from "../lib/request-context";
 
 const financesRouter = new Hono();
 
@@ -73,6 +74,7 @@ function getCostBreakdown(vehicle: {
 
 // GET /api/finances?from=ISO_DATE&to=ISO_DATE
 financesRouter.get("/", async (c) => {
+  const dealerId = getCurrentDealerId(c);
   const fromParam = c.req.query("from");
   const toParam = c.req.query("to");
 
@@ -103,7 +105,10 @@ financesRouter.get("/", async (c) => {
 
   // --- Sales in period ---
   const salesInPeriod = await prisma.sale.findMany({
-    where: saleDateFilter ? { saleDate: saleDateFilter } : {},
+    where: {
+      dealerId,
+      ...(saleDateFilter ? { saleDate: saleDateFilter } : {}),
+    },
     include: {
       vehicle: {
         include: { costs: true },
@@ -115,13 +120,16 @@ financesRouter.get("/", async (c) => {
 
   // --- Vehicles purchased (created) in period ---
   const vehiclesBoughtInPeriod = await prisma.vehicle.findMany({
-    where: createdAtFilter ? { createdAt: createdAtFilter } : {},
+    where: {
+      dealerId,
+      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+    },
     include: { costs: true },
   });
 
   // --- Vehicles currently in stock (not sold, regardless of date filter) ---
   const vehiclesInStock = await prisma.vehicle.findMany({
-    where: { status: { not: "sold" } },
+    where: { dealerId, status: { not: "sold" } },
     select: { purchasePrice: true },
   });
 

@@ -6,6 +6,7 @@ import { join } from "path";
 import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
+import { getCurrentDealerId } from "../lib/request-context";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -18,9 +19,10 @@ const customersRouter = new Hono();
 
 // GET /api/customers - list all customers with optional search
 customersRouter.get("/", async (c) => {
+  const dealerId = getCurrentDealerId(c);
   const search = c.req.query("search");
 
-  const where: Record<string, unknown> = {};
+  const where: Record<string, unknown> = { dealerId };
 
   if (search) {
     where.OR = [
@@ -48,9 +50,10 @@ customersRouter.get("/", async (c) => {
 // GET /api/customers/:id - get single customer with relations
 customersRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const customer = await prisma.customer.findUnique({
-    where: { id },
+  const customer = await prisma.customer.findFirst({
+    where: { id, dealerId },
     include: {
       vehicles: {
         include: { images: true },
@@ -76,6 +79,7 @@ customersRouter.post(
   "/",
   zValidator("json", CustomerCreateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
     // Convert empty strings to null for nullable fields and parse date
@@ -88,7 +92,10 @@ customersRouter.post(
     };
 
     const customer = await prisma.customer.create({
-      data: createData,
+      data: {
+        dealerId,
+        ...createData,
+      },
     });
 
     return c.json({ data: customer }, 201);
@@ -101,9 +108,10 @@ customersRouter.put(
   zValidator("json", CustomerUpdateSchema),
   async (c) => {
     const id = c.req.param("id");
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.customer.findUnique({ where: { id } });
+    const existing = await prisma.customer.findFirst({ where: { id, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     }
@@ -131,9 +139,10 @@ customersRouter.put(
 // DELETE /api/customers/:id - delete customer
 customersRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.customer.findUnique({
-    where: { id },
+  const existing = await prisma.customer.findFirst({
+    where: { id, dealerId },
     include: { documents: true },
   });
 
@@ -159,8 +168,9 @@ customersRouter.delete("/:id", async (c) => {
 // POST /api/customers/:id/documents - upload document
 customersRouter.post("/:id/documents", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.customer.findUnique({ where: { id } });
+  const existing = await prisma.customer.findFirst({ where: { id, dealerId } });
   if (!existing) {
     return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
   }
@@ -183,6 +193,7 @@ customersRouter.post("/:id/documents", async (c) => {
 
   const doc = await prisma.customerDocument.create({
     data: {
+      dealerId,
       name,
       url: `/api/uploads/${fileName}`,
       fileName,
@@ -197,8 +208,9 @@ customersRouter.post("/:id/documents", async (c) => {
 // DELETE /api/customers/:id/documents/:docId - delete document
 customersRouter.delete("/:id/documents/:docId", async (c) => {
   const docId = c.req.param("docId");
+  const dealerId = getCurrentDealerId(c);
 
-  const doc = await prisma.customerDocument.findUnique({ where: { id: docId } });
+  const doc = await prisma.customerDocument.findFirst({ where: { id: docId, dealerId } });
   if (!doc) {
     return c.json({ error: { message: "Document not found", code: "NOT_FOUND" } }, 404);
   }

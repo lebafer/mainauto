@@ -19,13 +19,70 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
-  username: string;
+  username?: string | null;
   image: string | null;
+  platformRole: "user" | "platform_super_admin";
+}
+
+export interface DealerInfo {
+  id: string;
+  name: string;
+  slug: string;
+  status: "active" | "suspended" | "inactive";
+  isDefault: boolean;
+}
+
+export interface DealerSettingsInfo {
+  dealerId: string;
+  legalName?: string | null;
+  addressLine1?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  taxId?: string | null;
+  legalRepresentative?: string | null;
+  bankName?: string | null;
+  iban?: string | null;
+  bic?: string | null;
+  logoUrl?: string | null;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+  documentFooterText?: string | null;
+  documentLegalText?: string | null;
+  purchaseTerms?: string | null;
+  saleTerms?: string | null;
+}
+
+export interface DealerSubscriptionInfo {
+  id: string;
+  dealerId: string;
+  planId: string;
+  status: "active" | "trialing" | "past_due" | "suspended" | "canceled";
+  featureOverrides?: Record<string, boolean>;
+  billingNotes?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  plan?: {
+    id: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    monthlyPriceCents: number;
+    featureEntitlements: Record<string, boolean>;
+    isActive: boolean;
+  };
 }
 
 export interface SessionData {
-  session: { token: string; userId: string; expiresAt: string };
   user: SessionUser;
+  dealer: DealerInfo | null;
+  dealerRole: "dealer_owner" | "dealer_admin" | "staff" | null;
+  dealerSettings: DealerSettingsInfo | null;
+  entitlements: Record<string, boolean>;
+  subscription?: DealerSubscriptionInfo | null;
 }
 
 // Direct session fetch that bypasses Better Auth's useSession hook
@@ -37,7 +94,7 @@ export async function fetchSession(): Promise<SessionData | null> {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${AUTH_BASE_URL}/api/auth/get-session`, {
+    const res = await fetch(`${AUTH_BASE_URL}/api/session/me`, {
       method: "GET",
       credentials: "include",
       headers,

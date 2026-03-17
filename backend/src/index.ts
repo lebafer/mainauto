@@ -6,6 +6,12 @@ import { auth } from "./auth";
 import { env } from "./env";
 import { prisma } from "./prisma";
 import { bootstrapInitialAdmin } from "./seed";
+import {
+  ensureCoreSaasData,
+  getMembershipEntitlements,
+  pickActiveMembership,
+  type ActiveDealerMembership,
+} from "./lib/dealers";
 import { vehiclesRouter } from "./routes/vehicles";
 import { customersRouter } from "./routes/customers";
 import { salesRouter } from "./routes/sales";
@@ -16,10 +22,21 @@ import { suppliersRouter } from "./routes/suppliers";
 import { connectorTypesRouter } from "./routes/connectorTypes";
 import { suppliersDbRouter } from "./routes/suppliersDb";
 import { financesRouter } from "./routes/finances";
+import { sessionRouter } from "./routes/session";
+import { settingsRouter } from "./routes/settings";
+import { adminRouter } from "./routes/admin";
 
 type Variables = {
-  user: typeof auth.$Infer.Session.user | null;
+  user: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    username?: string | null;
+    platformRole?: string | null;
+  } | null;
   session: typeof auth.$Infer.Session.session | null;
+  membership: ActiveDealerMembership | null;
+  entitlements: Record<string, boolean>;
 };
 
 const app = new Hono<{ Variables: Variables }>();
@@ -138,8 +155,61 @@ app.use("/api/*", async (c, next) => {
     );
   }
 
-  c.set("user", session.user);
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      memberships: {
+        where: {
+          isActive: true,
+          dealer: {
+            is: {
+              status: {
+                in: ["active", "suspended"],
+              },
+            },
+          },
+        },
+        include: {
+          dealer: {
+            include: {
+              settings: true,
+              subscriptions: {
+                include: { plan: true },
+                orderBy: { createdAt: "desc" },
+              },
+            },
+          },
+        },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+      },
+    },
+  });
+
+  const activeMembership = pickActiveMembership((dbUser?.memberships ?? []) as ActiveDealerMembership[]);
+  const entitlements = getMembershipEntitlements(activeMembership);
+
+  if (!activeMembership && dbUser?.platformRole !== "platform_super_admin") {
+    return c.json(
+      {
+        error: {
+          code: "NO_ACTIVE_DEALER",
+          message: "No active dealer membership found",
+        },
+      },
+      403
+    );
+  }
+
+  c.set("user", {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    username: session.user.username,
+    platformRole: dbUser?.platformRole ?? "user",
+  });
   c.set("session", session.session);
+  c.set("membership", activeMembership as Variables["membership"]);
+  c.set("entitlements", entitlements);
 
   return next();
 });
@@ -162,8 +232,15 @@ app.route("/api/suppliers", suppliersRouter);
 app.route("/api/connector-types", connectorTypesRouter);
 app.route("/api/suppliers-db", suppliersDbRouter);
 app.route("/api/finances", financesRouter);
+app.route("/api/session", sessionRouter);
+app.route("/api/settings", settingsRouter);
+app.route("/api/admin", adminRouter);
 
 const port = Number(env.PORT) || 3000;
+
+ensureCoreSaasData().catch((error) => {
+  console.error("[bootstrap] core_saas_data_failed", error);
+});
 
 bootstrapInitialAdmin().catch((error) => {
   console.error("[bootstrap] initial_admin_failed", error);

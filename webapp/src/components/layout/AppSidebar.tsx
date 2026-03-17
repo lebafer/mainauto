@@ -24,18 +24,29 @@ import {
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
-
-const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/vehicles", label: "Fahrzeuge", icon: Car },
-  { to: "/customers", label: "Kunden", icon: Users },
-  { to: "/suppliers", label: "Lieferanten", icon: Truck },
-  { to: "/sales", label: "Verkaufe", icon: Receipt },
-  { to: "/finances", label: "Finanzen", icon: BarChart2 },
-];
+import { useAuth } from "@/lib/auth-client";
 
 export function AppSidebar() {
   const location = useLocation();
+  const { session } = useAuth();
+
+  const navItems = [
+    { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { to: "/vehicles", label: "Fahrzeuge", icon: Car },
+    { to: "/customers", label: "Kunden", icon: Users },
+    { to: "/suppliers", label: "Lieferanten", icon: Truck },
+    { to: "/sales", label: "Verkäufe", icon: Receipt },
+    { to: "/finances", label: "Finanzen", icon: BarChart2 },
+    ...(session?.dealerRole && ["dealer_owner", "dealer_admin"].includes(session.dealerRole)
+      ? [
+          { to: "/settings/dealer", label: "Händler", icon: Users },
+          { to: "/settings/team", label: "Team", icon: Users },
+        ]
+      : []),
+    ...(session?.user.platformRole === "platform_super_admin"
+      ? [{ to: "/admin/dealers", label: "Super-Admin", icon: LayoutDashboard }]
+      : []),
+  ];
 
   const handleSignOut = async () => {
     await signOut();
@@ -44,19 +55,29 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="h-16 overflow-hidden p-0">
-        <div className="h-full w-full flex items-center justify-center">
-          <img
-            src="/mainauto-logo-light.png"
-            alt="MainAuto Logo"
-            style={{ transform: "scale(2)" }}
-            className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 dark:hidden"
-          />
-          <img
-            src="/mainauto-logo-dark.png"
-            alt="MainAuto Logo"
-            style={{ transform: "scale(2)" }}
-            className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 hidden dark:block"
-          />
+        <div className="flex h-full w-full items-center justify-center px-4">
+          {session?.dealerSettings?.logoUrl ? (
+            <img
+              src={session.dealerSettings.logoUrl}
+              alt={session.dealer?.name ?? "Dealer Logo"}
+              className="h-10 w-auto object-contain group-data-[collapsible=icon]:h-8"
+            />
+          ) : (
+            <>
+              <img
+                src="/mainauto-logo-light.png"
+                alt="MainAuto Logo"
+                style={{ transform: "scale(2)" }}
+                className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 dark:hidden"
+              />
+              <img
+                src="/mainauto-logo-dark.png"
+                alt="MainAuto Logo"
+                style={{ transform: "scale(2)" }}
+                className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 hidden dark:block"
+              />
+            </>
+          )}
         </div>
       </SidebarHeader>
 
@@ -95,6 +116,10 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarSeparator />
+        <div className="px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+          <div className="font-medium text-foreground">{session?.dealer?.name ?? "MeinAuto OS"}</div>
+          <div>{session?.subscription?.plan?.name ?? "Kein Tarif"}</div>
+        </div>
         <div className="flex items-center justify-between px-1 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
           <ThemeToggle />
           <Button
