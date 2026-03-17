@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="107" y1="80" x2="1031" y2="592" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f6faff" />
+      <stop offset="0.62" stop-color="#edf4fb" />
+      <stop offset="1" stop-color="#dde8f5" />
+    </linearGradient>
+    <linearGradient id="panel" x1="746" y1="118" x2="1040" y2="508" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#173a67" />
+      <stop offset="1" stop-color="#102644" />
+    </linearGradient>
+    <linearGradient id="arrow" x1="24" x2="116" y1="108" y2="20" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12335d" />
+      <stop offset="0.55" stop-color="#1f4f86" />
+      <stop offset="1" stop-color="#6f8fb4" />
+    </linearGradient>
+    <linearGradient id="gear" x1="73" x2="118" y1="102" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0f2f58" />
+      <stop offset="1" stop-color="#234f85" />
+    </linearGradient>
+    <linearGradient id="track" x1="26" x2="63" y1="101" y2="39" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#133860" />
+      <stop offset="1" stop-color="#8ca2bc" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <circle cx="1017" cy="78" r="162" fill="#dbe8f6" fill-opacity="0.7" />
+  <circle cx="162" cy="596" r="160" fill="#d7e4f5" fill-opacity="0.55" />
+  <rect x="726" y="92" width="388" height="446" rx="38" fill="url(#panel)" />
+  <rect x="766" y="156" width="307" height="78" rx="22" fill="#214778" fill-opacity="0.96" />
+  <rect x="766" y="272" width="307" height="78" rx="22" fill="#183863" fill-opacity="0.96" />
+  <rect x="766" y="388" width="307" height="78" rx="22" fill="#153156" fill-opacity="0.96" />
+  <circle cx="810" cy="195" r="16" fill="#7fb0f4" />
+  <circle cx="810" cy="311" r="16" fill="#7fb0f4" />
+  <circle cx="810" cy="427" r="16" fill="#7fb0f4" />
+  <rect x="840" y="183" width="182" height="12" rx="6" fill="#d8e7fb" fill-opacity="0.96" />
+  <rect x="840" y="205" width="144" height="10" rx="5" fill="#8eacd2" fill-opacity="0.9" />
+  <rect x="840" y="299" width="196" height="12" rx="6" fill="#d8e7fb" fill-opacity="0.96" />
+  <rect x="840" y="321" width="132" height="10" rx="5" fill="#8eacd2" fill-opacity="0.9" />
+  <rect x="840" y="415" width="170" height="12" rx="6" fill="#d8e7fb" fill-opacity="0.96" />
+  <rect x="840" y="437" width="154" height="10" rx="5" fill="#8eacd2" fill-opacity="0.9" />
+  <g transform="translate(120 96)">
+    <g fill="url(#track)" opacity="0.95">
+      <path d="M35 97c-5-16-5-33 0-49l9-8c-8 20-9 40-3 61l-6-4Z" />
+      <path d="M43 92c-3-15-2-30 3-45l8-8c-7 18-8 36-4 55l-7-2Z" />
+      <path d="M51 84c-2-12 0-24 5-35l8-7c-6 14-7 28-5 43l-8-1Z" />
+      <path d="M41 83h13l-7 8H36l5-8Z" />
+      <path d="M45 68h15l-8 8H40l5-8Z" />
+      <path d="M50 53h15l-8 8H46l4-8Z" />
+    </g>
+    <g transform="translate(24 22)">
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(45 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(90 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(135 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(180 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(225 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(270 65 65)" />
+      <rect x="57" y="39" width="16" height="14" rx="4" fill="url(#gear)" transform="rotate(315 65 65)" />
+      <circle cx="65" cy="65" r="34" fill="url(#gear)" />
+      <circle cx="65" cy="65" r="19" fill="white" fill-opacity="0.92" />
+    </g>
+    <path
+      d="M88 12 120 0l-9 32-10-10c-31 24-43 52-35 84 3 11 8 18 16 23-18 2-31-3-40-16-11-16-12-36-4-59 8-23 24-41 47-54l-9-8Z"
+      fill="url(#arrow)"
+    />
+  </g>
+  <text x="120" y="320" fill="#153f73" font-family="Arial, Helvetica, sans-serif" font-size="116" font-weight="800" letter-spacing="12">
+    CAROPS
+  </text>
+  <text x="120" y="382" fill="#355d8e" font-family="Arial, Helvetica, sans-serif" font-size="33" font-weight="500">
+    Das Betriebssystem für dein Autohaus
+  </text>
+  <text x="120" y="472" fill="#445c79" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="500">
+    Bestand, Verkauf, Dokumente und Team in einer klaren Cloud-Plattform.
+  </text>
+  <rect x="120" y="518" width="234" height="52" rx="26" fill="#173f72" />
+  <text x="164" y="552" fill="white" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700">
+    14 Tage Testphase
+  </text>
+</svg>
