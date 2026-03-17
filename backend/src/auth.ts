@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { username, bearer } from "better-auth/plugins";
 import { prisma } from "./prisma";
 import { env } from "./env";
+import { normalizeHost } from "./lib/dealers";
 
 function getCookieDomain(configuredDomain?: string): string | undefined {
   if (configuredDomain && configuredDomain.trim().length > 0) {
@@ -14,20 +15,56 @@ function getCookieDomain(configuredDomain?: string): string | undefined {
 const cookieDomain = getCookieDomain(env.COOKIE_DOMAIN);
 const isProduction = env.NODE_ENV === "production";
 
-const trustedOriginsSet = new Set<string>([
-  new URL(env.BACKEND_URL).origin,
-  "http://localhost:8000",
-  "http://127.0.0.1:8000",
-]);
+async function resolveTrustedOrigins(request?: Request): Promise<string[]> {
+  const trustedOriginsSet = new Set<string>([
+    new URL(env.BACKEND_URL).origin,
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+  ]);
 
-for (const origin of (env.CORS_ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean)) {
-  trustedOriginsSet.add(origin);
+  for (const origin of (env.CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)) {
+    trustedOriginsSet.add(origin);
+  }
+
+  const requestOrigin = request?.headers.get("origin")?.trim();
+  if (requestOrigin) {
+    trustedOriginsSet.add(requestOrigin);
+  }
+
+  const requestHost = normalizeHost(request?.headers.get("host"));
+  if (requestHost) {
+    const protocol =
+      request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
+      new URL(env.BACKEND_URL).protocol.replace(":", "") ||
+      "https";
+    trustedOriginsSet.add(`${protocol}://${requestHost}`);
+  }
+
+  const activeDomains = await prisma.dealerDomain.findMany({
+    where: {
+      status: {
+        in: ["active", "pending_dns"],
+      },
+    },
+    select: {
+      host: true,
+    },
+  });
+
+  for (const domain of activeDomains) {
+    const host = normalizeHost(domain.host);
+    if (!host) {
+      continue;
+    }
+    trustedOriginsSet.add(`https://${host}`);
+    trustedOriginsSet.add(`http://${host}`);
+  }
+
+  return Array.from(trustedOriginsSet);
 }
-
-const trustedOrigins = Array.from(trustedOriginsSet);
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -40,7 +77,7 @@ export const auth = betterAuth({
     // Allow one-time bootstrap via auth API when explicitly requested.
     disableSignUp: !env.BOOTSTRAP_ADMIN,
   },
-  trustedOrigins,
+  trustedOrigins: resolveTrustedOrigins,
   advanced: {
     ...(cookieDomain
       ? {

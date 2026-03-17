@@ -144,13 +144,33 @@ interface DocumentParty {
 
 function getDealerDocumentProfile(c: { get: (name: string) => unknown }): DealerDocumentProfile {
   const dealer = getCurrentDealer(c as never);
-  const settings = dealer.settings;
+  const settings = dealer.settings as {
+    displayName?: string | null;
+    legalName?: string | null;
+    addressLine1?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    country?: string | null;
+    website?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    taxId?: string | null;
+    legalRepresentative?: string | null;
+    bankName?: string | null;
+    iban?: string | null;
+    bic?: string | null;
+    logoUrl?: string | null;
+    documentFooterText?: string | null;
+    documentLegalText?: string | null;
+    purchaseTerms?: string | null;
+    saleTerms?: string | null;
+  } | null | undefined;
   const cityLine = [settings?.zip ?? DEFAULT_DEALER_SETTINGS.zip, settings?.city ?? DEFAULT_DEALER_SETTINGS.city]
     .filter(Boolean)
     .join(" ");
 
   return {
-    name: settings?.legalName || dealer.name,
+    name: settings?.displayName || settings?.legalName || dealer.name,
     addressLine1: settings?.addressLine1 || DEFAULT_DEALER_SETTINGS.addressLine1,
     cityLine: cityLine || `${DEFAULT_DEALER_SETTINGS.zip} ${DEFAULT_DEALER_SETTINGS.city}`,
     country: settings?.country || DEFAULT_DEALER_SETTINGS.country,
@@ -179,7 +199,11 @@ function getDealerFooterHtml(profile: DealerDocumentProfile): string {
   `;
 }
 
-function getLogoImgHtml(className: string, logoSrc: string | null = null, alt: string = DEFAULT_DEALER_SETTINGS.legalName): string {
+function getLogoImgHtml(
+  className: string,
+  logoSrc: string | null = null,
+  alt: string = DEFAULT_DEALER_SETTINGS.displayName
+): string {
   if (!logoSrc) {
     return "";
   }

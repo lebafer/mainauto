@@ -7,8 +7,11 @@ import { env } from "./env";
 import { prisma } from "./prisma";
 import { bootstrapInitialAdmin } from "./seed";
 import {
+  getActiveDealerDomain,
   ensureCoreSaasData,
   getMembershipEntitlements,
+  getTenantStatus as deriveTenantStatus,
+  normalizeHost,
   pickActiveMembership,
   type ActiveDealerMembership,
 } from "./lib/dealers";
@@ -25,6 +28,7 @@ import { financesRouter } from "./routes/finances";
 import { sessionRouter } from "./routes/session";
 import { settingsRouter } from "./routes/settings";
 import { adminRouter } from "./routes/admin";
+import { publicRouter } from "./routes/public";
 
 type Variables = {
   user: {
@@ -37,6 +41,27 @@ type Variables = {
   session: typeof auth.$Infer.Session.session | null;
   membership: ActiveDealerMembership | null;
   entitlements: Record<string, boolean>;
+  resolvedHost: string | null;
+  resolvedDealer:
+    | (ActiveDealerMembership["dealer"] & {
+        createdAt: Date;
+        updatedAt: Date;
+      })
+    | null;
+  resolvedDomain:
+    | {
+        id: string;
+        dealerId: string;
+        host: string;
+        status: string;
+        isPrimary: boolean;
+        verificationToken: string | null;
+        verifiedAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date;
+      }
+    | null;
+  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
 };
 
 const app = new Hono<{ Variables: Variables }>();
@@ -101,6 +126,46 @@ app.use(
 
 app.use("*", logger());
 
+app.use("*", async (c, next) => {
+  const host = normalizeHost(c.req.header("host"));
+  c.set("resolvedHost", host || null);
+
+  if (!host) {
+    c.set("resolvedDealer", null);
+    c.set("resolvedDomain", null);
+    c.set("tenantStatus", "unknown");
+    return next();
+  }
+
+  const domainRecord = await prisma.dealerDomain.findUnique({
+    where: { host },
+    include: {
+      dealer: {
+        include: {
+          settings: true,
+          domains: true,
+          subscriptions: {
+            include: { plan: true },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      },
+    },
+  });
+
+  c.set("resolvedDomain", domainRecord ?? null);
+  c.set("resolvedDealer", domainRecord?.dealer ?? null);
+  c.set(
+    "tenantStatus",
+    deriveTenantStatus({
+      dealerStatus: domainRecord?.dealer.status,
+      setupStatus: domainRecord?.dealer.setupStatus,
+    })
+  );
+
+  return next();
+});
+
 app.get("/health", async (c) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -130,7 +195,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 app.options("/api/auth/*", (c) => c.text("", 204));
 
 app.use("/api/*", async (c, next) => {
-  if (c.req.path.startsWith("/api/auth")) {
+  if (c.req.path.startsWith("/api/auth") || c.req.path.startsWith("/api/public")) {
     return next();
   }
 
@@ -173,6 +238,7 @@ app.use("/api/*", async (c, next) => {
           dealer: {
             include: {
               settings: true,
+              domains: true,
               subscriptions: {
                 include: { plan: true },
                 orderBy: { createdAt: "desc" },
@@ -185,8 +251,29 @@ app.use("/api/*", async (c, next) => {
     },
   });
 
-  const activeMembership = pickActiveMembership((dbUser?.memberships ?? []) as ActiveDealerMembership[]);
+  const resolvedDealer = c.get("resolvedDealer");
+  const memberships = (dbUser?.memberships ?? []) as ActiveDealerMembership[];
+  const activeMembership =
+    resolvedDealer
+      ? memberships.find((membership) => membership.dealerId === resolvedDealer.id) ?? null
+      : pickActiveMembership(memberships);
   const entitlements = getMembershipEntitlements(activeMembership);
+
+  if (
+    resolvedDealer &&
+    !activeMembership &&
+    dbUser?.platformRole !== "platform_super_admin"
+  ) {
+    return c.json(
+      {
+        error: {
+          code: "WRONG_TENANT",
+          message: "Benutzer gehoert nicht zu diesem Mandanten",
+        },
+      },
+      403
+    );
+  }
 
   if (!activeMembership && dbUser?.platformRole !== "platform_super_admin") {
     return c.json(
@@ -211,6 +298,55 @@ app.use("/api/*", async (c, next) => {
   c.set("membership", activeMembership as Variables["membership"]);
   c.set("entitlements", entitlements);
 
+  if (dbUser?.platformRole === "platform_super_admin" && c.req.path.startsWith("/api/admin")) {
+    return next();
+  }
+
+  const tenantStatus = c.get("tenantStatus");
+  const path = c.req.path;
+  const allowWithoutTenant = path.startsWith("/api/session");
+
+  if (!resolvedDealer && !allowWithoutTenant) {
+    return c.json(
+      {
+        error: {
+          code: "UNKNOWN_TENANT",
+          message: "Keine passende Mandanten-Domain gefunden",
+        },
+      },
+      404
+    );
+  }
+
+  if (tenantStatus === "suspended" || tenantStatus === "inactive") {
+    if (!allowWithoutTenant) {
+      return c.json(
+        {
+          error: {
+            code: "TENANT_UNAVAILABLE",
+            message: "Dieser Mandant ist derzeit nicht verfuegbar",
+          },
+        },
+        403
+      );
+    }
+  }
+
+  if (tenantStatus === "pending_setup" || tenantStatus === "ready_for_dns") {
+    const allowedPrefixes = ["/api/session", "/api/settings"];
+    if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
+      return c.json(
+        {
+          error: {
+            code: "TENANT_SETUP_INCOMPLETE",
+            message: "Dieser Mandant befindet sich noch im Onboarding",
+          },
+        },
+        403
+      );
+    }
+  }
+
   return next();
 });
 
@@ -232,6 +368,7 @@ app.route("/api/suppliers", suppliersRouter);
 app.route("/api/connector-types", connectorTypesRouter);
 app.route("/api/suppliers-db", suppliersDbRouter);
 app.route("/api/finances", financesRouter);
+app.route("/api/public", publicRouter);
 app.route("/api/session", sessionRouter);
 app.route("/api/settings", settingsRouter);
 app.route("/api/admin", adminRouter);

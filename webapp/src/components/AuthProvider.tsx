@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { AuthContext, fetchSession, type SessionData } from "@/lib/auth-client";
+import { AuthContext, fetchSession, type PublicTenantContext, type SessionData } from "@/lib/auth-client";
+import { fetchTenantContext } from "@/lib/tenant-client";
 
 const BRANDING_KEY = "ma_last_branding";
 
@@ -72,10 +73,30 @@ function getForegroundHsl(hex: string) {
   return luminance > 0.62 ? "222 14% 8%" : "0 0% 100%";
 }
 
-function applyBranding(session: SessionData | null) {
+function setDocumentMetadata(branding: {
+  title: string;
+  faviconUrl?: string | null;
+}) {
+  document.title = branding.title;
+
+  const existing = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (branding.faviconUrl) {
+    if (existing) {
+      existing.href = branding.faviconUrl;
+    } else {
+      const icon = document.createElement("link");
+      icon.rel = "icon";
+      icon.href = branding.faviconUrl;
+      document.head.appendChild(icon);
+    }
+  }
+}
+
+function applyBranding(session: SessionData | null, tenant: PublicTenantContext | null) {
   const root = document.documentElement;
-  const primary = normalizeHexColor(session?.dealerSettings?.primaryColor, "#f59e0b");
-  const accent = normalizeHexColor(session?.dealerSettings?.accentColor, "#111827");
+  const source = session?.dealerSettings ?? tenant;
+  const primary = normalizeHexColor(source?.primaryColor, "#f59e0b");
+  const accent = normalizeHexColor(source?.accentColor, "#111827");
   const primaryHsl = hexToHslString(primary);
   const accentHsl = hexToHslString(accent);
   const primaryFg = getForegroundHsl(primary);
@@ -99,12 +120,22 @@ function applyBranding(session: SessionData | null) {
   root.style.setProperty("--secondary", accentHsl);
   root.style.setProperty("--secondary-foreground", accentFg);
 
-  if (session?.dealer || session?.dealerSettings) {
+  setDocumentMetadata({
+    title:
+      source?.displayName ||
+      session?.dealer?.name ||
+      tenant?.displayName ||
+      "Autohaus Hub",
+    faviconUrl: source?.faviconUrl,
+  });
+
+  if (session?.dealer || session?.dealerSettings || tenant?.dealer) {
     localStorage.setItem(
       BRANDING_KEY,
       JSON.stringify({
         dealer: session.dealer,
         dealerSettings: session.dealerSettings,
+        tenant,
       })
     );
   }
@@ -112,12 +143,14 @@ function applyBranding(session: SessionData | null) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<SessionData | null>(null);
+  const [tenant, setTenant] = useState<PublicTenantContext | null>(null);
   const [isPending, setIsPending] = useState(true);
 
   const refetch = useCallback(async () => {
     setIsPending(true);
-    const data = await fetchSession();
-    setSession(data);
+    const [tenantData, sessionData] = await Promise.all([fetchTenantContext(), fetchSession()]);
+    setTenant(tenantData);
+    setSession(sessionData);
     setIsPending(false);
   }, []);
 
@@ -126,11 +159,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refetch]);
 
   useEffect(() => {
-    applyBranding(session);
-  }, [session]);
+    applyBranding(session, tenant);
+  }, [session, tenant]);
 
   return (
-    <AuthContext.Provider value={{ session, isPending, refetch }}>
+    <AuthContext.Provider value={{ session, tenant, isPending, refetch }}>
       {children}
     </AuthContext.Provider>
   );

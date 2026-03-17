@@ -29,7 +29,7 @@ import { DealerLogo } from "@/components/branding/DealerLogo";
 
 export function AppSidebar() {
   const location = useLocation();
-  const { session } = useAuth();
+  const { session, tenant } = useAuth();
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -41,7 +41,7 @@ export function AppSidebar() {
     ...(session?.dealerRole && ["dealer_owner", "dealer_admin"].includes(session.dealerRole)
       ? [
           { to: "/settings/dealer", label: "Händler", icon: Users },
-          { to: "/settings/team", label: "Team", icon: Users },
+          ...(session?.entitlements?.team_management ? [{ to: "/settings/team", label: "Team", icon: Users }] : []),
         ]
       : []),
   ];
@@ -110,7 +110,9 @@ export function AppSidebar() {
           className="rounded-lg px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
           style={{ background: "rgb(var(--tenant-primary-rgb) / 0.10)" }}
         >
-          <div className="font-medium text-foreground">{session?.dealer?.name ?? "MeinAuto OS"}</div>
+          <div className="font-medium text-foreground">
+            {session?.dealerSettings?.displayName ?? session?.dealer?.name ?? tenant?.displayName ?? "Autohaus Hub"}
+          </div>
           <div>{session?.subscription?.plan?.name ?? "Kein Tarif"}</div>
         </div>
         <div className="flex items-center justify-between px-1 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">

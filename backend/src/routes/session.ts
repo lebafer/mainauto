@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import { getCurrentEntitlements, getCurrentMembership, getCurrentUser } from "../lib/request-context";
+import {
+  getCurrentEntitlements,
+  getCurrentMembership,
+  getCurrentUser,
+  getResolvedDomain,
+  getResolvedHost,
+  getTenantStatus,
+} from "../lib/request-context";
+import { getActiveDealerDomain } from "../lib/dealers";
 
 const sessionRouter = new Hono();
 
@@ -7,8 +15,12 @@ sessionRouter.get("/me", async (c) => {
   const user = getCurrentUser(c);
   const membership = getCurrentMembership(c);
   const entitlements = getCurrentEntitlements(c);
+  const resolvedDomain = getResolvedDomain(c);
+  const resolvedHost = getResolvedHost(c);
+  const tenantStatus = getTenantStatus(c);
   const subscription =
     membership?.dealer.subscriptions.find((item) => item.status === "active" || item.status === "trialing") ?? null;
+  const activeDomain = resolvedDomain ?? getActiveDealerDomain(membership?.dealer.domains);
 
   return c.json({
     data: {
@@ -26,6 +38,7 @@ sessionRouter.get("/me", async (c) => {
             name: membership.dealer.name,
             slug: membership.dealer.slug,
             status: membership.dealer.status,
+            setupStatus: membership.dealer.setupStatus,
             isDefault: membership.dealer.isDefault,
             createdAt: membership.dealer.createdAt.toISOString(),
             updatedAt: membership.dealer.updatedAt.toISOString(),
@@ -35,6 +48,7 @@ sessionRouter.get("/me", async (c) => {
       dealerSettings: membership?.dealer.settings
         ? {
             dealerId: membership.dealer.settings.dealerId,
+            displayName: membership.dealer.settings.displayName,
             legalName: membership.dealer.settings.legalName,
             addressLine1: membership.dealer.settings.addressLine1,
             zip: membership.dealer.settings.zip,
@@ -42,6 +56,7 @@ sessionRouter.get("/me", async (c) => {
             country: membership.dealer.settings.country,
             phone: membership.dealer.settings.phone,
             email: membership.dealer.settings.email,
+            supportEmail: membership.dealer.settings.supportEmail,
             website: membership.dealer.settings.website,
             taxId: membership.dealer.settings.taxId,
             legalRepresentative: membership.dealer.settings.legalRepresentative,
@@ -49,8 +64,10 @@ sessionRouter.get("/me", async (c) => {
             iban: membership.dealer.settings.iban,
             bic: membership.dealer.settings.bic,
             logoUrl: membership.dealer.settings.logoUrl,
+            faviconUrl: membership.dealer.settings.faviconUrl,
             primaryColor: membership.dealer.settings.primaryColor,
             accentColor: membership.dealer.settings.accentColor,
+            loginHeadline: membership.dealer.settings.loginHeadline,
             documentFooterText: membership.dealer.settings.documentFooterText,
             documentLegalText: membership.dealer.settings.documentLegalText,
             purchaseTerms: membership.dealer.settings.purchaseTerms,
@@ -59,6 +76,21 @@ sessionRouter.get("/me", async (c) => {
             updatedAt: membership.dealer.settings.updatedAt.toISOString(),
           }
         : null,
+      activeDomain: activeDomain
+        ? {
+            id: activeDomain.id,
+            dealerId: activeDomain.dealerId,
+            host: activeDomain.host,
+            status: activeDomain.status,
+            isPrimary: activeDomain.isPrimary,
+            verificationToken: activeDomain.verificationToken,
+            verifiedAt: activeDomain.verifiedAt?.toISOString() ?? null,
+            createdAt: activeDomain.createdAt.toISOString(),
+            updatedAt: activeDomain.updatedAt.toISOString(),
+          }
+        : null,
+      tenantStatus,
+      resolvedHost,
       entitlements,
       subscription: subscription
         ? {

@@ -18,7 +18,7 @@ export interface HandoverDealerProfile {
 
 function getDefaultDealerProfile(): HandoverDealerProfile {
   return {
-    name: DEFAULT_DEALER_SETTINGS.legalName,
+    name: DEFAULT_DEALER_SETTINGS.displayName,
     addressLine1: DEFAULT_DEALER_SETTINGS.addressLine1,
     cityLine: `${DEFAULT_DEALER_SETTINGS.zip} ${DEFAULT_DEALER_SETTINGS.city}`,
     website: DEFAULT_DEALER_SETTINGS.website,
@@ -149,7 +149,11 @@ function describeWheelCondition(value: HandoverProtocol["mountedWheels"]["condit
   }
 }
 
-function getLogoImgHtml(className: string, logoSrc: string | null = null, alt: string = DEFAULT_DEALER_SETTINGS.legalName): string {
+function getLogoImgHtml(
+  className: string,
+  logoSrc: string | null = null,
+  alt: string = DEFAULT_DEALER_SETTINGS.displayName
+): string {
   if (!logoSrc) {
     return "";
   }

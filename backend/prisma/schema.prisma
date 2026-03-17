@@ -18,6 +18,13 @@ enum DealerStatus {
   inactive
 }
 
+enum DealerSetupStatus {
+  pending_setup
+  ready_for_dns
+  active
+  suspended
+}
+
 enum DealerMembershipRole {
   dealer_owner
   dealer_admin
@@ -32,6 +39,13 @@ enum DealerSubscriptionStatus {
   canceled
 }
 
+enum DealerDomainStatus {
+  pending_dns
+  active
+  failed
+  disabled
+}
+
 // ─── Dealer / SaaS Models ──────────────────────────────────────
 
 model Dealer {
@@ -39,10 +53,12 @@ model Dealer {
   name                 String
   slug                 String                @unique
   status               DealerStatus          @default(active)
+  setupStatus          DealerSetupStatus     @default(pending_setup)
   isDefault            Boolean               @default(false)
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
   settings             DealerSettings?
+  domains              DealerDomain[]
   memberships          DealerMembership[]
   subscriptions        DealerSubscription[]
   counters             Counter[]
@@ -66,6 +82,7 @@ model DealerSettings {
   id                    String   @id @default(cuid())
   dealerId              String   @unique
   dealer                Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  displayName           String?
   legalName             String?
   addressLine1          String?
   zip                   String?
@@ -73,6 +90,7 @@ model DealerSettings {
   country               String?
   phone                 String?
   email                 String?
+  supportEmail          String?
   website               String?
   taxId                 String?
   legalRepresentative   String?
@@ -80,14 +98,31 @@ model DealerSettings {
   iban                  String?
   bic                   String?
   logoUrl               String?
+  faviconUrl            String?
   primaryColor          String?
   accentColor           String?
+  loginHeadline         String?
   documentFooterText    String?
   documentLegalText     String?
   purchaseTerms         String?
   saleTerms             String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+model DealerDomain {
+  id                String             @id @default(cuid())
+  dealerId          String
+  dealer            Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  host              String             @unique
+  status            DealerDomainStatus @default(pending_dns)
+  isPrimary         Boolean            @default(false)
+  verificationToken String?
+  verifiedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([dealerId, status])
 }
 
 model Plan {
@@ -191,6 +226,19 @@ model Verification {
   expiresAt  DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model OnboardingInquiry {
+  id           String   @id @default(cuid())
+  businessName String
+  contactName  String
+  email        String
+  phone        String?
+  website      String?
+  notes        String?
+  status       String   @default("new")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ─── Counter for sequential vehicle numbers ────────────────────

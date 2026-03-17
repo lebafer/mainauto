@@ -19,7 +19,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
               <ShieldCheck className="h-5 w-5 text-cyan-300" />
             </div>
             <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-cyan-200/80">MeinAuto</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-cyan-200/80">White-Label</div>
               <div className="text-lg font-semibold">Superadmin</div>
             </div>
           </div>

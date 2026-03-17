@@ -13,7 +13,7 @@ function getAdminBootstrapConfig() {
     enabled: env.BOOTSTRAP_ADMIN,
     username: env.INITIAL_ADMIN_USERNAME?.trim(),
     password: env.INITIAL_ADMIN_PASSWORD?.trim(),
-    email: env.INITIAL_ADMIN_EMAIL?.trim() || "mainauto@admin.local",
+    email: env.INITIAL_ADMIN_EMAIL?.trim() || "admin@platform.local",
   };
 }
 

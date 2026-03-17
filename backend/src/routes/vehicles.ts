@@ -854,6 +854,21 @@ vehiclesRouter.get("/:id/handover-protocol", async (c) => {
   const id = c.req.param("id");
   const dealerId = getCurrentDealerId(c);
   const dealer = getCurrentDealer(c);
+  const settings = dealer.settings as {
+    legalName?: string | null;
+    addressLine1?: string | null;
+    zip?: string | null;
+    city?: string | null;
+    website?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    taxId?: string | null;
+    legalRepresentative?: string | null;
+    bankName?: string | null;
+    iban?: string | null;
+    bic?: string | null;
+    logoUrl?: string | null;
+  } | null | undefined;
 
   const vehicle = await prisma.vehicle.findFirst({
     where: { id, dealerId },
@@ -868,18 +883,18 @@ vehiclesRouter.get("/:id/handover-protocol", async (c) => {
   }
 
   const defaults = buildDefaultHandoverProtocol(vehicle, vehicle.customer, {
-    name: dealer.settings?.legalName || dealer.name,
-    addressLine1: dealer.settings?.addressLine1 || "",
-    cityLine: [dealer.settings?.zip, dealer.settings?.city].filter(Boolean).join(" "),
-    website: dealer.settings?.website || "",
-    email: dealer.settings?.email || "",
-    phone: dealer.settings?.phone || "",
-    taxId: dealer.settings?.taxId || "",
-    legalRepresentative: dealer.settings?.legalRepresentative || "",
-    bankName: dealer.settings?.bankName || "",
-    iban: dealer.settings?.iban || "",
-    bic: dealer.settings?.bic || "",
-    logoUrl: dealer.settings?.logoUrl || null,
+    name: settings?.legalName || dealer.name,
+    addressLine1: settings?.addressLine1 || "",
+    cityLine: [settings?.zip, settings?.city].filter(Boolean).join(" "),
+    website: settings?.website || "",
+    email: settings?.email || "",
+    phone: settings?.phone || "",
+    taxId: settings?.taxId || "",
+    legalRepresentative: settings?.legalRepresentative || "",
+    bankName: settings?.bankName || "",
+    iban: settings?.iban || "",
+    bic: settings?.bic || "",
+    logoUrl: settings?.logoUrl || null,
   });
   const parsedStored = vehicle.handoverProtocol
     ? HandoverProtocolSchema.parse(vehicle.handoverProtocol.data)

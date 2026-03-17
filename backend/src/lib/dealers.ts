@@ -1,41 +1,58 @@
 import type {
   Dealer,
+  DealerDomain,
+  DealerDomainStatus,
   DealerMembership,
   DealerMembershipRole,
   DealerSettings,
+  DealerSetupStatus,
   DealerSubscription,
   Plan,
   PlatformRole,
 } from "@prisma/client";
 import { prisma } from "../prisma";
+import { env } from "../env";
 
 export type FeatureEntitlements = Record<string, boolean>;
+export type TenantStatus =
+  | "unknown"
+  | "pending_setup"
+  | "ready_for_dns"
+  | "active"
+  | "suspended"
+  | "inactive";
 
-export const DEFAULT_PLATFORM_NAME = "MeinAuto OS";
-export const DEFAULT_DEALER_NAME = "MainAuto Miltenberg Manuel Rui Fernandes";
+export const DEFAULT_PLATFORM_NAME = "Autohaus Hub";
+export const DEFAULT_DEALER_NAME = "Referenz Autohaus";
 export const DEFAULT_DEALER_SLUG = "mainauto";
+export const DEFAULT_SUPPORT_EMAIL = "support@autohaus-hub.local";
 
 export const DEFAULT_DEALER_SETTINGS = {
-  legalName: "MainAuto Miltenberg Manuel Rui Fernandes",
-  addressLine1: "Mainzer Str. 10 + 37",
-  zip: "63897",
-  city: "Miltenberg",
+  displayName: "Referenz Autohaus",
+  legalName: "Referenz Autohaus",
+  addressLine1: "Musterstrasse 1",
+  zip: "10115",
+  city: "Berlin",
   country: "Deutschland",
-  phone: "+49(0)9371-5054245",
-  email: "mainauto@gmail.com",
-  website: "www.mainauto.eu",
-  taxId: "DE196691148",
-  legalRepresentative: "Manuel Rui Fernandes",
-  bankName: "Sparkasse Odenwaldkreis",
-  iban: "DE 59 5085 1952 0000 1147 77",
-  bic: "HELADEF1ERB",
+  phone: "+49 30 000000",
+  email: "info@referenz-autohaus.de",
+  supportEmail: DEFAULT_SUPPORT_EMAIL,
+  website: "https://www.referenz-autohaus.de",
+  taxId: "DE000000000",
+  legalRepresentative: "Max Mustermann",
+  bankName: "Musterbank",
+  iban: "DE00 0000 0000 0000 0000 00",
+  bic: "TESTDE00XXX",
   primaryColor: "#f59e0b",
   accentColor: "#111827",
+  loginHeadline: "Ihre White-Label-Autohaussoftware fuer Verkauf, Bestand und Prozesse.",
   documentFooterText:
-    "MainAuto Miltenberg Manuel Rui Fernandes • Mainzer Str. 10 + 37 • 63897 Miltenberg",
-  documentLegalText: "USt-IdNr. DE196691148 • Vertretungsberechtigt: Manuel Rui Fernandes",
+    "Referenz Autohaus • Musterstrasse 1 • 10115 Berlin",
+  documentLegalText: "USt-IdNr. DE000000000 • Vertretungsberechtigt: Max Mustermann",
   purchaseTerms: "Fahrzeugkauf zu den individuell vereinbarten Konditionen.",
   saleTerms: "Verkauf gemaess den im Vertrag aufgefuehrten Bedingungen.",
+  logoUrl: null,
+  faviconUrl: null,
 } as const;
 
 export const DEFAULT_PLAN_DEFINITIONS = [
@@ -46,6 +63,8 @@ export const DEFAULT_PLAN_DEFINITIONS = [
     monthlyPriceCents: 9900,
     featureEntitlements: {
       branding: false,
+      white_label: false,
+      custom_domain: false,
       team_management: false,
       documents_advanced: false,
       ai_brief_extraction: false,
@@ -58,6 +77,8 @@ export const DEFAULT_PLAN_DEFINITIONS = [
     monthlyPriceCents: 19900,
     featureEntitlements: {
       branding: true,
+      white_label: true,
+      custom_domain: true,
       team_management: true,
       documents_advanced: true,
       ai_brief_extraction: false,
@@ -70,6 +91,8 @@ export const DEFAULT_PLAN_DEFINITIONS = [
     monthlyPriceCents: 24900,
     featureEntitlements: {
       branding: true,
+      white_label: true,
+      custom_domain: true,
       team_management: true,
       documents_advanced: true,
       ai_brief_extraction: true,
@@ -109,6 +132,45 @@ export function mergeFeatureEntitlements(
   };
 }
 
+export function normalizeHost(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  return value.trim().toLowerCase().replace(/\.$/, "").replace(/:\d+$/, "");
+}
+
+export function createFallbackDealerHost(slug: string): string {
+  return `${slug}.${env.PLATFORM_DOMAIN}`;
+}
+
+export function getTenantStatus(input: {
+  dealerStatus?: string | null;
+  setupStatus?: DealerSetupStatus | string | null;
+}): TenantStatus {
+  if (!input.dealerStatus && !input.setupStatus) {
+    return "unknown";
+  }
+
+  if (input.dealerStatus === "suspended" || input.setupStatus === "suspended") {
+    return "suspended";
+  }
+
+  if (input.dealerStatus === "inactive") {
+    return "inactive";
+  }
+
+  if (input.setupStatus === "ready_for_dns") {
+    return "ready_for_dns";
+  }
+
+  if (input.setupStatus === "pending_setup") {
+    return "pending_setup";
+  }
+
+  return "active";
+}
+
 export async function ensureDefaultPlans() {
   for (const plan of DEFAULT_PLAN_DEFINITIONS) {
     await prisma.plan.upsert({
@@ -137,12 +199,14 @@ export async function ensureDefaultDealer() {
     where: { slug: DEFAULT_DEALER_SLUG },
     update: {
       name: DEFAULT_DEALER_NAME,
+      setupStatus: "active",
       isDefault: true,
       status: "active",
     },
     create: {
       name: DEFAULT_DEALER_NAME,
       slug: DEFAULT_DEALER_SLUG,
+      setupStatus: "active",
       isDefault: true,
       status: "active",
     },
@@ -156,6 +220,27 @@ export async function ensureDefaultDealer() {
     create: {
       dealerId: dealer.id,
       ...DEFAULT_DEALER_SETTINGS,
+    },
+  });
+
+  await prisma.dealerDomain.upsert({
+    where: {
+      host: createFallbackDealerHost(dealer.slug),
+    },
+    update: {
+      dealerId: dealer.id,
+      status: "active",
+      isPrimary: true,
+      verificationToken: null,
+      verifiedAt: new Date(),
+    },
+    create: {
+      dealerId: dealer.id,
+      host: createFallbackDealerHost(dealer.slug),
+      status: "active",
+      isPrimary: true,
+      verificationToken: null,
+      verifiedAt: new Date(),
     },
   });
 
@@ -190,6 +275,7 @@ export async function ensureCoreSaasData() {
 export type ActiveDealerMembership = DealerMembership & {
   dealer: Dealer & {
     settings: DealerSettings | null;
+    domains: DealerDomain[];
     subscriptions: Array<DealerSubscription & { plan: Plan }>;
   };
 };
@@ -210,6 +296,16 @@ export function getMembershipEntitlements(membership: ActiveDealerMembership | n
   );
 
   return mergeFeatureEntitlements(subscription?.plan.featureEntitlements, subscription?.featureOverrides);
+}
+
+export function getActiveDealerDomain(
+  domains: Array<DealerDomain & { status?: DealerDomainStatus | string }> | undefined
+): DealerDomain | null {
+  if (!domains?.length) {
+    return null;
+  }
+
+  return domains.find((domain) => domain.isPrimary && domain.status === "active") ?? domains[0] ?? null;
 }
 
 export function isPlatformSuperAdmin(platformRole: PlatformRole | string | null | undefined): boolean {

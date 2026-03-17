@@ -15,6 +15,7 @@ import { Loader2 } from "lucide-react";
 
 // Lazy load pages
 const Login = lazy(() => import("@/pages/Login"));
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const VehicleList = lazy(() => import("@/pages/vehicles/VehicleList"));
 const VehicleNew = lazy(() => import("@/pages/vehicles/VehicleNew"));
@@ -56,15 +57,7 @@ const App = () => (
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* Redirect root to dashboard */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/dashboard" replace />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/" element={<LandingPage />} />
 
               {/* Auth routes (guest only) */}
               <Route

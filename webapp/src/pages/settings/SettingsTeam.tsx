@@ -88,7 +88,9 @@ export default function SettingsTeam() {
   const teamQuery = useQuery({
     queryKey: ["dealer-team"],
     queryFn: () => api.get<TeamMember[]>("/api/settings/team"),
-    enabled: session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin",
+    enabled:
+      (session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin") &&
+      session?.entitlements?.team_management === true,
   });
 
   const createMutation = useMutation({
@@ -151,6 +153,10 @@ export default function SettingsTeam() {
 
   if (!(session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin")) {
     return <div className="text-sm text-muted-foreground">Kein Zugriff auf diese Seite.</div>;
+  }
+
+  if (session?.entitlements?.team_management !== true) {
+    return <div className="text-sm text-muted-foreground">Teamverwaltung ist in deinem Tarif nicht enthalten.</div>;
   }
 
   return (

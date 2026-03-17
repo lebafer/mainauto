@@ -36,6 +36,30 @@ type Plan = {
 };
 
 type DealerStatus = "active" | "suspended" | "inactive";
+type DealerSetupStatus = "pending_setup" | "ready_for_dns" | "active" | "suspended";
+type DealerDomainStatus = "pending_dns" | "active" | "failed" | "disabled";
+
+type DealerDomain = {
+  id: string;
+  dealerId: string;
+  host: string;
+  status: DealerDomainStatus;
+  isPrimary: boolean;
+  verificationToken?: string | null;
+  verifiedAt?: string | null;
+};
+
+type Inquiry = {
+  id: string;
+  businessName: string;
+  contactName: string;
+  email: string;
+  phone?: string | null;
+  website?: string | null;
+  notes?: string | null;
+  status: string;
+  createdAt: string;
+};
 
 type DealerMembership = {
   id: string;
@@ -54,7 +78,12 @@ type Dealer = {
   name: string;
   slug: string;
   status: DealerStatus;
+  setupStatus: DealerSetupStatus;
   isDefault?: boolean;
+  settings?: {
+    displayName?: string | null;
+  } | null;
+  domains: DealerDomain[];
   memberships: DealerMembership[];
   subscriptions: Array<{ planId: string; plan?: { name: string } }>;
   _count: {
@@ -69,6 +98,7 @@ type DealerEditForm = {
   name: string;
   slug: string;
   status: DealerStatus;
+  setupStatus: DealerSetupStatus;
   ownerName: string;
   ownerEmail: string;
   ownerUsername: string;
@@ -86,6 +116,7 @@ function createEditForm(dealer: Dealer): DealerEditForm {
     name: dealer.name,
     slug: dealer.slug,
     status: dealer.status,
+    setupStatus: dealer.setupStatus,
     ownerName: owner?.user.name ?? "",
     ownerEmail: owner?.user.email ?? "",
     ownerUsername: owner?.user.username ?? "",
@@ -97,6 +128,7 @@ export default function AdminDealers() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { session } = useAuth();
+  const [newDomainByDealer, setNewDomainByDealer] = useState<Record<string, string>>({});
   const [newDealer, setNewDealer] = useState({
     name: "",
     slug: "",
@@ -117,6 +149,12 @@ export default function AdminDealers() {
   const plansQuery = useQuery({
     queryKey: ["admin-plans"],
     queryFn: () => api.get<Plan[]>("/api/admin/plans"),
+    enabled: session?.user.platformRole === "platform_super_admin",
+  });
+
+  const inquiriesQuery = useQuery({
+    queryKey: ["admin-inquiries"],
+    queryFn: () => api.get<Inquiry[]>("/api/admin/inquiries"),
     enabled: session?.user.platformRole === "platform_super_admin",
   });
 
@@ -202,6 +240,57 @@ export default function AdminDealers() {
     },
   });
 
+  const createDomainMutation = useMutation({
+    mutationFn: ({ dealerId, host }: { dealerId: string; host: string }) =>
+      api.post(`/api/admin/dealers/${dealerId}/domains`, { host }),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      setNewDomainByDealer((current) => ({ ...current, [variables.dealerId]: "" }));
+      toast({ title: "Domain angelegt" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Domain konnte nicht angelegt werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const activateDomainMutation = useMutation({
+    mutationFn: ({ domainId, status }: { domainId: string; status: DealerDomainStatus }) =>
+      api.put(`/api/admin/domains/${domainId}/activate`, {
+        status: status === "active" ? "active" : "disabled",
+        isPrimary: status === "active",
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      toast({ title: "Domain aktualisiert" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Domain konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteDomainMutation = useMutation({
+    mutationFn: (domainId: string) => api.delete(`/api/admin/domains/${domainId}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      toast({ title: "Domain entfernt" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Domain konnte nicht entfernt werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const openEditDialog = (dealer: Dealer) => {
     setEditingDealer(dealer);
     setEditForm(createEditForm(dealer));
@@ -276,10 +365,76 @@ export default function AdminDealers() {
                       {dealer.isDefault ? " • Standard-Dealer" : ""}
                     </div>
                     <div className="text-sm text-muted-foreground">
+                      Setup: {dealer.setupStatus}
+                      {dealer.settings?.displayName ? ` • Anzeige: ${dealer.settings.displayName}` : ""}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
                       {dealer._count.memberships} Nutzer • {dealer._count.vehicles} Fahrzeuge • {dealer._count.customers} Kunden
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Owner: {owner?.user.name ?? "Kein Owner"} {owner?.user.email ? `• ${owner.user.email}` : ""}
+                    </div>
+                    <div className="mt-3 space-y-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
+                      <div className="font-medium text-foreground">Domains</div>
+                      {dealer.domains.length === 0 ? <div>Noch keine Domains hinterlegt.</div> : null}
+                      {dealer.domains.map((domain) => (
+                        <div key={domain.id} className="rounded-md border bg-background/70 p-3">
+                          <div className="font-mono text-xs text-foreground">{domain.host}</div>
+                          <div className="mt-1 text-xs">
+                            {domain.status}
+                            {domain.isPrimary ? " • Primaer" : ""}
+                            {domain.verifiedAt ? ` • verifiziert ${new Date(domain.verifiedAt).toLocaleDateString("de-DE")}` : ""}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                activateDomainMutation.mutate({
+                                  domainId: domain.id,
+                                  status: domain.status === "active" ? "disabled" : "active",
+                                })
+                              }
+                            >
+                              {domain.status === "active" ? "Deaktivieren" : "Aktivieren"}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteDomainMutation.mutate(domain.id)}
+                            >
+                              Entfernen
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          placeholder="app.kunde.de"
+                          value={newDomainByDealer[dealer.id] ?? ""}
+                          onChange={(event) =>
+                            setNewDomainByDealer((current) => ({
+                              ...current,
+                              [dealer.id]: event.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            createDomainMutation.mutate({
+                              dealerId: dealer.id,
+                              host: newDomainByDealer[dealer.id] ?? "",
+                            })
+                          }
+                          disabled={!newDomainByDealer[dealer.id]?.trim() || createDomainMutation.isPending}
+                        >
+                          Domain anlegen
+                        </Button>
+                      </div>
                     </div>
                   </div>
 
@@ -418,6 +573,26 @@ export default function AdminDealers() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <Label>Setup-Status</Label>
+                <Select
+                  value={editForm.setupStatus}
+                  onValueChange={(value: DealerSetupStatus) =>
+                    setEditForm((current) => (current ? { ...current, setupStatus: value } : current))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending_setup">Pending Setup</SelectItem>
+                    <SelectItem value="ready_for_dns">Ready for DNS</SelectItem>
+                    <SelectItem value="active">Aktiv</SelectItem>
+                    <SelectItem value="suspended">Gesperrt</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           ) : null}
 
@@ -442,6 +617,7 @@ export default function AdminDealers() {
                   name: editForm.name,
                   slug: editForm.slug,
                   status: editForm.status,
+                  setupStatus: editForm.setupStatus,
                   owner: {
                     name: editForm.ownerName,
                     email: editForm.ownerEmail,
@@ -471,6 +647,31 @@ export default function AdminDealers() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Neue White-Label-Anfragen</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {(inquiriesQuery.data ?? []).length === 0 ? (
+            <div className="text-sm text-muted-foreground">Noch keine Anfragen eingegangen.</div>
+          ) : (
+            (inquiriesQuery.data ?? []).map((inquiry) => (
+              <div key={inquiry.id} className="rounded-lg border p-4">
+                <div className="font-medium">{inquiry.businessName}</div>
+                <div className="text-sm text-muted-foreground">
+                  {inquiry.contactName} • {inquiry.email}
+                  {inquiry.phone ? ` • ${inquiry.phone}` : ""}
+                </div>
+                {inquiry.website ? (
+                  <div className="text-sm text-muted-foreground">{inquiry.website}</div>
+                ) : null}
+                {inquiry.notes ? <div className="mt-2 text-sm">{inquiry.notes}</div> : null}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

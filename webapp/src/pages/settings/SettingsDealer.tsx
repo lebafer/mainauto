@@ -23,6 +23,7 @@ type DealerSettingsResponse = {
 };
 
 const EMPTY_FORM = {
+  displayName: "",
   legalName: "",
   addressLine1: "",
   zip: "",
@@ -30,6 +31,7 @@ const EMPTY_FORM = {
   country: "",
   phone: "",
   email: "",
+  supportEmail: "",
   website: "",
   taxId: "",
   legalRepresentative: "",
@@ -37,8 +39,10 @@ const EMPTY_FORM = {
   iban: "",
   bic: "",
   logoUrl: "",
+  faviconUrl: "",
   primaryColor: "",
   accentColor: "",
+  loginHeadline: "",
   documentFooterText: "",
   documentLegalText: "",
   purchaseTerms: "",
@@ -63,6 +67,7 @@ export default function SettingsDealer() {
     if (!settings) return;
 
     setForm({
+      displayName: String(settings.displayName ?? ""),
       legalName: String(settings.legalName ?? ""),
       addressLine1: String(settings.addressLine1 ?? ""),
       zip: String(settings.zip ?? ""),
@@ -70,6 +75,7 @@ export default function SettingsDealer() {
       country: String(settings.country ?? ""),
       phone: String(settings.phone ?? ""),
       email: String(settings.email ?? ""),
+      supportEmail: String(settings.supportEmail ?? ""),
       website: String(settings.website ?? ""),
       taxId: String(settings.taxId ?? ""),
       legalRepresentative: String(settings.legalRepresentative ?? ""),
@@ -77,8 +83,10 @@ export default function SettingsDealer() {
       iban: String(settings.iban ?? ""),
       bic: String(settings.bic ?? ""),
       logoUrl: String(settings.logoUrl ?? ""),
+      faviconUrl: String(settings.faviconUrl ?? ""),
       primaryColor: String(settings.primaryColor ?? ""),
       accentColor: String(settings.accentColor ?? ""),
+      loginHeadline: String(settings.loginHeadline ?? ""),
       documentFooterText: String(settings.documentFooterText ?? ""),
       documentLegalText: String(settings.documentLegalText ?? ""),
       purchaseTerms: String(settings.purchaseTerms ?? ""),
@@ -163,6 +171,7 @@ export default function SettingsDealer() {
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           {Object.entries({
+            displayName: "Anzeigename",
             legalName: "Firmenname",
             addressLine1: "Adresse",
             zip: "PLZ",
@@ -170,12 +179,14 @@ export default function SettingsDealer() {
             country: "Land",
             phone: "Telefon",
             email: "E-Mail",
+            supportEmail: "Support-E-Mail",
             website: "Website",
             taxId: "USt-Id",
             legalRepresentative: "Vertretungsberechtigt",
             bankName: "Bank",
             iban: "IBAN",
             bic: "BIC",
+            faviconUrl: "Favicon-URL",
           }).map(([key, label]) => (
             <div key={key} className="space-y-2">
               <Label htmlFor={key}>{label}</Label>
@@ -283,6 +294,16 @@ export default function SettingsDealer() {
                 placeholder="#111827"
               />
             </div>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="loginHeadline">Login-Headline</Label>
+            <Textarea
+              id="loginHeadline"
+              value={form.loginHeadline}
+              onChange={(event) => setForm((current) => ({ ...current, loginHeadline: event.target.value }))}
+              placeholder="Kurzer Satz fuer die Login-Seite deines White-Label-Portals"
+            />
           </div>
         </CardContent>
       </Card>

@@ -11,7 +11,12 @@ import {
   DealerTeamMemberCreateSchema,
   DealerTeamRoleUpdateSchema,
 } from "../types";
-import { getCurrentDealer, getCurrentDealerId, requireDealerRole } from "../lib/request-context";
+import {
+  getCurrentDealer,
+  getCurrentDealerId,
+  requireDealerRole,
+  requireEntitlement,
+} from "../lib/request-context";
 import { createCredentialUser } from "../lib/auth-users";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
@@ -50,6 +55,21 @@ async function ensureAnotherActiveOwnerExists(dealerId: string, membershipId: st
 
 const settingsRouter = new Hono();
 
+function hasBrandingChanges(data: Record<string, unknown>) {
+  return [
+    "displayName",
+    "supportEmail",
+    "logoUrl",
+    "faviconUrl",
+    "primaryColor",
+    "accentColor",
+    "loginHeadline",
+  ].some((key) => {
+    const value = data[key];
+    return typeof value === "string" ? value.trim().length > 0 : value != null;
+  });
+}
+
 settingsRouter.get("/dealer", async (c) => {
   const dealer = getCurrentDealer(c);
   const settings = await prisma.dealerSettings.findUnique({
@@ -63,6 +83,7 @@ settingsRouter.get("/dealer", async (c) => {
         name: dealer.name,
         slug: dealer.slug,
         status: dealer.status,
+        setupStatus: dealer.setupStatus,
         isDefault: dealer.isDefault,
       },
       settings,
@@ -82,6 +103,13 @@ settingsRouter.put(
     const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
+    if (hasBrandingChanges(data)) {
+      const entitlementError = requireEntitlement(c, "white_label");
+      if (entitlementError) {
+        return entitlementError;
+      }
+    }
+
     const settings = await prisma.dealerSettings.upsert({
       where: { dealerId },
       update: data,
@@ -99,6 +127,11 @@ settingsRouter.post("/dealer/logo", async (c) => {
   const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
   if (forbidden) {
     return forbidden;
+  }
+
+  const featureError = requireEntitlement(c, "white_label");
+  if (featureError) {
+    return featureError;
   }
 
   const dealerId = getCurrentDealerId(c);
@@ -150,6 +183,11 @@ settingsRouter.delete("/dealer/logo", async (c) => {
     return forbidden;
   }
 
+  const featureError = requireEntitlement(c, "white_label");
+  if (featureError) {
+    return featureError;
+  }
+
   const dealerId = getCurrentDealerId(c);
   const existingSettings = await prisma.dealerSettings.findUnique({
     where: { dealerId },
@@ -175,6 +213,11 @@ settingsRouter.delete("/dealer/logo", async (c) => {
 });
 
 settingsRouter.get("/team", async (c) => {
+  const featureError = requireEntitlement(c, "team_management");
+  if (featureError) {
+    return featureError;
+  }
+
   const dealerId = getCurrentDealerId(c);
 
   const members = await prisma.dealerMembership.findMany({
@@ -204,6 +247,11 @@ settingsRouter.post(
     const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
     if (forbidden) {
       return forbidden;
+    }
+
+    const featureError = requireEntitlement(c, "team_management");
+    if (featureError) {
+      return featureError;
     }
 
     const dealerId = getCurrentDealerId(c);
@@ -266,6 +314,11 @@ settingsRouter.put(
     const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
     if (forbidden) {
       return forbidden;
+    }
+
+    const featureError = requireEntitlement(c, "team_management");
+    if (featureError) {
+      return featureError;
     }
 
     const dealerId = getCurrentDealerId(c);
@@ -404,6 +457,11 @@ settingsRouter.delete("/team/:membershipId", async (c) => {
   const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
   if (forbidden) {
     return forbidden;
+  }
+
+  const featureError = requireEntitlement(c, "team_management");
+  if (featureError) {
+    return featureError;
   }
 
   const dealerId = getCurrentDealerId(c);

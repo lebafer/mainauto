@@ -29,11 +29,13 @@ export interface DealerInfo {
   name: string;
   slug: string;
   status: "active" | "suspended" | "inactive";
+  setupStatus: "pending_setup" | "ready_for_dns" | "active" | "suspended";
   isDefault: boolean;
 }
 
 export interface DealerSettingsInfo {
   dealerId: string;
+  displayName?: string | null;
   legalName?: string | null;
   addressLine1?: string | null;
   zip?: string | null;
@@ -41,6 +43,7 @@ export interface DealerSettingsInfo {
   country?: string | null;
   phone?: string | null;
   email?: string | null;
+  supportEmail?: string | null;
   website?: string | null;
   taxId?: string | null;
   legalRepresentative?: string | null;
@@ -48,12 +51,26 @@ export interface DealerSettingsInfo {
   iban?: string | null;
   bic?: string | null;
   logoUrl?: string | null;
+  faviconUrl?: string | null;
   primaryColor?: string | null;
   accentColor?: string | null;
+  loginHeadline?: string | null;
   documentFooterText?: string | null;
   documentLegalText?: string | null;
   purchaseTerms?: string | null;
   saleTerms?: string | null;
+}
+
+export interface DealerDomainInfo {
+  id: string;
+  dealerId: string;
+  host: string;
+  status: "pending_dns" | "active" | "failed" | "disabled";
+  isPrimary: boolean;
+  verificationToken?: string | null;
+  verifiedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface DealerSubscriptionInfo {
@@ -81,8 +98,24 @@ export interface SessionData {
   dealer: DealerInfo | null;
   dealerRole: "dealer_owner" | "dealer_admin" | "staff" | null;
   dealerSettings: DealerSettingsInfo | null;
+  activeDomain?: DealerDomainInfo | null;
+  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  resolvedHost?: string | null;
   entitlements: Record<string, boolean>;
   subscription?: DealerSubscriptionInfo | null;
+}
+
+export interface PublicTenantContext {
+  displayName: string;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  loginHeadline: string | null;
+  supportEmail: string | null;
+  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  dealer: DealerInfo | null;
+  activeDomain: DealerDomainInfo | null;
 }
 
 // Direct session fetch that bypasses Better Auth's useSession hook
@@ -113,12 +146,14 @@ export async function fetchSession(): Promise<SessionData | null> {
 // React context for session
 export interface AuthContextType {
   session: SessionData | null;
+  tenant: PublicTenantContext | null;
   isPending: boolean;
   refetch: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   session: null,
+  tenant: null,
   isPending: true,
   refetch: async () => {},
 });

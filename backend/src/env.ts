@@ -16,6 +16,11 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   BACKEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().optional(),
+  PLATFORM_DOMAIN: z
+    .string()
+    .optional()
+    .default("tenant.local")
+    .transform((value) => value.trim().replace(/^\.+/, "").toLowerCase()),
   AUTH_DISABLE_CSRF_CHECK: z
     .string()
     .optional()

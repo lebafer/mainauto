@@ -9,14 +9,17 @@ import {
   CardDescription,
   CardHeader,
 } from "@/components/ui/card";
-import { authClient, TOKEN_KEY } from "@/lib/auth-client";
+import { authClient, TOKEN_KEY, useAuth } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
+import { DealerLogo } from "@/components/branding/DealerLogo";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { tenant } = useAuth();
+  const isTenantBlocked = tenant?.tenantStatus === "suspended" || tenant?.tenantStatus === "inactive";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,9 +65,19 @@ export default function Login() {
       <Card className="relative z-10 w-full max-w-md border-border/50 shadow-2xl">
         <CardHeader className="space-y-4 text-center">
           <div>
-            <div className="text-2xl font-semibold tracking-tight">MeinAuto Login</div>
+            <div className="mb-4 flex justify-center">
+              <DealerLogo
+                src={tenant?.logoUrl}
+                alt={tenant?.displayName ?? "Portal"}
+                className="h-16 w-44"
+                placeholderClassName="bg-muted"
+              />
+            </div>
+            <div className="text-2xl font-semibold tracking-tight">
+              {tenant?.displayName ?? "Autohaus Hub"}
+            </div>
             <CardDescription className="mt-1.5 text-base">
-              Melden Sie sich mit Ihren Zugangsdaten an
+              {tenant?.loginHeadline ?? "Melden Sie sich mit Ihren Zugangsdaten an."}
             </CardDescription>
           </div>
         </CardHeader>
@@ -86,10 +99,11 @@ export default function Login() {
                   className="pl-10"
                   required
                   autoComplete="username"
-                  autoFocus
-                />
+                    autoFocus
+                    disabled={isTenantBlocked}
+                  />
+                </div>
               </div>
-            </div>
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium">
@@ -106,15 +120,22 @@ export default function Login() {
                   className="pl-10"
                   required
                   autoComplete="current-password"
+                  disabled={isTenantBlocked}
                 />
               </div>
             </div>
+
+            {isTenantBlocked ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Dieser Mandant ist derzeit nicht verfuegbar. Bitte wende dich an {tenant?.supportEmail ?? "den Support"}.
+              </div>
+            ) : null}
 
             <Button
               type="submit"
               className="w-full"
               size="lg"
-              disabled={isLoading || !username.trim() || !password.trim()}
+              disabled={isTenantBlocked || isLoading || !username.trim() || !password.trim()}
             >
               {isLoading ? (
                 <>

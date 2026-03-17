@@ -1,6 +1,6 @@
 import type { Context } from "hono";
-import type { DealerMembershipRole, PlatformRole } from "@prisma/client";
-import type { ActiveDealerMembership, FeatureEntitlements } from "./dealers";
+import type { Dealer, DealerDomain, DealerMembershipRole, PlatformRole } from "@prisma/client";
+import type { ActiveDealerMembership, FeatureEntitlements, TenantStatus } from "./dealers";
 
 export interface RequestContextState {
   user: {
@@ -18,6 +18,10 @@ export interface RequestContextState {
   };
   membership: ActiveDealerMembership | null;
   entitlements: FeatureEntitlements;
+  resolvedHost: string | null;
+  resolvedDealer: (Dealer & { settings?: unknown }) | null;
+  resolvedDomain: DealerDomain | null;
+  tenantStatus: TenantStatus;
 }
 
 function getState(c: Context): RequestContextState {
@@ -26,6 +30,10 @@ function getState(c: Context): RequestContextState {
     session: c.get("session") as RequestContextState["session"],
     membership: (c.get("membership") as ActiveDealerMembership | null) ?? null,
     entitlements: (c.get("entitlements") as FeatureEntitlements | undefined) ?? {},
+    resolvedHost: (c.get("resolvedHost") as string | undefined) ?? null,
+    resolvedDealer: (c.get("resolvedDealer") as RequestContextState["resolvedDealer"] | undefined) ?? null,
+    resolvedDomain: (c.get("resolvedDomain") as DealerDomain | undefined) ?? null,
+    tenantStatus: (c.get("tenantStatus") as TenantStatus | undefined) ?? "unknown",
   };
 }
 
@@ -40,6 +48,10 @@ export function getCurrentMembership(c: Context) {
 export function getCurrentDealer(c: Context) {
   const membership = getCurrentMembership(c);
   if (!membership) {
+    const resolvedDealer = getResolvedDealer(c);
+    if (resolvedDealer) {
+      return resolvedDealer as NonNullable<RequestContextState["resolvedDealer"]>;
+    }
     throw new Error("No active dealer membership available");
   }
 
@@ -56,6 +68,22 @@ export function getCurrentDealerRole(c: Context): DealerMembershipRole | string 
 
 export function getCurrentEntitlements(c: Context): FeatureEntitlements {
   return getState(c).entitlements;
+}
+
+export function getResolvedHost(c: Context): string | null {
+  return getState(c).resolvedHost;
+}
+
+export function getResolvedDealer(c: Context) {
+  return getState(c).resolvedDealer;
+}
+
+export function getResolvedDomain(c: Context) {
+  return getState(c).resolvedDomain;
+}
+
+export function getTenantStatus(c: Context): TenantStatus {
+  return getState(c).tenantStatus;
 }
 
 export function requirePlatformSuperAdmin(c: Context): Response | null {
@@ -108,4 +136,38 @@ export function requireEntitlement(c: Context, entitlement: string): Response | 
     },
     403
   );
+}
+
+export function requireTenantAccess(c: Context): Response | null {
+  const state = getState(c);
+
+  if (state.user.platformRole === "platform_super_admin") {
+    return null;
+  }
+
+  if (!state.resolvedDealer) {
+    return c.json(
+      {
+        error: {
+          code: "UNKNOWN_TENANT",
+          message: "Keine passende Mandanten-Domain gefunden",
+        },
+      },
+      404
+    );
+  }
+
+  if (state.tenantStatus === "suspended" || state.tenantStatus === "inactive") {
+    return c.json(
+      {
+        error: {
+          code: "TENANT_UNAVAILABLE",
+          message: "Dieser Mandant ist derzeit nicht verfuegbar",
+        },
+      },
+      403
+    );
+  }
+
+  return null;
 }
