@@ -7,6 +7,8 @@ import {
   LogOut,
   Truck,
   BarChart2,
+  CreditCard,
+  Building2,
 } from "lucide-react";
 import {
   Sidebar,
@@ -25,11 +27,11 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-client";
-import { DealerLogo } from "@/components/branding/DealerLogo";
+import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 
 export function AppSidebar() {
   const location = useLocation();
-  const { session, tenant } = useAuth();
+  const { session } = useAuth();
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -38,9 +40,10 @@ export function AppSidebar() {
     { to: "/suppliers", label: "Lieferanten", icon: Truck },
     { to: "/sales", label: "Verkäufe", icon: Receipt },
     { to: "/finances", label: "Finanzen", icon: BarChart2 },
+    { to: "/billing", label: "Tarif", icon: CreditCard },
     ...(session?.dealerRole && ["dealer_owner", "dealer_admin"].includes(session.dealerRole)
       ? [
-          { to: "/settings/dealer", label: "Händler", icon: Users },
+          { to: "/settings/dealer", label: "Unternehmen", icon: Building2 },
           ...(session?.entitlements?.team_management ? [{ to: "/settings/team", label: "Team", icon: Users }] : []),
         ]
       : []),
@@ -56,17 +59,15 @@ export function AppSidebar() {
       className="border-r border-sidebar-border"
       style={{
         background:
-          "linear-gradient(180deg, rgb(var(--tenant-accent-rgb) / 0.26) 0%, rgb(var(--tenant-primary-rgb) / 0.08) 18%, hsl(var(--sidebar-background)) 34%)",
-        boxShadow: "inset 2px 0 0 rgb(var(--tenant-primary-rgb) / 0.55)",
+          "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(15,23,42,0.92) 24%, hsl(var(--sidebar-background)) 48%)",
+        boxShadow: "inset 2px 0 0 rgba(245,158,11,0.55)",
       }}
     >
       <SidebarHeader className="h-24 overflow-hidden p-0">
         <div className="flex h-full w-full items-center justify-center bg-sidebar px-4">
-          <DealerLogo
-            src={session?.dealerSettings?.logoUrl}
-            alt={session?.dealer?.name ?? "Dealer Logo"}
-            className="h-16 w-full max-w-[220px] group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:max-w-[40px]"
-            placeholderClassName="border-sidebar-border bg-muted/20 group-data-[collapsible=icon]:rounded-full"
+          <CarOpsLogo
+            compact={false}
+            className="group-data-[collapsible=icon]:[&>div:last-child]:hidden"
           />
         </div>
       </SidebarHeader>
@@ -108,10 +109,10 @@ export function AppSidebar() {
         <SidebarSeparator />
         <div
           className="rounded-lg px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
-          style={{ background: "rgb(var(--tenant-primary-rgb) / 0.10)" }}
+          style={{ background: "rgba(245,158,11,0.10)" }}
         >
           <div className="font-medium text-foreground">
-            {session?.dealerSettings?.displayName ?? session?.dealer?.name ?? tenant?.displayName ?? "Autohaus Hub"}
+            {session?.dealerSettings?.displayName ?? session?.dealer?.name ?? "Autohaus"}
           </div>
           <div>{session?.subscription?.plan?.name ?? "Kein Tarif"}</div>
         </div>

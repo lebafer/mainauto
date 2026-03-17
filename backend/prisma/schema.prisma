@@ -131,6 +131,7 @@ model Plan {
   name                String
   description         String?
   monthlyPriceCents   Int                  @default(0)
+  stripePriceMonthlyId String?
   featureEntitlements Json
   isActive            Boolean              @default(true)
   createdAt           DateTime             @default(now())
@@ -145,14 +146,21 @@ model DealerSubscription {
   planId           String
   plan             Plan                     @relation(fields: [planId], references: [id], onDelete: Restrict)
   status           DealerSubscriptionStatus @default(active)
+  stripeCustomerId String?
+  stripeSubscriptionId String?
+  stripeCheckoutSessionId String?
+  stripePriceId    String?
   featureOverrides Json?
   billingNotes     String?
+  trialEndsAt      DateTime?
+  currentPeriodEndsAt DateTime?
   startsAt         DateTime                 @default(now())
   endsAt           DateTime?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
 
   @@index([dealerId, status])
+  @@unique([stripeSubscriptionId])
   @@unique([dealerId, planId])
 }
 

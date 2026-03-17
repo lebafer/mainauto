@@ -5,7 +5,9 @@ import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
 import { DealerLogo } from "@/components/branding/DealerLogo";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,10 +41,6 @@ const EMPTY_FORM = {
   iban: "",
   bic: "",
   logoUrl: "",
-  faviconUrl: "",
-  primaryColor: "",
-  accentColor: "",
-  loginHeadline: "",
   documentFooterText: "",
   documentLegalText: "",
   purchaseTerms: "",
@@ -55,6 +53,7 @@ export default function SettingsDealer() {
   const { session, refetch } = useAuth();
   const [form, setForm] = useState(EMPTY_FORM);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const documentBrandingEnabled = session?.entitlements?.document_branding === true;
 
   const settingsQuery = useQuery({
     queryKey: ["dealer-settings"],
@@ -64,7 +63,9 @@ export default function SettingsDealer() {
 
   useEffect(() => {
     const settings = settingsQuery.data?.settings;
-    if (!settings) return;
+    if (!settings) {
+      return;
+    }
 
     setForm({
       displayName: String(settings.displayName ?? ""),
@@ -83,10 +84,6 @@ export default function SettingsDealer() {
       iban: String(settings.iban ?? ""),
       bic: String(settings.bic ?? ""),
       logoUrl: String(settings.logoUrl ?? ""),
-      faviconUrl: String(settings.faviconUrl ?? ""),
-      primaryColor: String(settings.primaryColor ?? ""),
-      accentColor: String(settings.accentColor ?? ""),
-      loginHeadline: String(settings.loginHeadline ?? ""),
       documentFooterText: String(settings.documentFooterText ?? ""),
       documentLegalText: String(settings.documentLegalText ?? ""),
       purchaseTerms: String(settings.purchaseTerms ?? ""),
@@ -98,7 +95,7 @@ export default function SettingsDealer() {
     mutationFn: () => api.put("/api/settings/dealer", form),
     onSuccess: async () => {
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["dealer-settings"] }), refetch()]);
-      toast({ title: "Gespeichert", description: "Händler-Einstellungen wurden aktualisiert." });
+      toast({ title: "Gespeichert", description: "Unternehmensdaten wurden aktualisiert." });
     },
     onError: (error) => {
       toast({
@@ -131,7 +128,7 @@ export default function SettingsDealer() {
     onSuccess: async () => {
       setLogoFile(null);
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["dealer-settings"] }), refetch()]);
-      toast({ title: "Logo hochgeladen", description: "Das Händlerlogo wurde aktualisiert." });
+      toast({ title: "Logo hochgeladen", description: "Das Dokumentenlogo wurde aktualisiert." });
     },
     onError: (error) => {
       toast({
@@ -148,7 +145,7 @@ export default function SettingsDealer() {
       setLogoFile(null);
       setForm((current) => ({ ...current, logoUrl: "" }));
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["dealer-settings"] }), refetch()]);
-      toast({ title: "Logo entfernt", description: "Das Händlerlogo wurde entfernt." });
+      toast({ title: "Logo entfernt", description: "Das Dokumentenlogo wurde entfernt." });
     },
     onError: (error) => {
       toast({
@@ -166,8 +163,12 @@ export default function SettingsDealer() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Händlerprofil</CardTitle>
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <CardTitle>Unternehmensprofil</CardTitle>
+            <CardDescription>Diese Daten gelten fuer dein Autohaus und fliessen in Dokumente und Stammdaten ein.</CardDescription>
+          </div>
+          <Badge variant="outline">{session.subscription?.plan?.name ?? "Kein Tarif"}</Badge>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           {Object.entries({
@@ -186,7 +187,6 @@ export default function SettingsDealer() {
             bankName: "Bank",
             iban: "IBAN",
             bic: "BIC",
-            faviconUrl: "Favicon-URL",
           }).map(([key, label]) => (
             <div key={key} className="space-y-2">
               <Label htmlFor={key}>{label}</Label>
@@ -197,37 +197,58 @@ export default function SettingsDealer() {
               />
             </div>
           ))}
+        </CardContent>
+      </Card>
 
-          <div className="space-y-3 md:col-span-2">
-            <Label>Logo</Label>
-            <div className="flex flex-col gap-4 rounded-lg border border-dashed p-4 md:flex-row md:items-center md:justify-between">
+      <Card>
+        <CardHeader>
+          <CardTitle>Dokumentenbranding</CardTitle>
+          <CardDescription>
+            Eigenes Logo und individuelle Rechtstexte sind nur im Pro-Tarif verfuegbar.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {!documentBrandingEnabled ? (
+            <Alert>
+              <AlertTitle>Pro-Feature</AlertTitle>
+              <AlertDescription>
+                Upgrade auf Pro, um dein Autohaus-Logo in Dokumenten zu verwenden und eigene Dokumententexte zu
+                hinterlegen.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="space-y-3">
+            <Label>Dokumentenlogo</Label>
+            <div className="flex flex-col gap-4 rounded-2xl border border-dashed p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-4">
                 <DealerLogo
                   src={form.logoUrl}
-                  alt="Händlerlogo"
+                  alt="Dokumentenlogo"
                   className="h-20 w-44 rounded-md bg-muted/20 p-2"
                   placeholderClassName="border-border bg-muted"
                 />
                 <div className="text-sm text-muted-foreground">
-                  PNG, JPG oder WebP hochladen. Das Logo wird direkt für Sidebar und Dokumente genutzt.
+                  Dieses Logo erscheint nur in deinen generierten Dokumenten, nicht im CarOps-Login oder in der App.
                 </div>
               </div>
-              <div className="flex flex-col gap-2 md:min-w-[220px]">
+              <div className="flex flex-col gap-2 md:min-w-[240px]">
                 <Input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/svg+xml"
                   onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+                  disabled={!documentBrandingEnabled}
                 />
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => logoFile && logoUploadMutation.mutate(logoFile)}
-                  disabled={!logoFile || logoUploadMutation.isPending}
+                  disabled={!documentBrandingEnabled || !logoFile || logoUploadMutation.isPending}
                 >
                   {logoUploadMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Lädt hoch...
+                      Laedt hoch...
                     </>
                   ) : (
                     <>
@@ -240,7 +261,12 @@ export default function SettingsDealer() {
                   type="button"
                   variant="ghost"
                   onClick={() => removeLogoMutation.mutate()}
-                  disabled={!form.logoUrl || removeLogoMutation.isPending || logoUploadMutation.isPending}
+                  disabled={
+                    !documentBrandingEnabled ||
+                    !form.logoUrl ||
+                    removeLogoMutation.isPending ||
+                    logoUploadMutation.isPending
+                  }
                 >
                   {removeLogoMutation.isPending ? (
                     <>
@@ -258,83 +284,41 @@ export default function SettingsDealer() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="primaryColor">Primärfarbe</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                id="primaryColorPicker"
-                type="color"
-                value={form.primaryColor || "#f59e0b"}
-                onChange={(event) => setForm((current) => ({ ...current, primaryColor: event.target.value }))}
-                className="h-10 w-16 cursor-pointer p-1"
-              />
-              <Input
-                id="primaryColor"
-                value={form.primaryColor}
-                onChange={(event) => setForm((current) => ({ ...current, primaryColor: event.target.value }))}
-                placeholder="#f59e0b"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="accentColor">Akzentfarbe</Label>
-            <div className="flex items-center gap-3">
-              <Input
-                id="accentColorPicker"
-                type="color"
-                value={form.accentColor || "#111827"}
-                onChange={(event) => setForm((current) => ({ ...current, accentColor: event.target.value }))}
-                className="h-10 w-16 cursor-pointer p-1"
-              />
-              <Input
-                id="accentColor"
-                value={form.accentColor}
-                onChange={(event) => setForm((current) => ({ ...current, accentColor: event.target.value }))}
-                placeholder="#111827"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="loginHeadline">Login-Headline</Label>
-            <Textarea
-              id="loginHeadline"
-              value={form.loginHeadline}
-              onChange={(event) => setForm((current) => ({ ...current, loginHeadline: event.target.value }))}
-              placeholder="Kurzer Satz fuer die Login-Seite deines White-Label-Portals"
-            />
+          <div className="grid gap-4">
+            {[
+              ["documentFooterText", "Dokument-Fusszeile"],
+              ["documentLegalText", "Rechtstext"],
+              ["purchaseTerms", "Ankaufsbedingungen"],
+              ["saleTerms", "Verkaufsbedingungen"],
+            ].map(([key, label]) => (
+              <div key={key} className="space-y-2">
+                <Label htmlFor={key}>{label}</Label>
+                <Textarea
+                  id={key}
+                  rows={4}
+                  value={form[key as keyof typeof form]}
+                  onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
+                  disabled={!documentBrandingEnabled}
+                />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Dokumenttexte</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {[
-            ["documentFooterText", "Dokument-Fußzeile"],
-            ["documentLegalText", "Rechtstext"],
-            ["purchaseTerms", "Ankaufsbedingungen"],
-            ["saleTerms", "Verkaufsbedingungen"],
-          ].map(([key, label]) => (
-            <div key={key} className="space-y-2">
-              <Label htmlFor={key}>{label}</Label>
-              <Textarea
-                id={key}
-                value={form[key as keyof typeof form]}
-                onChange={(event) => setForm((current) => ({ ...current, [key]: event.target.value }))}
-                rows={4}
-              />
-            </div>
-          ))}
-          <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full md:w-fit">
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full md:w-fit">
+        {saveMutation.isPending ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Speichert...
+          </>
+        ) : (
+          <>
             <Save className="mr-2 h-4 w-4" />
-            Änderungen speichern
-          </Button>
-        </CardContent>
-      </Card>
+            Aenderungen speichern
+          </>
+        )}
+      </Button>
     </div>
   );
 }

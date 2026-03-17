@@ -18,7 +18,7 @@ export function GuestRoute({ children }: GuestRouteProps) {
   }
 
   if (session) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={session.billing.requiresPayment ? "/billing" : "/dashboard"} replace />;
   }
 
   return <>{children}</>;

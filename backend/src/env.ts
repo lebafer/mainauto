@@ -50,6 +50,12 @@ const envSchema = z.object({
     .optional()
     .default("gpt-4o")
     .transform((value) => value.trim() || "gpt-4o"),
+
+  // Billing
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_STANDARD_PRICE_ID: z.string().optional(),
+  STRIPE_PRO_PRICE_ID: z.string().optional(),
 });
 
 /**

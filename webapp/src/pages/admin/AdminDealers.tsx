@@ -711,7 +711,7 @@ export default function AdminDealers() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Neue White-Label-Anfragen</CardTitle>
+          <CardTitle>Neue SaaS-Anfragen</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           {(inquiriesQuery.data ?? []).length === 0 ? (

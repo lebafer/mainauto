@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth-client";
 import { Loader2 } from "lucide-react";
 
@@ -7,6 +7,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const location = useLocation();
   const { session, isPending } = useAuth();
 
   if (isPending) {
@@ -32,6 +33,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         </div>
       </div>
     );
+  }
+
+  if (session.billing.requiresPayment && location.pathname !== "/billing") {
+    return <Navigate to="/billing" replace />;
   }
 
   return <>{children}</>;

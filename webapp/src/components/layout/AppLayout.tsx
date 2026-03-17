@@ -24,7 +24,8 @@ const pageTitles: Record<string, string> = {
   "/suppliers": "Lieferanten",
   "/suppliers/new": "Neuer Lieferant",
   "/finances": "Finanzen",
-  "/settings/dealer": "Händler-Einstellungen",
+  "/billing": "Tarif & Abrechnung",
+  "/settings/dealer": "Unternehmen & Dokumente",
   "/settings/team": "Teamverwaltung",
   "/admin/dealers": "Super-Admin",
 };

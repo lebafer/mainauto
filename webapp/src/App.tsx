@@ -16,6 +16,8 @@ import { Loader2 } from "lucide-react";
 // Lazy load pages
 const Login = lazy(() => import("@/pages/Login"));
 const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const Signup = lazy(() => import("@/pages/Signup"));
+const Billing = lazy(() => import("@/pages/Billing"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const VehicleList = lazy(() => import("@/pages/vehicles/VehicleList"));
 const VehicleNew = lazy(() => import("@/pages/vehicles/VehicleNew"));
@@ -68,10 +70,29 @@ const App = () => (
                   </GuestRoute>
                 }
               />
+              <Route
+                path="/signup"
+                element={
+                  <GuestRoute>
+                    <Signup />
+                  </GuestRoute>
+                }
+              />
 
               <Route path="/admin/login" element={<AdminLogin />} />
 
               {/* Protected app routes with layout */}
+              <Route
+                path="/billing"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Billing />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
               <Route
                 path="/dashboard"
                 element={

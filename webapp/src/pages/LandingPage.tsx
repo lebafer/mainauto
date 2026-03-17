@@ -1,100 +1,75 @@
-import { useState } from "react";
 import { Navigate, Link } from "react-router-dom";
-import { useMutation } from "@tanstack/react-query";
-import { ArrowRight, Building2, Globe, ShieldCheck, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
+import { ArrowRight, Bot, Building2, CheckCircle2, Users2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-client";
-import { submitOnboardingInquiry } from "@/lib/tenant-client";
-import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { DealerLogo } from "@/components/branding/DealerLogo";
+import { Badge } from "@/components/ui/badge";
 
-const EMPTY_FORM = {
-  businessName: "",
-  contactName: "",
-  email: "",
-  phone: "",
-  website: "",
-  notes: "",
+type PlanSlug = "standard" | "pro";
+
+type PublicPlan = {
+  id: string;
+  slug: PlanSlug;
+  name: string;
+  description?: string | null;
+  monthlyPriceCents: number;
+  trialDays: number;
 };
 
-export default function LandingPage() {
-  const { session, tenant } = useAuth();
-  const { toast } = useToast();
-  const [form, setForm] = useState(EMPTY_FORM);
+const formatCurrency = (cents: number) =>
+  new Intl.NumberFormat("de-DE", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 
-  const inquiryMutation = useMutation({
-    mutationFn: () => submitOnboardingInquiry(form),
-    onSuccess: () => {
-      setForm(EMPTY_FORM);
-      toast({
-        title: "Anfrage gesendet",
-        description: "Wir melden uns mit den naechsten Schritten fuer dein White-Label-Setup.",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Fehler",
-        description: error instanceof Error ? error.message : "Anfrage konnte nicht gesendet werden.",
-        variant: "destructive",
-      });
-    },
+export default function LandingPage() {
+  const { session } = useAuth();
+  const plansQuery = useQuery({
+    queryKey: ["public-plans"],
+    queryFn: () => api.get<PublicPlan[]>("/api/public/plans"),
   });
 
   if (session) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={session.billing.requiresPayment ? "/billing" : "/dashboard"} replace />;
   }
 
-  const isDealerHost = Boolean(tenant?.dealer);
-
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.16),transparent_30%),linear-gradient(180deg,#09090b,#0f172a_38%,#111827)] text-white">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ef_0%,#fff_35%,#fff_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_40%,#020617_100%)] dark:text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
         <header className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-40 items-center">
-              <DealerLogo
-                src={tenant?.logoUrl}
-                alt={tenant?.displayName ?? "Autohaus Hub"}
-                className="h-12 w-full"
-                placeholderClassName="border-white/10 bg-white/5 text-white/70"
-              />
-            </div>
-            <div className="hidden text-sm text-slate-300 md:block">
-              {tenant?.displayName ?? "White-Label-Autohaussoftware"}
-            </div>
-          </div>
+          <CarOpsLogo />
           <div className="flex items-center gap-3">
-            <Button asChild variant="ghost" className="text-white hover:bg-white/10 hover:text-white">
+            <Button asChild variant="ghost">
               <Link to="/login">Login</Link>
             </Button>
-            {!isDealerHost ? (
-              <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-                <a href="#anfrage">Demo anfragen</a>
-              </Button>
-            ) : null}
+            <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+              <Link to="/signup">Kostenlos starten</Link>
+            </Button>
           </div>
         </header>
 
         <main className="grid flex-1 gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <section className="space-y-8">
-            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-200">
-              {isDealerHost ? "Mandantenportal" : "White-Label V1"}
-            </div>
+          <motion.section
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }}
+            className="space-y-8"
+          >
+            <Badge className="w-fit rounded-full bg-amber-500/15 px-4 py-1 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300">
+              SaaS fuer moderne Autohäuser
+            </Badge>
             <div className="space-y-4">
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-white md:text-6xl">
-                {isDealerHost
-                  ? tenant?.displayName ?? "Autohaus-Portal"
-                  : "Autohaussoftware als vermietbares White-Label-Produkt"}
+              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">
+                CarOps ist das Betriebssystem fuer dein Autohaus.
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-slate-300">
-                {isDealerHost
-                  ? tenant?.loginHeadline ??
-                    "Bestand, Verkauf, Dokumente und Teamzugriff unter deiner eigenen Marke."
-                  : "Eine zentrale SaaS-Plattform fuer kleine Autohaeuser mit eigener Marke, eigener Subdomain und sauberem Onboarding."}
+              <p className="max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
+                Verwalte Bestand, Verkauf, Dokumente und dein Team in einer gemeinsamen Cloud-Plattform. Schnell
+                startklar, klar bepreist und ohne zusaetzliche Setup-Schleifen.
               </p>
             </div>
 
@@ -102,126 +77,106 @@ export default function LandingPage() {
               {[
                 {
                   icon: Building2,
-                  title: "Mandantenfaehig",
-                  body: "Haendler, Teams, Daten und Branding bleiben sauber getrennt.",
+                  title: "Autohaus-ready",
+                  body: "Fahrzeuge, Kunden, Verkauf und Dokumente in einem System.",
                 },
                 {
-                  icon: Globe,
-                  title: "Eigene Subdomain",
-                  body: "Jeder Kunde kann sein Portal spaeter unter app.kunde.de anbinden.",
+                  icon: Users2,
+                  title: "Team im Blick",
+                  body: "Owner, Admins und Mitarbeiter arbeiten mit klaren Rollen.",
                 },
                 {
-                  icon: ShieldCheck,
-                  title: "Kontrolliertes Onboarding",
-                  body: "V1 bleibt manuell und damit im Betrieb beherrschbar.",
+                  icon: Bot,
+                  title: "KI fuer Briefe",
+                  body: "Pro liest Fahrzeugbriefe aus und spart dir manuelle Erfassung.",
                 },
               ].map((item) => (
-                <Card key={item.title} className="border-white/10 bg-white/5 text-white shadow-xl backdrop-blur">
+                <Card key={item.title} className="border-border/70 bg-card/75 shadow-xl backdrop-blur">
                   <CardHeader className="pb-3">
-                    <item.icon className="h-5 w-5 text-amber-300" />
+                    <item.icon className="h-5 w-5 text-amber-500" />
                     <CardTitle className="mt-3 text-lg">{item.title}</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm text-slate-300">{item.body}</CardContent>
+                  <CardContent className="text-sm text-muted-foreground">{item.body}</CardContent>
                 </Card>
               ))}
             </div>
 
             <div className="flex flex-wrap gap-3">
               <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-                <Link to="/login">
-                  Zum Login
+                <Link to="/signup">
+                  Jetzt kostenlos starten
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              {!isDealerHost ? (
-                <Button asChild size="lg" variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10 hover:text-white">
-                  <a href="#anfrage">White-Label anfragen</a>
-                </Button>
-              ) : null}
+              <Button asChild size="lg" variant="outline">
+                <Link to="/login">Zum Login</Link>
+              </Button>
             </div>
-          </section>
+          </motion.section>
 
-          <section id="anfrage">
-            {isDealerHost ? (
-              <Card className="border-white/10 bg-white/5 text-white shadow-2xl backdrop-blur">
-                <CardHeader>
-                  <CardTitle>Portal-Zugang</CardTitle>
-                  <CardDescription className="text-slate-300">
-                    Dieses Portal ist fuer {tenant?.displayName ?? "dein Autohaus"} vorbereitet. Melde dich mit deinen Zugangsdaten an oder kontaktiere den Support.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Button asChild className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
-                    <Link to="/login">Zum Login</Link>
-                  </Button>
-                  <div className="rounded-xl border border-white/10 bg-slate-950/40 p-4 text-sm text-slate-300">
-                    Support: {tenant?.supportEmail ?? "support@autohaus-hub.local"}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="border-white/10 bg-white/5 text-white shadow-2xl backdrop-blur">
-                <CardHeader>
-                  <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.16em] text-amber-200">
-                    <Sparkles className="mr-2 h-3.5 w-3.5" />
-                    White-Label Anfrage
-                  </div>
-                  <CardTitle className="mt-4">Onboarding anfragen</CardTitle>
-                  <CardDescription className="text-slate-300">
-                    Hinterlasse uns die wichtigsten Daten. Wir richten danach Demo, Tarif und White-Label-Setup manuell fuer dich ein.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-4">
-                  {[
-                    ["businessName", "Autohaus / Firma"],
-                    ["contactName", "Ansprechpartner"],
-                    ["email", "E-Mail"],
-                    ["phone", "Telefon"],
-                    ["website", "Website"],
-                  ].map(([key, label]) => (
-                    <div key={key} className="space-y-2">
-                      <Label htmlFor={key} className="text-slate-200">
-                        {label}
-                      </Label>
-                      <Input
-                        id={key}
-                        type={key === "email" ? "email" : "text"}
-                        value={form[key as keyof typeof form]}
-                        onChange={(event) =>
-                          setForm((current) => ({ ...current, [key]: event.target.value }))
-                        }
-                        className="border-white/10 bg-slate-950/40 text-white placeholder:text-slate-500"
-                      />
+          <motion.section
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
+            className="space-y-4"
+          >
+            <Card className="border-border/70 bg-slate-950 text-slate-50 shadow-2xl">
+              <CardHeader>
+                <CardTitle>Tarife fuer v1</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Gleicher Einstieg fuer alle. Keine Sonderkonfigurationen, keine Extrarunden, einfach loslegen.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                {(plansQuery.data ?? []).map((plan) => (
+                  <div key={plan.id} className="rounded-3xl border border-white/10 bg-white/5 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xl font-semibold">{plan.name}</div>
+                        <div className="mt-1 text-sm text-slate-300">{plan.description}</div>
+                      </div>
+                      {plan.slug === "pro" ? <Badge className="bg-amber-500 text-slate-950">Pro</Badge> : null}
                     </div>
-                  ))}
-                  <div className="space-y-2">
-                    <Label htmlFor="notes" className="text-slate-200">
-                      Was benoetigst du?
-                    </Label>
-                    <Textarea
-                      id="notes"
-                      value={form.notes}
-                      onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
-                      className="min-h-[120px] border-white/10 bg-slate-950/40 text-white placeholder:text-slate-500"
-                      placeholder="z. B. Anzahl Mitarbeiter, gewuenschte Prozesse, spaetere Wunschdomain"
-                    />
+                    <div className="mt-5 text-4xl font-semibold">{formatCurrency(plan.monthlyPriceCents)}</div>
+                    <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">pro Monat</div>
+                    <div className="mt-5 space-y-3 text-sm text-slate-300">
+                      {(plan.slug === "pro"
+                        ? ["Teamverwaltung", "Dokumentenbranding", "KI-Fahrzeugbrief-Extraktion"]
+                        : ["Fahrzeugverwaltung", "CRM und Verkauf", "14 Tage Testphase"])
+                        .map((feature) => (
+                          <div key={feature} className="flex items-start gap-2">
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 text-amber-400" />
+                            <span>{feature}</span>
+                          </div>
+                        ))}
+                    </div>
                   </div>
-                  <Button
-                    onClick={() => inquiryMutation.mutate()}
-                    disabled={
-                      inquiryMutation.isPending ||
-                      !form.businessName.trim() ||
-                      !form.contactName.trim() ||
-                      !form.email.trim()
-                    }
-                    className="bg-amber-500 text-slate-950 hover:bg-amber-400"
-                  >
-                    {inquiryMutation.isPending ? "Wird gesendet..." : "Anfrage absenden"}
-                  </Button>
+                ))}
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-slate-200">
+                  Testphase: 14 Tage. Zahlung erst noetig, wenn du danach weiternutzen willst.
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="border-border/70">
+                <CardHeader>
+                  <CardTitle className="text-lg">Schneller Start</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Registrierung, Trial und Checkout laufen im selben SaaS-Flow.
                 </CardContent>
               </Card>
-            )}
-          </section>
+              <Card className="border-border/70">
+                <CardHeader>
+                  <CardTitle className="text-lg">Saubere Abrechnung</CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  Upgrade, Aboverwaltung und Paywall sind direkt im Produkt verankert.
+                </CardContent>
+              </Card>
+            </div>
+          </motion.section>
         </main>
       </div>
     </div>

@@ -15,6 +15,7 @@ import {
   pickActiveMembership,
   type ActiveDealerMembership,
 } from "./lib/dealers";
+import { getBillingState, getCurrentSubscription } from "./lib/billing";
 import { vehiclesRouter } from "./routes/vehicles";
 import { customersRouter } from "./routes/customers";
 import { salesRouter } from "./routes/sales";
@@ -29,6 +30,7 @@ import { sessionRouter } from "./routes/session";
 import { settingsRouter } from "./routes/settings";
 import { adminRouter } from "./routes/admin";
 import { publicRouter } from "./routes/public";
+import { billingRouter } from "./routes/billing";
 
 type Variables = {
   user: {
@@ -62,6 +64,13 @@ type Variables = {
       }
     | null;
   tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  billing: {
+    status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
+    trialEndsAt: Date | null;
+    currentPeriodEndsAt: Date | null;
+    requiresPayment: boolean;
+    canAccessApp: boolean;
+  };
 };
 
 const app = new Hono<{ Variables: Variables }>();
@@ -195,7 +204,11 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 app.options("/api/auth/*", (c) => c.text("", 204));
 
 app.use("/api/*", async (c, next) => {
-  if (c.req.path.startsWith("/api/auth") || c.req.path.startsWith("/api/public")) {
+  if (
+    c.req.path.startsWith("/api/auth") ||
+    c.req.path.startsWith("/api/public") ||
+    c.req.path === "/api/billing/webhook"
+  ) {
     return next();
   }
 
@@ -258,6 +271,9 @@ app.use("/api/*", async (c, next) => {
       ? memberships.find((membership) => membership.dealerId === resolvedDealer.id) ?? null
       : pickActiveMembership(memberships);
   const entitlements = getMembershipEntitlements(activeMembership);
+  const effectiveDealer = resolvedDealer ?? activeMembership?.dealer ?? null;
+  const effectiveDomain = c.get("resolvedDomain") ?? getActiveDealerDomain(activeMembership?.dealer.domains);
+  const billing = getBillingState(getCurrentSubscription(activeMembership?.dealer.subscriptions));
 
   if (
     resolvedDealer &&
@@ -297,6 +313,19 @@ app.use("/api/*", async (c, next) => {
   c.set("session", session.session);
   c.set("membership", activeMembership as Variables["membership"]);
   c.set("entitlements", entitlements);
+  c.set("billing", billing);
+
+  if (effectiveDealer) {
+    c.set("resolvedDealer", effectiveDealer as Variables["resolvedDealer"]);
+    c.set("resolvedDomain", effectiveDomain as Variables["resolvedDomain"]);
+    c.set(
+      "tenantStatus",
+      deriveTenantStatus({
+        dealerStatus: effectiveDealer.status,
+        setupStatus: effectiveDealer.setupStatus,
+      })
+    );
+  }
 
   if (dbUser?.platformRole === "platform_super_admin" && c.req.path.startsWith("/api/admin")) {
     return next();
@@ -304,9 +333,9 @@ app.use("/api/*", async (c, next) => {
 
   const tenantStatus = c.get("tenantStatus");
   const path = c.req.path;
-  const allowWithoutTenant = path.startsWith("/api/session");
+  const allowWithoutTenant = path.startsWith("/api/session") || path.startsWith("/api/billing");
 
-  if (!resolvedDealer && !allowWithoutTenant) {
+  if (!effectiveDealer && !allowWithoutTenant) {
     return c.json(
       {
         error: {
@@ -333,7 +362,7 @@ app.use("/api/*", async (c, next) => {
   }
 
   if (tenantStatus === "pending_setup" || tenantStatus === "ready_for_dns") {
-    const allowedPrefixes = ["/api/session", "/api/settings"];
+    const allowedPrefixes = ["/api/session", "/api/settings", "/api/billing"];
     if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
       return c.json(
         {
@@ -343,6 +372,21 @@ app.use("/api/*", async (c, next) => {
           },
         },
         403
+      );
+    }
+  }
+
+  if (billing.requiresPayment) {
+    const allowedPrefixes = ["/api/session", "/api/billing"];
+    if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
+      return c.json(
+        {
+          error: {
+            code: "PAYMENT_REQUIRED",
+            message: "Dein Testzeitraum ist abgelaufen oder dein Abo ist nicht aktiv.",
+          },
+        },
+        402
       );
     }
   }
@@ -370,6 +414,7 @@ app.route("/api/suppliers-db", suppliersDbRouter);
 app.route("/api/finances", financesRouter);
 app.route("/api/public", publicRouter);
 app.route("/api/session", sessionRouter);
+app.route("/api/billing", billingRouter);
 app.route("/api/settings", settingsRouter);
 app.route("/api/admin", adminRouter);
 

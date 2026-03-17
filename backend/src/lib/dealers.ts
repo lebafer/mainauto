@@ -22,10 +22,11 @@ export type TenantStatus =
   | "suspended"
   | "inactive";
 
-export const DEFAULT_PLATFORM_NAME = "Autohaus Hub";
+export const DEFAULT_PLATFORM_NAME = "CarOps";
+export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem fuer dein Autohaus";
 export const DEFAULT_DEALER_NAME = "Referenz Autohaus";
 export const DEFAULT_DEALER_SLUG = "mainauto";
-export const DEFAULT_SUPPORT_EMAIL = "support@autohaus-hub.local";
+export const DEFAULT_SUPPORT_EMAIL = "support@carops.local";
 
 export const DEFAULT_DEALER_SETTINGS = {
   displayName: "Referenz Autohaus",
@@ -43,9 +44,9 @@ export const DEFAULT_DEALER_SETTINGS = {
   bankName: "Musterbank",
   iban: "DE00 0000 0000 0000 0000 00",
   bic: "TESTDE00XXX",
-  primaryColor: "#f59e0b",
-  accentColor: "#111827",
-  loginHeadline: "Ihre White-Label-Autohaussoftware fuer Verkauf, Bestand und Prozesse.",
+  primaryColor: "#d97706",
+  accentColor: "#0f172a",
+  loginHeadline: DEFAULT_PLATFORM_SLOGAN,
   documentFooterText:
     "Referenz Autohaus • Musterstrasse 1 • 10115 Berlin",
   documentLegalText: "USt-IdNr. DE000000000 • Vertretungsberechtigt: Max Mustermann",
@@ -57,44 +58,26 @@ export const DEFAULT_DEALER_SETTINGS = {
 
 export const DEFAULT_PLAN_DEFINITIONS = [
   {
-    slug: "basic",
-    name: "Basic",
-    description: "Grundpaket fuer die taegliche Fahrzeugverwaltung.",
-    monthlyPriceCents: 9900,
+    slug: "standard",
+    name: "Standard",
+    description: "Der kompakte Einstieg fuer kleine Autohaeuser mit 14 Tagen Testphase.",
+    monthlyPriceCents: 5000,
+    stripePriceMonthlyId: env.STRIPE_STANDARD_PRICE_ID?.trim() || null,
     featureEntitlements: {
-      branding: false,
-      white_label: false,
-      custom_domain: false,
       team_management: false,
-      documents_advanced: false,
+      document_branding: false,
       ai_brief_extraction: false,
     },
   },
   {
     slug: "pro",
     name: "Pro",
-    description: "Mit Branding, Teamverwaltung und erweiterten Dokumenten.",
-    monthlyPriceCents: 19900,
+    description: "Fuer Autohaeuser mit Team, Dokumentenbranding und KI-Briefscan.",
+    monthlyPriceCents: 8900,
+    stripePriceMonthlyId: env.STRIPE_PRO_PRICE_ID?.trim() || null,
     featureEntitlements: {
-      branding: true,
-      white_label: true,
-      custom_domain: true,
       team_management: true,
-      documents_advanced: true,
-      ai_brief_extraction: false,
-    },
-  },
-  {
-    slug: "pro-ai",
-    name: "Pro + KI",
-    description: "Pro-Paket mit KI-Briefextraktion.",
-    monthlyPriceCents: 24900,
-    featureEntitlements: {
-      branding: true,
-      white_label: true,
-      custom_domain: true,
-      team_management: true,
-      documents_advanced: true,
+      document_branding: true,
       ai_brief_extraction: true,
     },
   },
@@ -179,6 +162,7 @@ export async function ensureDefaultPlans() {
         name: plan.name,
         description: plan.description,
         monthlyPriceCents: plan.monthlyPriceCents,
+        stripePriceMonthlyId: plan.stripePriceMonthlyId,
         featureEntitlements: plan.featureEntitlements,
         isActive: true,
       },
@@ -187,11 +171,23 @@ export async function ensureDefaultPlans() {
         name: plan.name,
         description: plan.description,
         monthlyPriceCents: plan.monthlyPriceCents,
+        stripePriceMonthlyId: plan.stripePriceMonthlyId,
         featureEntitlements: plan.featureEntitlements,
         isActive: true,
       },
     });
   }
+
+  await prisma.plan.updateMany({
+    where: {
+      slug: {
+        in: ["basic", "pro-ai"],
+      },
+    },
+    data: {
+      isActive: false,
+    },
+  });
 }
 
 export async function ensureDefaultDealer() {
@@ -244,22 +240,39 @@ export async function ensureDefaultDealer() {
     },
   });
 
-  const proAiPlan = await prisma.plan.findUnique({ where: { slug: "pro-ai" } });
-  if (proAiPlan) {
+  const defaultPlan = await prisma.plan.findUnique({ where: { slug: "pro" } });
+  if (defaultPlan) {
+    await prisma.dealerSubscription.updateMany({
+      where: {
+        dealerId: dealer.id,
+        NOT: {
+          planId: defaultPlan.id,
+        },
+        status: {
+          in: ["active", "trialing", "past_due"],
+        },
+      },
+      data: {
+        status: "canceled",
+      },
+    });
+
     await prisma.dealerSubscription.upsert({
       where: {
         dealerId_planId: {
           dealerId: dealer.id,
-          planId: proAiPlan.id,
+          planId: defaultPlan.id,
         },
       },
       update: {
         status: "active",
+        trialEndsAt: null,
       },
       create: {
         dealerId: dealer.id,
-        planId: proAiPlan.id,
+        planId: defaultPlan.id,
         status: "active",
+        trialEndsAt: null,
       },
     });
   }
@@ -292,7 +305,7 @@ export function pickActiveMembership(
 
 export function getMembershipEntitlements(membership: ActiveDealerMembership | null): FeatureEntitlements {
   const subscription = membership?.dealer.subscriptions.find(
-    (item) => item.status === "active" || item.status === "trialing"
+    (item) => item.status === "active" || item.status === "trialing" || item.status === "past_due"
   );
 
   return mergeFeatureEntitlements(subscription?.plan.featureEntitlements, subscription?.featureOverrides);

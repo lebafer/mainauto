@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  getBillingState,
   getCurrentEntitlements,
   getCurrentMembership,
   getCurrentUser,
@@ -8,6 +9,7 @@ import {
   getTenantStatus,
 } from "../lib/request-context";
 import { getActiveDealerDomain } from "../lib/dealers";
+import { getCurrentSubscription } from "../lib/billing";
 
 const sessionRouter = new Hono();
 
@@ -18,8 +20,8 @@ sessionRouter.get("/me", async (c) => {
   const resolvedDomain = getResolvedDomain(c);
   const resolvedHost = getResolvedHost(c);
   const tenantStatus = getTenantStatus(c);
-  const subscription =
-    membership?.dealer.subscriptions.find((item) => item.status === "active" || item.status === "trialing") ?? null;
+  const billing = getBillingState(c);
+  const subscription = getCurrentSubscription(membership?.dealer.subscriptions);
   const activeDomain = resolvedDomain ?? getActiveDealerDomain(membership?.dealer.domains);
 
   return c.json({
@@ -92,14 +94,27 @@ sessionRouter.get("/me", async (c) => {
       tenantStatus,
       resolvedHost,
       entitlements,
+      billing: {
+        status: billing.status,
+        trialEndsAt: billing.trialEndsAt?.toISOString() ?? null,
+        currentPeriodEndsAt: billing.currentPeriodEndsAt?.toISOString() ?? null,
+        requiresPayment: billing.requiresPayment,
+        canAccessApp: billing.canAccessApp,
+      },
       subscription: subscription
         ? {
             id: subscription.id,
             dealerId: subscription.dealerId,
             planId: subscription.planId,
             status: subscription.status,
+            stripeCustomerId: subscription.stripeCustomerId,
+            stripeSubscriptionId: subscription.stripeSubscriptionId,
+            stripeCheckoutSessionId: subscription.stripeCheckoutSessionId,
+            stripePriceId: subscription.stripePriceId,
             featureOverrides: subscription.featureOverrides ?? {},
             billingNotes: subscription.billingNotes,
+            trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
+            currentPeriodEndsAt: subscription.currentPeriodEndsAt?.toISOString() ?? null,
             startsAt: subscription.startsAt.toISOString(),
             endsAt: subscription.endsAt?.toISOString() ?? null,
             createdAt: subscription.createdAt.toISOString(),
@@ -110,6 +125,7 @@ sessionRouter.get("/me", async (c) => {
               name: subscription.plan.name,
               description: subscription.plan.description,
               monthlyPriceCents: subscription.plan.monthlyPriceCents,
+              stripePriceMonthlyId: subscription.plan.stripePriceMonthlyId,
               featureEntitlements: subscription.plan.featureEntitlements,
               isActive: subscription.plan.isActive,
               createdAt: subscription.plan.createdAt.toISOString(),

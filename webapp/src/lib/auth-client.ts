@@ -78,8 +78,14 @@ export interface DealerSubscriptionInfo {
   dealerId: string;
   planId: string;
   status: "active" | "trialing" | "past_due" | "suspended" | "canceled";
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  stripePriceId?: string | null;
   featureOverrides?: Record<string, boolean>;
   billingNotes?: string | null;
+  trialEndsAt?: string | null;
+  currentPeriodEndsAt?: string | null;
   startsAt: string;
   endsAt?: string | null;
   plan?: {
@@ -88,9 +94,18 @@ export interface DealerSubscriptionInfo {
     name: string;
     description?: string | null;
     monthlyPriceCents: number;
+    stripePriceMonthlyId?: string | null;
     featureEntitlements: Record<string, boolean>;
     isActive: boolean;
   };
+}
+
+export interface BillingInfo {
+  status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
+  trialEndsAt: string | null;
+  currentPeriodEndsAt: string | null;
+  requiresPayment: boolean;
+  canAccessApp: boolean;
 }
 
 export interface SessionData {
@@ -102,6 +117,7 @@ export interface SessionData {
   tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
   resolvedHost?: string | null;
   entitlements: Record<string, boolean>;
+  billing: BillingInfo;
   subscription?: DealerSubscriptionInfo | null;
 }
 

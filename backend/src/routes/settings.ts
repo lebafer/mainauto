@@ -57,13 +57,11 @@ const settingsRouter = new Hono();
 
 function hasBrandingChanges(data: Record<string, unknown>) {
   return [
-    "displayName",
-    "supportEmail",
     "logoUrl",
-    "faviconUrl",
-    "primaryColor",
-    "accentColor",
-    "loginHeadline",
+    "documentFooterText",
+    "documentLegalText",
+    "purchaseTerms",
+    "saleTerms",
   ].some((key) => {
     const value = data[key];
     return typeof value === "string" ? value.trim().length > 0 : value != null;
@@ -104,7 +102,7 @@ settingsRouter.put(
     const data = c.req.valid("json");
 
     if (hasBrandingChanges(data)) {
-      const entitlementError = requireEntitlement(c, "white_label");
+      const entitlementError = requireEntitlement(c, "document_branding");
       if (entitlementError) {
         return entitlementError;
       }
@@ -129,7 +127,7 @@ settingsRouter.post("/dealer/logo", async (c) => {
     return forbidden;
   }
 
-  const featureError = requireEntitlement(c, "white_label");
+  const featureError = requireEntitlement(c, "document_branding");
   if (featureError) {
     return featureError;
   }
@@ -183,7 +181,7 @@ settingsRouter.delete("/dealer/logo", async (c) => {
     return forbidden;
   }
 
-  const featureError = requireEntitlement(c, "white_label");
+  const featureError = requireEntitlement(c, "document_branding");
   if (featureError) {
     return featureError;
   }

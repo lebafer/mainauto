@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { User, Lock, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Lock, Loader2, User } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,25 +10,21 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { authClient, TOKEN_KEY, useAuth } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
-import { DealerLogo } from "@/components/branding/DealerLogo";
+import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
-  const { tenant } = useAuth();
-  const isTenantBlocked = tenant?.tenantStatus === "suspended" || tenant?.tenantStatus === "inactive";
+  const { session } = useAuth();
+  const isTenantBlocked = session?.tenantStatus === "suspended" || session?.tenantStatus === "inactive";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username.trim() || !password.trim()) return;
-
-    setIsLoading(true);
-    try {
+  const signInMutation = useMutation({
+    mutationFn: async () => {
       const result = await authClient.signIn.username({
         username: username.trim(),
         password: password.trim(),
@@ -40,51 +38,45 @@ export default function Login() {
           typeof result.error.message === "string"
             ? result.error.message
             : "";
-        toast({
-          title: "Fehler",
-          description: authErrorMessage || "Benutzername oder Passwort ist falsch.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
+        throw new Error(authErrorMessage || "Benutzername oder Passwort ist falsch.");
       }
 
-      // Save the short token from response body (required for Bearer auth)
       const token = (result.data as { token?: string } | null)?.token;
       if (token) {
         localStorage.setItem(TOKEN_KEY, token);
       }
+    },
+    onSuccess: () => {
       window.location.replace("/dashboard");
-    } catch {
+    },
+    onError: (error) => {
       toast({
         title: "Fehler",
-        description: "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+        description: error instanceof Error ? error.message : "Anmeldung fehlgeschlagen.",
         variant: "destructive",
       });
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) return;
+    signInMutation.mutate();
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-muted/50 p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(148,163,184,0.10),transparent)]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#fff8ef_0%,#fff_35%,#fff_100%)] p-4 dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_50%,#020617_100%)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.18),transparent_30%)]" />
 
-      <Card className="relative z-10 w-full max-w-md border-border/50 shadow-2xl">
-        <CardHeader className="space-y-4 text-center">
-          <div>
-            <div className="mb-4 flex justify-center">
-              <DealerLogo
-                src={tenant?.logoUrl}
-                alt={tenant?.displayName ?? "Portal"}
-                className="h-16 w-44"
-                placeholderClassName="bg-muted"
-              />
-            </div>
-            <div className="text-2xl font-semibold tracking-tight">
-              {tenant?.displayName ?? "Autohaus Hub"}
-            </div>
-            <CardDescription className="mt-1.5 text-base">
-              {tenant?.loginHeadline ?? "Melden Sie sich mit Ihren Zugangsdaten an."}
+      <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
+        <CardHeader className="space-y-6 text-center">
+          <div className="flex justify-center">
+            <CarOpsLogo />
+          </div>
+          <div className="space-y-2">
+            <CardTitle className="text-2xl">Willkommen zurueck</CardTitle>
+            <CardDescription className="text-base">
+              Melde dich an und steuere dein Autohaus in CarOps.
             </CardDescription>
           </div>
         </CardHeader>
@@ -106,11 +98,11 @@ export default function Login() {
                   className="pl-10"
                   required
                   autoComplete="username"
-                    autoFocus
-                    disabled={isTenantBlocked}
-                  />
-                </div>
+                  autoFocus
+                  disabled={isTenantBlocked}
+                />
               </div>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="password" className="text-sm font-medium">
@@ -134,7 +126,7 @@ export default function Login() {
 
             {isTenantBlocked ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Dieser Mandant ist derzeit nicht verfuegbar. Bitte wende dich an {tenant?.supportEmail ?? "den Support"}.
+                Dieser Zugang ist derzeit nicht verfuegbar. Bitte wende dich an den Support.
               </div>
             ) : null}
 
@@ -142,9 +134,9 @@ export default function Login() {
               type="submit"
               className="w-full"
               size="lg"
-              disabled={isTenantBlocked || isLoading || !username.trim() || !password.trim()}
+              disabled={isTenantBlocked || signInMutation.isPending || !username.trim() || !password.trim()}
             >
-              {isLoading ? (
+              {signInMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Wird angemeldet...
@@ -153,6 +145,13 @@ export default function Login() {
                 "Anmelden"
               )}
             </Button>
+
+            <div className="text-center text-sm text-muted-foreground">
+              Noch kein Account?{" "}
+              <Link to="/signup" className="font-medium text-amber-600 hover:text-amber-500">
+                Jetzt kostenlos starten
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

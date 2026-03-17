@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { Dealer, DealerDomain, DealerMembershipRole, PlatformRole } from "@prisma/client";
 import type { ActiveDealerMembership, FeatureEntitlements, TenantStatus } from "./dealers";
+import type { BillingState } from "./billing";
 
 export interface RequestContextState {
   user: {
@@ -22,6 +23,7 @@ export interface RequestContextState {
   resolvedDealer: (Dealer & { settings?: unknown }) | null;
   resolvedDomain: DealerDomain | null;
   tenantStatus: TenantStatus;
+  billing: BillingState;
 }
 
 function getState(c: Context): RequestContextState {
@@ -34,6 +36,14 @@ function getState(c: Context): RequestContextState {
     resolvedDealer: (c.get("resolvedDealer") as RequestContextState["resolvedDealer"] | undefined) ?? null,
     resolvedDomain: (c.get("resolvedDomain") as DealerDomain | undefined) ?? null,
     tenantStatus: (c.get("tenantStatus") as TenantStatus | undefined) ?? "unknown",
+    billing:
+      (c.get("billing") as BillingState | undefined) ?? {
+        status: "none",
+        trialEndsAt: null,
+        currentPeriodEndsAt: null,
+        requiresPayment: true,
+        canAccessApp: false,
+      },
   };
 }
 
@@ -84,6 +94,10 @@ export function getResolvedDomain(c: Context) {
 
 export function getTenantStatus(c: Context): TenantStatus {
   return getState(c).tenantStatus;
+}
+
+export function getBillingState(c: Context): BillingState {
+  return getState(c).billing;
 }
 
 export function requirePlatformSuperAdmin(c: Context): Response | null {

@@ -159,7 +159,7 @@ adminRouter.post(
     });
 
     const basicPlan = await prisma.plan.findFirst({
-      where: { slug: "basic" },
+      where: { slug: "standard" },
     });
 
     const dealer = await prisma.dealer.create({
@@ -167,7 +167,7 @@ adminRouter.post(
         name: data.name,
         slug,
         status: data.status,
-        setupStatus: data.setupStatus ?? "pending_setup",
+        setupStatus: data.setupStatus ?? "active",
         settings: {
           create: {
             displayName: data.name,

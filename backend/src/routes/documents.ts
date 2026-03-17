@@ -13,7 +13,7 @@ import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
-import { getCurrentDealer, getCurrentDealerId } from "../lib/request-context";
+import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -144,6 +144,7 @@ interface DocumentParty {
 
 function getDealerDocumentProfile(c: { get: (name: string) => unknown }): DealerDocumentProfile {
   const dealer = getCurrentDealer(c as never);
+  const entitlements = getCurrentEntitlements(c as never);
   const settings = dealer.settings as {
     displayName?: string | null;
     legalName?: string | null;
@@ -182,11 +183,23 @@ function getDealerDocumentProfile(c: { get: (name: string) => unknown }): Dealer
     bankName: settings?.bankName || DEFAULT_DEALER_SETTINGS.bankName,
     iban: settings?.iban || DEFAULT_DEALER_SETTINGS.iban,
     bic: settings?.bic || DEFAULT_DEALER_SETTINGS.bic,
-    logoUrl: settings?.logoUrl || null,
-    documentFooterText: settings?.documentFooterText || DEFAULT_DEALER_SETTINGS.documentFooterText,
-    documentLegalText: settings?.documentLegalText || DEFAULT_DEALER_SETTINGS.documentLegalText,
-    purchaseTerms: settings?.purchaseTerms || DEFAULT_DEALER_SETTINGS.purchaseTerms,
-    saleTerms: settings?.saleTerms || DEFAULT_DEALER_SETTINGS.saleTerms,
+    logoUrl: entitlements.document_branding === true ? settings?.logoUrl || null : null,
+    documentFooterText:
+      entitlements.document_branding === true
+        ? settings?.documentFooterText || DEFAULT_DEALER_SETTINGS.documentFooterText
+        : DEFAULT_DEALER_SETTINGS.documentFooterText,
+    documentLegalText:
+      entitlements.document_branding === true
+        ? settings?.documentLegalText || DEFAULT_DEALER_SETTINGS.documentLegalText
+        : DEFAULT_DEALER_SETTINGS.documentLegalText,
+    purchaseTerms:
+      entitlements.document_branding === true
+        ? settings?.purchaseTerms || DEFAULT_DEALER_SETTINGS.purchaseTerms
+        : DEFAULT_DEALER_SETTINGS.purchaseTerms,
+    saleTerms:
+      entitlements.document_branding === true
+        ? settings?.saleTerms || DEFAULT_DEALER_SETTINGS.saleTerms
+        : DEFAULT_DEALER_SETTINGS.saleTerms,
   };
 }
 
