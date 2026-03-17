@@ -39,7 +39,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ef_0%,#fff_35%,#fff_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_40%,#020617_100%)] dark:text-white">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#eef4fb_0%,#f8fbff_30%,#ffffff_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#020617_0%,#0b1730_40%,#020617_100%)] dark:text-white">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
         <header className="flex items-center justify-between gap-4">
           <CarOpsLogo />
@@ -47,7 +47,7 @@ export default function LandingPage() {
             <Button asChild variant="ghost">
               <Link to="/login">Login</Link>
             </Button>
-            <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+            <Button asChild className="bg-[#19477e] text-white hover:bg-[#123965]">
               <Link to="/signup">Kostenlos starten</Link>
             </Button>
           </div>
@@ -60,7 +60,7 @@ export default function LandingPage() {
             transition={{ duration: 0.45 }}
             className="space-y-8"
           >
-            <Badge className="w-fit rounded-full bg-amber-500/15 px-4 py-1 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300">
+            <Badge className="w-fit rounded-full bg-[#19477e]/10 px-4 py-1 text-[#19477e] hover:bg-[#19477e]/10 dark:text-[#c8dbf7]">
               SaaS für moderne Autohäuser
             </Badge>
             <div className="space-y-4">
@@ -71,6 +71,19 @@ export default function LandingPage() {
                 Verwalte Bestand, Verkauf, Dokumente und dein Team in einer gemeinsamen Cloud-Plattform. Schnell
                 startklar, klar bepreist und ohne versteckte Kosten.
               </p>
+            </div>
+
+            <div className="relative overflow-hidden rounded-[2rem] border border-[#19477e]/10 bg-white/85 p-6 shadow-[0_30px_90px_-45px_rgba(25,71,126,0.42)] backdrop-blur dark:border-white/10 dark:bg-white/5">
+              <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,rgba(94,129,173,0.2),transparent_70%)]" />
+              <div className="relative flex items-center gap-5">
+                <CarOpsLogo compact className="scale-[1.55]" />
+                <div className="space-y-1">
+                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#456792]">CarOps Cloud</div>
+                  <div className="text-xl font-semibold text-slate-900 dark:text-white">
+                    Klar gebrandet, direkt startklar und ohne White-Label-Ballast.
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-3">
@@ -93,7 +106,7 @@ export default function LandingPage() {
               ].map((item) => (
                 <Card key={item.title} className="border-border/70 bg-card/75 shadow-xl backdrop-blur">
                   <CardHeader className="pb-3">
-                    <item.icon className="h-5 w-5 text-amber-500" />
+                    <item.icon className="h-5 w-5 text-[#19477e]" />
                     <CardTitle className="mt-3 text-lg">{item.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm text-muted-foreground">{item.body}</CardContent>
@@ -102,7 +115,7 @@ export default function LandingPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+              <Button asChild size="lg" className="bg-[#19477e] text-white hover:bg-[#123965]">
                 <Link to="/signup">
                   Jetzt kostenlos starten
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -120,7 +133,7 @@ export default function LandingPage() {
             transition={{ duration: 0.45, delay: 0.1 }}
             className="space-y-4"
           >
-            <Card className="border-border/70 bg-slate-950 text-slate-50 shadow-2xl">
+            <Card className="border-[#19477e]/15 bg-[linear-gradient(180deg,#0f2542_0%,#102d50_100%)] text-slate-50 shadow-2xl">
               <CardHeader>
                 <CardTitle>Tarife</CardTitle>
               </CardHeader>
@@ -141,14 +154,14 @@ export default function LandingPage() {
                         : ["Fahrzeugverwaltung", "CRM und Verkauf", "14 Tage Testphase"])
                         .map((feature) => (
                           <div key={feature} className="flex items-start gap-2">
-                            <CheckCircle2 className="mt-0.5 h-4 w-4 text-amber-400" />
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 text-[#7fb0f4]" />
                             <span>{feature}</span>
                           </div>
                         ))}
                     </div>
                   </div>
                 ))}
-                <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-slate-200">
+                <div className="rounded-2xl border border-[#7fb0f4]/25 bg-[#7fb0f4]/10 p-4 text-sm text-slate-200">
                   Testphase: 14 Tage. Zahlung erst nötig, wenn du danach weiternutzen willst.
                 </div>
               </CardContent>

@@ -59,8 +59,8 @@ export function AppSidebar() {
       className="border-r border-sidebar-border"
       style={{
         background:
-          "linear-gradient(180deg, rgba(15,23,42,0.98) 0%, rgba(15,23,42,0.92) 24%, hsl(var(--sidebar-background)) 48%)",
-        boxShadow: "inset 2px 0 0 rgba(245,158,11,0.55)",
+          "linear-gradient(180deg, rgba(8,20,38,0.98) 0%, rgba(15,34,60,0.94) 24%, hsl(var(--sidebar-background)) 48%)",
+        boxShadow: "inset 2px 0 0 rgba(96,145,209,0.55)",
       }}
     >
       <SidebarHeader className="h-24 overflow-hidden p-0">
@@ -109,7 +109,7 @@ export function AppSidebar() {
         <SidebarSeparator />
         <div
           className="rounded-lg px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
-          style={{ background: "rgba(245,158,11,0.10)" }}
+          style={{ background: "rgba(96,145,209,0.10)" }}
         >
           <div className="font-medium text-foreground">
             {session?.dealerSettings?.displayName ?? session?.dealer?.name ?? "Autohaus"}

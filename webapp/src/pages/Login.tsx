@@ -65,8 +65,8 @@ export default function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#fff8ef_0%,#fff_35%,#fff_100%)] p-4 dark:bg-[linear-gradient(180deg,#020617_0%,#0f172a_50%,#020617_100%)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.18),transparent_30%)]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#edf4fb_0%,#f8fbff_35%,#ffffff_100%)] p-4 dark:bg-[linear-gradient(180deg,#020617_0%,#0b1730_50%,#020617_100%)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,78,129,0.18),transparent_35%)]" />
 
       <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
         <CardHeader className="space-y-6 text-center">
@@ -126,7 +126,7 @@ export default function Login() {
 
             {isTenantBlocked ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Dieser Zugang ist derzeit nicht verfuegbar. Bitte wende dich an den Support.
+                Dieser Zugang ist derzeit nicht verfügbar. Bitte wende dich an den Support.
               </div>
             ) : null}
 
@@ -148,7 +148,7 @@ export default function Login() {
 
             <div className="text-center text-sm text-muted-foreground">
               Noch kein Account?{" "}
-              <Link to="/signup" className="font-medium text-amber-600 hover:text-amber-500">
+              <Link to="/signup" className="font-medium text-[#19477e] hover:text-[#123965]">
                 Jetzt kostenlos starten
               </Link>
             </div>

@@ -79,11 +79,11 @@ export default function AdminLogin() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.2),transparent_40%),linear-gradient(to_bottom,#09090b,#111827)] p-4">
-      <Card className="w-full max-w-md border-cyan-400/20 bg-slate-950/80 text-white shadow-2xl backdrop-blur">
+    <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.2),transparent_40%),linear-gradient(to_bottom,#08101d,#111827)] p-4">
+      <Card className="w-full max-w-md border-[#7fb0f4]/20 bg-slate-950/80 text-white shadow-2xl backdrop-blur">
         <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
-            <ShieldCheck className="h-8 w-8 text-cyan-300" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#7fb0f4]/30 bg-[#7fb0f4]/10">
+            <ShieldCheck className="h-8 w-8 text-[#c8dbf7]" />
           </div>
           <div>
             <CardTitle className="text-2xl">Superadmin Login</CardTitle>
@@ -127,7 +127,7 @@ export default function AdminLogin() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-cyan-500 text-slate-950 hover:bg-cyan-400" disabled={isLoading}>
+            <Button type="submit" className="w-full bg-[#7fb0f4] text-slate-950 hover:bg-[#9bc1f6]" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
