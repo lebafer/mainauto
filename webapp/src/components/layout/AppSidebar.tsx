@@ -43,9 +43,6 @@ export function AppSidebar() {
           { to: "/settings/team", label: "Team", icon: Users },
         ]
       : []),
-    ...(session?.user.platformRole === "platform_super_admin"
-      ? [{ to: "/admin/dealers", label: "Super-Admin", icon: LayoutDashboard }]
-      : []),
   ];
 
   const handleSignOut = async () => {
