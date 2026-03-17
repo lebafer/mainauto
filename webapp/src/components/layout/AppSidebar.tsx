@@ -53,9 +53,23 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+    <Sidebar
+      collapsible="icon"
+      className="border-r border-sidebar-border"
+      style={{
+        background:
+          "linear-gradient(180deg, rgb(var(--tenant-accent-rgb) / 0.26) 0%, rgb(var(--tenant-primary-rgb) / 0.08) 18%, hsl(var(--sidebar-background)) 34%)",
+        boxShadow: "inset 2px 0 0 rgb(var(--tenant-primary-rgb) / 0.55)",
+      }}
+    >
       <SidebarHeader className="h-16 overflow-hidden p-0">
-        <div className="flex h-full w-full items-center justify-center px-4">
+        <div
+          className="flex h-full w-full items-center justify-center px-4"
+          style={{
+            background:
+              "linear-gradient(135deg, rgb(var(--tenant-primary-rgb) / 0.20), rgb(var(--tenant-accent-rgb) / 0.32))",
+          }}
+        >
           {session?.dealerSettings?.logoUrl ? (
             <img
               src={session.dealerSettings.logoUrl}
@@ -116,7 +130,10 @@ export function AppSidebar() {
 
       <SidebarFooter>
         <SidebarSeparator />
-        <div className="px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
+        <div
+          className="rounded-lg px-3 py-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
+          style={{ background: "rgb(var(--tenant-primary-rgb) / 0.10)" }}
+        >
           <div className="font-medium text-foreground">{session?.dealer?.name ?? "MeinAuto OS"}</div>
           <div>{session?.subscription?.plan?.name ?? "Kein Tarif"}</div>
         </div>

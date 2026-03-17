@@ -75,34 +75,29 @@ const formatDateLong = (dateString: string) =>
 interface StatConfig {
   label: string;
   icon: typeof Car;
-  gradient: string;
-  iconBg: string;
+  tone: "primary" | "accent";
 }
 
 const statConfigs: StatConfig[] = [
   {
     label: "Gesamte Fahrzeuge",
     icon: Car,
-    gradient: "from-blue-500/10 via-blue-500/5 to-transparent",
-    iconBg: "bg-blue-500/15 text-blue-600 dark:text-blue-400",
+    tone: "primary",
   },
   {
     label: "Verfugbare Fahrzeuge",
     icon: Car,
-    gradient: "from-emerald-500/10 via-emerald-500/5 to-transparent",
-    iconBg: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    tone: "accent",
   },
   {
     label: "Gesamte Kunden",
     icon: Users,
-    gradient: "from-amber-500/10 via-amber-500/5 to-transparent",
-    iconBg: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    tone: "primary",
   },
   {
     label: "Bestandswert",
     icon: TrendingUp,
-    gradient: "from-violet-500/10 via-violet-500/5 to-transparent",
-    iconBg: "bg-violet-500/15 text-violet-600 dark:text-violet-400",
+    tone: "accent",
   },
 ];
 
@@ -120,15 +115,34 @@ function StatCard({
   index: number;
 }) {
   const Icon = config.icon;
+  const gradient =
+    config.tone === "primary"
+      ? "linear-gradient(135deg, rgb(var(--tenant-primary-rgb) / 0.18), rgb(var(--tenant-primary-rgb) / 0.03) 55%, transparent)"
+      : "linear-gradient(135deg, rgb(var(--tenant-accent-rgb) / 0.20), rgb(var(--tenant-accent-rgb) / 0.04) 55%, transparent)";
+  const iconStyle =
+    config.tone === "primary"
+      ? {
+          background: "rgb(var(--tenant-primary-rgb) / 0.14)",
+          color: "rgb(var(--tenant-primary-rgb) / 1)",
+        }
+      : {
+          background: "rgb(var(--tenant-accent-rgb) / 0.16)",
+          color: "rgb(var(--tenant-accent-rgb) / 1)",
+        };
 
   return (
     <Card
       className="relative overflow-hidden border-border/50 animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
-      style={{ animationDelay: `${index * 80}ms`, animationDuration: "400ms" }}
+      style={{
+        animationDelay: `${index * 80}ms`,
+        animationDuration: "400ms",
+        boxShadow:
+          config.tone === "primary"
+            ? "inset 0 1px 0 rgb(var(--tenant-primary-rgb) / 0.18)"
+            : "inset 0 1px 0 rgb(var(--tenant-accent-rgb) / 0.18)",
+      }}
     >
-      <div
-        className={`absolute inset-0 bg-gradient-to-br ${config.gradient} pointer-events-none`}
-      />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: gradient }} />
       <CardContent className="relative p-5">
         <div className="flex items-start justify-between">
           <div className="space-y-2">
@@ -144,9 +158,7 @@ function StatCard({
               <p className="text-xs text-muted-foreground">{subtitle}</p>
             ) : null}
           </div>
-          <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${config.iconBg}`}
-          >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg" style={iconStyle}>
             <Icon className="h-5 w-5" />
           </div>
         </div>
