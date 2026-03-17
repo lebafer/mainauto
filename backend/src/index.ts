@@ -7,7 +7,6 @@ import { env } from "./env";
 import { prisma } from "./prisma";
 import { bootstrapInitialAdmin } from "./seed";
 import {
-  getActiveDealerDomain,
   ensureCoreSaasData,
   getMembershipEntitlements,
   getTenantStatus as deriveTenantStatus,
@@ -50,20 +49,8 @@ type Variables = {
         updatedAt: Date;
       })
     | null;
-  resolvedDomain:
-    | {
-        id: string;
-        dealerId: string;
-        host: string;
-        status: string;
-        isPrimary: boolean;
-        verificationToken: string | null;
-        verifiedAt: Date | null;
-        createdAt: Date;
-        updatedAt: Date;
-      }
-    | null;
-  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  resolvedDomain: null;
+  tenantStatus: "unknown" | "pending_setup" | "active" | "suspended" | "inactive";
   billing: {
     status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
     trialEndsAt: Date | null;
@@ -138,39 +125,9 @@ app.use("*", logger());
 app.use("*", async (c, next) => {
   const host = normalizeHost(c.req.header("host"));
   c.set("resolvedHost", host || null);
-
-  if (!host) {
-    c.set("resolvedDealer", null);
-    c.set("resolvedDomain", null);
-    c.set("tenantStatus", "unknown");
-    return next();
-  }
-
-  const domainRecord = await prisma.dealerDomain.findUnique({
-    where: { host },
-    include: {
-      dealer: {
-        include: {
-          settings: true,
-          domains: true,
-          subscriptions: {
-            include: { plan: true },
-            orderBy: { createdAt: "desc" },
-          },
-        },
-      },
-    },
-  });
-
-  c.set("resolvedDomain", domainRecord ?? null);
-  c.set("resolvedDealer", domainRecord?.dealer ?? null);
-  c.set(
-    "tenantStatus",
-    deriveTenantStatus({
-      dealerStatus: domainRecord?.dealer.status,
-      setupStatus: domainRecord?.dealer.setupStatus,
-    })
-  );
+  c.set("resolvedDealer", null);
+  c.set("resolvedDomain", null);
+  c.set("tenantStatus", "unknown");
 
   return next();
 });
@@ -251,7 +208,6 @@ app.use("/api/*", async (c, next) => {
           dealer: {
             include: {
               settings: true,
-              domains: true,
               subscriptions: {
                 include: { plan: true },
                 orderBy: { createdAt: "desc" },
@@ -266,30 +222,10 @@ app.use("/api/*", async (c, next) => {
 
   const resolvedDealer = c.get("resolvedDealer");
   const memberships = (dbUser?.memberships ?? []) as ActiveDealerMembership[];
-  const activeMembership =
-    resolvedDealer
-      ? memberships.find((membership) => membership.dealerId === resolvedDealer.id) ?? null
-      : pickActiveMembership(memberships);
+  const activeMembership = pickActiveMembership(memberships);
   const entitlements = getMembershipEntitlements(activeMembership);
-  const effectiveDealer = resolvedDealer ?? activeMembership?.dealer ?? null;
-  const effectiveDomain = c.get("resolvedDomain") ?? getActiveDealerDomain(activeMembership?.dealer.domains);
+  const effectiveDealer = activeMembership?.dealer ?? null;
   const billing = getBillingState(getCurrentSubscription(activeMembership?.dealer.subscriptions));
-
-  if (
-    resolvedDealer &&
-    !activeMembership &&
-    dbUser?.platformRole !== "platform_super_admin"
-  ) {
-    return c.json(
-      {
-        error: {
-          code: "WRONG_TENANT",
-          message: "Benutzer gehoert nicht zu diesem Mandanten",
-        },
-      },
-      403
-    );
-  }
 
   if (!activeMembership && dbUser?.platformRole !== "platform_super_admin") {
     return c.json(
@@ -317,7 +253,6 @@ app.use("/api/*", async (c, next) => {
 
   if (effectiveDealer) {
     c.set("resolvedDealer", effectiveDealer as Variables["resolvedDealer"]);
-    c.set("resolvedDomain", effectiveDomain as Variables["resolvedDomain"]);
     c.set(
       "tenantStatus",
       deriveTenantStatus({
@@ -340,7 +275,7 @@ app.use("/api/*", async (c, next) => {
       {
         error: {
           code: "UNKNOWN_TENANT",
-          message: "Keine passende Mandanten-Domain gefunden",
+          message: "Kein aktives Autohaus gefunden",
         },
       },
       404
@@ -361,7 +296,7 @@ app.use("/api/*", async (c, next) => {
     }
   }
 
-  if (tenantStatus === "pending_setup" || tenantStatus === "ready_for_dns") {
+  if (tenantStatus === "pending_setup") {
     const allowedPrefixes = ["/api/session", "/api/settings", "/api/billing"];
     if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
       return c.json(

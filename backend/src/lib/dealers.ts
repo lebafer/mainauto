@@ -1,7 +1,5 @@
 import type {
   Dealer,
-  DealerDomain,
-  DealerDomainStatus,
   DealerMembership,
   DealerMembershipRole,
   DealerSettings,
@@ -17,13 +15,12 @@ export type FeatureEntitlements = Record<string, boolean>;
 export type TenantStatus =
   | "unknown"
   | "pending_setup"
-  | "ready_for_dns"
   | "active"
   | "suspended"
   | "inactive";
 
 export const DEFAULT_PLATFORM_NAME = "CarOps";
-export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem fuer dein Autohaus";
+export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem für dein Autohaus";
 export const DEFAULT_DEALER_NAME = "Referenz Autohaus";
 export const DEFAULT_DEALER_SLUG = "mainauto";
 export const DEFAULT_SUPPORT_EMAIL = "support@carops.local";
@@ -60,7 +57,7 @@ export const DEFAULT_PLAN_DEFINITIONS = [
   {
     slug: "standard",
     name: "Standard",
-    description: "Der kompakte Einstieg fuer kleine Autohaeuser mit 14 Tagen Testphase.",
+    description: "Der kompakte Einstieg für kleine Autohäuser mit 14 Tagen Testphase.",
     monthlyPriceCents: 5000,
     stripePriceMonthlyId: env.STRIPE_STANDARD_PRICE_ID?.trim() || null,
     featureEntitlements: {
@@ -72,7 +69,7 @@ export const DEFAULT_PLAN_DEFINITIONS = [
   {
     slug: "pro",
     name: "Pro",
-    description: "Fuer Autohaeuser mit Team, Dokumentenbranding und KI-Briefscan.",
+    description: "Für Autohäuser mit Team, Dokumentenbranding und KI-Briefscan.",
     monthlyPriceCents: 8900,
     stripePriceMonthlyId: env.STRIPE_PRO_PRICE_ID?.trim() || null,
     featureEntitlements: {
@@ -123,10 +120,6 @@ export function normalizeHost(value: string | null | undefined): string {
   return value.trim().toLowerCase().replace(/\.$/, "").replace(/:\d+$/, "");
 }
 
-export function createFallbackDealerHost(slug: string): string {
-  return `${slug}.${env.PLATFORM_DOMAIN}`;
-}
-
 export function getTenantStatus(input: {
   dealerStatus?: string | null;
   setupStatus?: DealerSetupStatus | string | null;
@@ -141,10 +134,6 @@ export function getTenantStatus(input: {
 
   if (input.dealerStatus === "inactive") {
     return "inactive";
-  }
-
-  if (input.setupStatus === "ready_for_dns") {
-    return "ready_for_dns";
   }
 
   if (input.setupStatus === "pending_setup") {
@@ -195,7 +184,6 @@ export async function ensureDefaultDealer() {
     where: { slug: DEFAULT_DEALER_SLUG },
     include: {
       settings: true,
-      domains: true,
       subscriptions: true,
     },
   });
@@ -226,22 +214,6 @@ export async function ensureDefaultDealer() {
     });
   }
 
-  const fallbackHost = createFallbackDealerHost(dealer.slug);
-  const hasAnyDomain = (existingDealer?.domains.length ?? 0) > 0;
-  const existingFallbackDomain = existingDealer?.domains.find((domain) => domain.host === fallbackHost);
-  if (!existingFallbackDomain) {
-    await prisma.dealerDomain.create({
-      data: {
-        dealerId: dealer.id,
-        host: fallbackHost,
-        status: "active",
-        isPrimary: !hasAnyDomain,
-        verificationToken: null,
-        verifiedAt: new Date(),
-      },
-    });
-  }
-
   const hasAnySubscription = (existingDealer?.subscriptions.length ?? 0) > 0;
   const defaultPlan = await prisma.plan.findUnique({ where: { slug: "pro" } });
   if (!hasAnySubscription && defaultPlan) {
@@ -266,7 +238,6 @@ export async function ensureCoreSaasData() {
 export type ActiveDealerMembership = DealerMembership & {
   dealer: Dealer & {
     settings: DealerSettings | null;
-    domains: DealerDomain[];
     subscriptions: Array<DealerSubscription & { plan: Plan }>;
   };
 };
@@ -287,16 +258,6 @@ export function getMembershipEntitlements(membership: ActiveDealerMembership | n
   );
 
   return mergeFeatureEntitlements(subscription?.plan.featureEntitlements, subscription?.featureOverrides);
-}
-
-export function getActiveDealerDomain(
-  domains: Array<DealerDomain & { status?: DealerDomainStatus | string }> | undefined
-): DealerDomain | null {
-  if (!domains?.length) {
-    return null;
-  }
-
-  return domains.find((domain) => domain.isPrimary && domain.status === "active") ?? domains[0] ?? null;
 }
 
 export function isPlatformSuperAdmin(platformRole: PlatformRole | string | null | undefined): boolean {

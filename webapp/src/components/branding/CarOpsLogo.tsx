@@ -16,7 +16,7 @@ export function CarOpsLogo({ className, compact = false }: CarOpsLogoProps) {
         <div className="leading-none">
           <div className="font-semibold tracking-[0.24em] text-slate-950 dark:text-white">CAROPS</div>
           <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            Das Betriebssystem fuer dein Autohaus
+            Das Betriebssystem für dein Autohaus
           </div>
         </div>
       )}

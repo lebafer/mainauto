@@ -139,14 +139,14 @@ export default function Billing() {
             <div className="space-y-3">
               <CardTitle className="text-3xl">
                 {session.billing.isComplimentary
-                  ? `${session.subscription?.plan?.name ?? "CarOps"} ist kostenlos fuer dieses Autohaus freigeschaltet.`
+                  ? `${session.subscription?.plan?.name ?? "CarOps"} ist kostenlos für dieses Autohaus freigeschaltet.`
                   : session.billing.requiresPayment
                   ? "Dein Zugang ist aktuell hinter der Paywall."
                   : `Du nutzt gerade ${session.subscription?.plan?.name ?? "CarOps"}.`}
               </CardTitle>
               <CardDescription className="max-w-2xl text-base leading-7">
                 {session.billing.isComplimentary
-                  ? "Dieses Autohaus wurde im Adminbereich kostenlos freigeschaltet. Stripe ist deshalb fuer den Zugriff aktuell nicht noetig."
+                  ? "Dieses Autohaus wurde im Adminbereich kostenlos freigeschaltet. Stripe ist deshalb für den Zugriff aktuell nicht nötig."
                   : session.billing.requiresPayment
                   ? "Waehle jetzt einen Tarif und aktiviere dein Abo, damit du wieder voll auf dein Autohaus zugreifen kannst."
                   : "Verwalte hier Testphase, Upgrade und dein Zahlungsprofil. Alle Tarifwechsel laufen direkt ueber Stripe."}
@@ -169,7 +169,7 @@ export default function Billing() {
                 text: currentPlan
                   ? session.billing.isComplimentary
                     ? `${currentPlan.name} ist kostenlos freigeschaltet.`
-                    : `${currentPlan.name} fuer ${formatCurrency(currentPlan.monthlyPriceCents)} / Monat`
+                    : `${currentPlan.name} für ${formatCurrency(currentPlan.monthlyPriceCents)} / Monat`
                   : "Noch kein Tarif aktiv.",
               },
               {

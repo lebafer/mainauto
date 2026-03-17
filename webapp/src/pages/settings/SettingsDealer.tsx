@@ -166,7 +166,7 @@ export default function SettingsDealer() {
         <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <CardTitle>Unternehmensprofil</CardTitle>
-            <CardDescription>Diese Daten gelten fuer dein Autohaus und fliessen in Dokumente und Stammdaten ein.</CardDescription>
+            <CardDescription>Diese Daten gelten für dein Autohaus und fliessen in Dokumente und Stammdaten ein.</CardDescription>
           </div>
           <Badge variant="outline">{session.subscription?.plan?.name ?? "Kein Tarif"}</Badge>
         </CardHeader>

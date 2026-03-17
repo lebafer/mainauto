@@ -187,23 +187,6 @@ export const DealerSubscriptionComplimentaryUpdateSchema = z.object({
   complimentaryAccess: z.boolean(),
 });
 
-export const DealerDomainCreateSchema = z.object({
-  host: z
-    .string()
-    .trim()
-    .min(4, "Host ist erforderlich")
-    .transform((value) => value.toLowerCase()),
-});
-
-export const DealerDomainVerifySchema = z.object({
-  status: DealerDomainStatusSchema.default("pending_dns"),
-});
-
-export const DealerDomainActivateSchema = z.object({
-  status: z.enum(["active", "disabled", "failed"]).default("active"),
-  isPrimary: z.boolean().default(true),
-});
-
 export const PublicTenantContextSchema = z.object({
   displayName: z.string(),
   logoUrl: z.string().nullable(),
@@ -276,32 +259,6 @@ export const StripeCheckoutMetadataSchema = z.object({
   dealerSubscriptionId: z.string(),
 });
 
-export const OnboardingInquiryCreateSchema = z.object({
-  businessName: z.string().min(2, "Firmenname ist erforderlich"),
-  contactName: z.string().min(2, "Ansprechpartner ist erforderlich"),
-  email: z.string().email("Gueltige E-Mail erforderlich"),
-  phone: z.string().trim().optional(),
-  website: z.string().trim().optional(),
-  notes: z.string().trim().max(4000).optional(),
-});
-
-export const OnboardingInquirySchema = z.object({
-  id: z.string(),
-  businessName: z.string(),
-  contactName: z.string(),
-  email: z.string(),
-  phone: z.string().nullable().optional(),
-  website: z.string().nullable().optional(),
-  notes: z.string().nullable().optional(),
-  status: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-
-export const OnboardingInquiryStatusUpdateSchema = z.object({
-  status: z.enum(["new", "in_progress", "converted", "archived"]),
-});
-
 export const SessionContextSchema = z.object({
   user: z.object({
     id: z.string(),
@@ -331,7 +288,6 @@ export type Plan = z.infer<typeof PlanSchema>;
 export type DealerSubscription = z.infer<typeof DealerSubscriptionSchema>;
 export type PublicTenantContext = z.infer<typeof PublicTenantContextSchema>;
 export type PublicPlan = z.infer<typeof PublicPlanSchema>;
-export type OnboardingInquiry = z.infer<typeof OnboardingInquirySchema>;
 export type SessionContext = z.infer<typeof SessionContextSchema>;
 
 // ─── Vehicle Schemas ─────────────────────────────────────────

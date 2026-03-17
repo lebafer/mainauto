@@ -9,28 +9,15 @@ import { randomUUID } from "crypto";
 import {
   AdminDealerCreateSchema,
   AdminDealerUpdateSchema,
-  DealerDomainActivateSchema,
-  DealerDomainCreateSchema,
-  DealerDomainVerifySchema,
   DealerSubscriptionComplimentaryUpdateSchema,
   DealerSubscriptionUpdateSchema,
-  OnboardingInquiryStatusUpdateSchema,
 } from "../types";
 import { requirePlatformSuperAdmin } from "../lib/request-context";
-import { createFallbackDealerHost, normalizeHost, slugifyDealerName } from "../lib/dealers";
+import { slugifyDealerName } from "../lib/dealers";
 import { createCredentialUser } from "../lib/auth-users";
 
 const adminRouter = new Hono();
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
-
-function isValidHost(value: string): boolean {
-  const normalized = normalizeHost(value);
-  if (!normalized || normalized.length > 253) {
-    return false;
-  }
-
-  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(normalized);
-}
 
 async function deleteDealerLogoFile(logoUrl: string | null | undefined) {
   if (!logoUrl?.startsWith("/api/uploads/")) {
@@ -57,9 +44,6 @@ adminRouter.get("/dealers", async (c) => {
   const dealers = await prisma.dealer.findMany({
     include: {
       settings: true,
-      domains: {
-        orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-      },
       memberships: {
         include: {
           user: {
@@ -92,30 +76,6 @@ adminRouter.get("/dealers", async (c) => {
 
   return c.json({ data: dealers });
 });
-
-adminRouter.get("/inquiries", async (c) => {
-  const inquiries = await prisma.onboardingInquiry.findMany({
-    orderBy: { createdAt: "desc" },
-  });
-
-  return c.json({ data: inquiries });
-});
-
-adminRouter.patch(
-  "/inquiries/:inquiryId",
-  zValidator("json", OnboardingInquiryStatusUpdateSchema),
-  async (c) => {
-    const inquiryId = c.req.param("inquiryId");
-    const data = c.req.valid("json");
-
-    const inquiry = await prisma.onboardingInquiry.update({
-      where: { id: inquiryId },
-      data: { status: data.status },
-    });
-
-    return c.json({ data: inquiry });
-  }
-);
 
 adminRouter.get("/plans", async (c) => {
   const plans = await prisma.plan.findMany({
@@ -175,15 +135,6 @@ adminRouter.post(
             legalName: data.name,
           },
         },
-        domains: {
-          create: {
-            host: createFallbackDealerHost(slug),
-            status: "active",
-            isPrimary: true,
-            verificationToken: null,
-            verifiedAt: new Date(),
-          },
-        },
         memberships: {
           create: {
             userId: owner.id,
@@ -203,9 +154,6 @@ adminRouter.post(
       },
       include: {
         settings: true,
-        domains: {
-          orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-        },
         memberships: {
           include: {
             user: {
@@ -343,18 +291,6 @@ adminRouter.put(
         }
       }
 
-      if (nextSlug && nextSlug !== existingDealer.slug) {
-        await tx.dealerDomain.updateMany({
-          where: {
-            dealerId,
-            host: createFallbackDealerHost(existingDealer.slug),
-          },
-          data: {
-            host: createFallbackDealerHost(nextSlug),
-          },
-        });
-      }
-
       return tx.dealer.update({
         where: { id: dealerId },
         data: {
@@ -379,9 +315,6 @@ adminRouter.put(
         },
         include: {
           settings: true,
-          domains: {
-            orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-          },
           memberships: {
             include: {
               user: {
@@ -529,7 +462,7 @@ adminRouter.put(
 
     if (!subscription) {
       return c.json(
-        { error: { code: "SUBSCRIPTION_NOT_FOUND", message: "Fuer dieses Autohaus existiert noch kein Tarif." } },
+        { error: { code: "SUBSCRIPTION_NOT_FOUND", message: "Für dieses Autohaus existiert noch kein Tarif." } },
         404
       );
     }
@@ -545,202 +478,5 @@ adminRouter.put(
     return c.json({ data: updatedSubscription });
   }
 );
-
-adminRouter.post(
-  "/dealers/:dealerId/domains",
-  zValidator("json", DealerDomainCreateSchema),
-  async (c) => {
-    const dealerId = c.req.param("dealerId");
-    const data = c.req.valid("json");
-    const host = normalizeHost(data.host);
-
-    if (!isValidHost(host)) {
-      return c.json({ error: { code: "INVALID_HOST", message: "Host ist ungueltig" } }, 400);
-    }
-
-    const dealer = await prisma.dealer.findUnique({
-      where: { id: dealerId },
-      include: {
-        subscriptions: {
-          include: { plan: true },
-          orderBy: { createdAt: "desc" },
-        },
-      },
-    });
-
-    if (!dealer) {
-      return c.json({ error: { code: "NOT_FOUND", message: "Autohaus nicht gefunden" } }, 404);
-    }
-
-    const activeSubscription =
-      dealer.subscriptions.find((item) => item.status === "active" || item.status === "trialing") ?? null;
-    const entitlements = {
-      ...(activeSubscription?.plan.featureEntitlements as Record<string, boolean> | undefined),
-      ...((activeSubscription?.featureOverrides as Record<string, boolean> | undefined) ?? {}),
-    };
-
-    if (entitlements.custom_domain !== true) {
-      return c.json(
-        { error: { code: "FEATURE_NOT_ENABLED", message: "Custom Domains sind fuer diesen Tarif nicht aktiv" } },
-        403
-      );
-    }
-
-    const existing = await prisma.dealerDomain.findUnique({
-      where: { host },
-    });
-
-    if (existing) {
-      return c.json({ error: { code: "DOMAIN_EXISTS", message: "Domain ist bereits vergeben" } }, 409);
-    }
-
-    const domain = await prisma.dealerDomain.create({
-      data: {
-        dealerId,
-        host,
-        status: "pending_dns",
-        isPrimary: false,
-        verificationToken: randomUUID(),
-      },
-    });
-
-    await prisma.dealer.update({
-      where: { id: dealerId },
-      data: {
-        setupStatus: dealer.setupStatus === "pending_setup" ? "ready_for_dns" : dealer.setupStatus,
-      },
-    });
-
-    return c.json({ data: domain }, 201);
-  }
-);
-
-adminRouter.post(
-  "/domains/:domainId/verify",
-  zValidator("json", DealerDomainVerifySchema),
-  async (c) => {
-    const domainId = c.req.param("domainId");
-    const data = c.req.valid("json");
-
-    const domain = await prisma.dealerDomain.findUnique({
-      where: { id: domainId },
-    });
-
-    if (!domain) {
-      return c.json({ error: { code: "NOT_FOUND", message: "Domain nicht gefunden" } }, 404);
-    }
-
-    const nextStatus = data.status === "pending_dns" ? "pending_dns" : domain.status;
-
-    const updated = await prisma.dealerDomain.update({
-      where: { id: domainId },
-      data: {
-        status: nextStatus,
-        verificationToken: domain.verificationToken ?? randomUUID(),
-      },
-    });
-
-    return c.json({ data: updated });
-  }
-);
-
-adminRouter.put(
-  "/domains/:domainId/activate",
-  zValidator("json", DealerDomainActivateSchema),
-  async (c) => {
-    const domainId = c.req.param("domainId");
-    const data = c.req.valid("json");
-
-    const domain = await prisma.dealerDomain.findUnique({
-      where: { id: domainId },
-    });
-
-    if (!domain) {
-      return c.json({ error: { code: "NOT_FOUND", message: "Domain nicht gefunden" } }, 404);
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      if (data.isPrimary) {
-        await tx.dealerDomain.updateMany({
-          where: { dealerId: domain.dealerId },
-          data: { isPrimary: false },
-        });
-      }
-
-      const activatedDomain = await tx.dealerDomain.update({
-        where: { id: domainId },
-        data: {
-          status: data.status,
-          isPrimary: data.isPrimary,
-          verifiedAt: data.status === "active" ? new Date() : null,
-          verificationToken: data.status === "active" ? null : domain.verificationToken,
-        },
-      });
-
-      await tx.dealer.update({
-        where: { id: domain.dealerId },
-        data: {
-          setupStatus: data.status === "active" ? "active" : "ready_for_dns",
-        },
-      });
-
-      return activatedDomain;
-    });
-
-    return c.json({ data: updated });
-  }
-);
-
-adminRouter.delete("/domains/:domainId", async (c) => {
-  const domainId = c.req.param("domainId");
-
-  const domain = await prisma.dealerDomain.findUnique({
-    where: { id: domainId },
-  });
-
-  if (!domain) {
-    return c.json({ error: { code: "NOT_FOUND", message: "Domain nicht gefunden" } }, 404);
-  }
-
-  let fallbackDomainId: string | null = null;
-
-  if (domain.isPrimary && domain.status === "active") {
-    const fallbackDomain = await prisma.dealerDomain.findFirst({
-      where: {
-        dealerId: domain.dealerId,
-        id: { not: domain.id },
-      },
-      orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-    });
-
-    if (!fallbackDomain) {
-      return c.json(
-        { error: { code: "PRIMARY_DOMAIN_REQUIRED", message: "Es muss mindestens eine Domain verbleiben" } },
-        400
-      );
-    }
-
-    fallbackDomainId = fallbackDomain.id;
-  }
-
-  await prisma.$transaction(async (tx) => {
-    await tx.dealerDomain.delete({
-      where: { id: domainId },
-    });
-
-    if (fallbackDomainId) {
-      await tx.dealerDomain.update({
-        where: { id: fallbackDomainId },
-        data: {
-          isPrimary: true,
-          status: "active",
-          verifiedAt: new Date(),
-        },
-      });
-    }
-  });
-
-  return c.json({ data: { success: true } });
-});
 
 export { adminRouter };

@@ -4,11 +4,9 @@ import {
   getCurrentEntitlements,
   getCurrentMembership,
   getCurrentUser,
-  getResolvedDomain,
   getResolvedHost,
   getTenantStatus,
 } from "../lib/request-context";
-import { getActiveDealerDomain } from "../lib/dealers";
 import { getCurrentSubscription } from "../lib/billing";
 
 const sessionRouter = new Hono();
@@ -17,12 +15,10 @@ sessionRouter.get("/me", async (c) => {
   const user = getCurrentUser(c);
   const membership = getCurrentMembership(c);
   const entitlements = getCurrentEntitlements(c);
-  const resolvedDomain = getResolvedDomain(c);
   const resolvedHost = getResolvedHost(c);
   const tenantStatus = getTenantStatus(c);
   const billing = getBillingState(c);
   const subscription = getCurrentSubscription(membership?.dealer.subscriptions);
-  const activeDomain = resolvedDomain ?? getActiveDealerDomain(membership?.dealer.domains);
 
   return c.json({
     data: {
@@ -78,19 +74,7 @@ sessionRouter.get("/me", async (c) => {
             updatedAt: membership.dealer.settings.updatedAt.toISOString(),
           }
         : null,
-      activeDomain: activeDomain
-        ? {
-            id: activeDomain.id,
-            dealerId: activeDomain.dealerId,
-            host: activeDomain.host,
-            status: activeDomain.status,
-            isPrimary: activeDomain.isPrimary,
-            verificationToken: activeDomain.verificationToken,
-            verifiedAt: activeDomain.verifiedAt?.toISOString() ?? null,
-            createdAt: activeDomain.createdAt.toISOString(),
-            updatedAt: activeDomain.updatedAt.toISOString(),
-          }
-        : null,
+      activeDomain: null,
       tenantStatus,
       resolvedHost,
       entitlements,

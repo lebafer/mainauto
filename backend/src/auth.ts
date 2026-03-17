@@ -43,26 +43,6 @@ async function resolveTrustedOrigins(request?: Request): Promise<string[]> {
     trustedOriginsSet.add(`${protocol}://${requestHost}`);
   }
 
-  const activeDomains = await prisma.dealerDomain.findMany({
-    where: {
-      status: {
-        in: ["active", "pending_dns"],
-      },
-    },
-    select: {
-      host: true,
-    },
-  });
-
-  for (const domain of activeDomains) {
-    const host = normalizeHost(domain.host);
-    if (!host) {
-      continue;
-    }
-    trustedOriginsSet.add(`https://${host}`);
-    trustedOriginsSet.add(`http://${host}`);
-  }
-
   return Array.from(trustedOriginsSet);
 }
 

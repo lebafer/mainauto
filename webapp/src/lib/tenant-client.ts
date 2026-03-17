@@ -18,29 +18,3 @@ export async function fetchTenantContext(): Promise<PublicTenantContext | null> 
     return null;
   }
 }
-
-export async function submitOnboardingInquiry(input: {
-  businessName: string;
-  contactName: string;
-  email: string;
-  phone?: string;
-  website?: string;
-  notes?: string;
-}) {
-  const response = await fetch(`${API_BASE_URL}/api/public/inquiries`, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(input),
-  });
-
-  if (!response.ok) {
-    const json = await response.json().catch(() => null);
-    throw new Error(json?.error?.message || "Anfrage konnte nicht gesendet werden.");
-  }
-
-  const payload = await response.json();
-  return payload?.data ?? null;
-}

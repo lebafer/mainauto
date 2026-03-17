@@ -370,7 +370,7 @@ export default function AdminDealers() {
                       <div className="space-y-1">
                         <div className="text-sm font-medium text-foreground">Kostenloser Zugang</div>
                         <div className="text-xs text-muted-foreground">
-                          Hebt die Paywall fuer dieses Autohaus direkt auf.
+                          Hebt die Paywall für dieses Autohaus direkt auf.
                         </div>
                       </div>
                       <Switch
@@ -430,9 +430,9 @@ export default function AdminDealers() {
                     </div>
 
                     <div className="text-xs text-muted-foreground">
-                      Login-Link fuer Kunden: <span className="font-mono">/login</span>
+                      Login-Link für Kunden: <span className="font-mono">/login</span>
                       <br />
-                      Admin-Link fuer dich: <span className="font-mono">/admin/login</span>
+                      Admin-Link für dich: <span className="font-mono">/admin/login</span>
                     </div>
                   </div>
                 </div>
@@ -517,7 +517,6 @@ export default function AdminDealers() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pending_setup">Pending Setup</SelectItem>
-                    <SelectItem value="ready_for_dns">Ready for DNS</SelectItem>
                     <SelectItem value="active">Aktiv</SelectItem>
                     <SelectItem value="suspended">Gesperrt</SelectItem>
                   </SelectContent>

@@ -34,7 +34,7 @@ const PLAN_FEATURES: Record<PlanSlug, string[]> = {
   ],
   pro: [
     "Alles aus Standard",
-    "Teamverwaltung fuer Mitarbeiter",
+    "Teamverwaltung für Mitarbeiter",
     "Eigenes Logo in Dokumenten",
     "KI-Fahrzeugbrief-Extraktion",
   ],
@@ -130,7 +130,7 @@ export default function Signup() {
             </Badge>
             <div className="space-y-3">
               <h1 className="text-4xl font-semibold tracking-tight text-slate-950 dark:text-white md:text-5xl">
-                Starte CarOps fuer dein Autohaus.
+                Starte CarOps für dein Autohaus.
               </h1>
               <p className="text-lg leading-8 text-slate-600 dark:text-slate-300">
                 Lege dein Autohaus an, teste 14 Tage ohne Zahlungszwang und aktiviere dein Abo erst, wenn du bereit
@@ -259,7 +259,7 @@ export default function Signup() {
             </Button>
 
             <p className="text-sm text-muted-foreground">
-              Mit der Registrierung startet deine Testphase. Erst nach Ablauf der 14 Tage wird eine Zahlung fuer den
+              Mit der Registrierung startet deine Testphase. Erst nach Ablauf der 14 Tage wird eine Zahlung für den
               weiteren Zugriff erforderlich.
             </p>
           </CardContent>

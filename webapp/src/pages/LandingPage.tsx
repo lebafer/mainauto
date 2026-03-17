@@ -61,11 +61,11 @@ export default function LandingPage() {
             className="space-y-8"
           >
             <Badge className="w-fit rounded-full bg-amber-500/15 px-4 py-1 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300">
-              SaaS fuer moderne Autohäuser
+              SaaS für moderne Autohäuser
             </Badge>
             <div className="space-y-4">
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">
-                CarOps ist das Betriebssystem fuer dein Autohaus.
+                CarOps ist das Betriebssystem für dein Autohaus.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
                 Verwalte Bestand, Verkauf, Dokumente und dein Team in einer gemeinsamen Cloud-Plattform. Schnell
@@ -87,7 +87,7 @@ export default function LandingPage() {
                 },
                 {
                   icon: Bot,
-                  title: "KI fuer Briefe",
+                  title: "KI für Briefe",
                   body: "Pro liest Fahrzeugbriefe aus und spart dir manuelle Erfassung.",
                 },
               ].map((item) => (
@@ -122,9 +122,9 @@ export default function LandingPage() {
           >
             <Card className="border-border/70 bg-slate-950 text-slate-50 shadow-2xl">
               <CardHeader>
-                <CardTitle>Tarife fuer v1</CardTitle>
+                <CardTitle>Tarife</CardTitle>
                 <CardDescription className="text-slate-300">
-                  Gleicher Einstieg fuer alle. Keine Sonderkonfigurationen, keine Extrarunden, einfach loslegen.
+                  Gleicher Einstieg für alle. Keine Sonderkonfigurationen, keine Extrarunden, einfach loslegen.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
@@ -135,7 +135,6 @@ export default function LandingPage() {
                         <div className="text-xl font-semibold">{plan.name}</div>
                         <div className="mt-1 text-sm text-slate-300">{plan.description}</div>
                       </div>
-                      {plan.slug === "pro" ? <Badge className="bg-amber-500 text-slate-950">Pro</Badge> : null}
                     </div>
                     <div className="mt-5 text-4xl font-semibold">{formatCurrency(plan.monthlyPriceCents)}</div>
                     <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">pro Monat</div>
@@ -157,25 +156,6 @@ export default function LandingPage() {
                 </div>
               </CardContent>
             </Card>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Card className="border-border/70">
-                <CardHeader>
-                  <CardTitle className="text-lg">Schneller Start</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Registrierung, Trial und Checkout laufen im selben SaaS-Flow.
-                </CardContent>
-              </Card>
-              <Card className="border-border/70">
-                <CardHeader>
-                  <CardTitle className="text-lg">Saubere Abrechnung</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                  Upgrade, Aboverwaltung und Paywall sind direkt im Produkt verankert.
-                </CardContent>
-              </Card>
-            </div>
           </motion.section>
         </main>
       </div>
