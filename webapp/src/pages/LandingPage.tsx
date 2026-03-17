@@ -123,9 +123,6 @@ export default function LandingPage() {
             <Card className="border-border/70 bg-slate-950 text-slate-50 shadow-2xl">
               <CardHeader>
                 <CardTitle>Tarife</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Gleicher Einstieg für alle. Keine Sonderkonfigurationen, keine Extrarunden, einfach loslegen.
-                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
                 {(plansQuery.data ?? []).map((plan) => (
@@ -152,7 +149,7 @@ export default function LandingPage() {
                   </div>
                 ))}
                 <div className="rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-slate-200">
-                  Testphase: 14 Tage. Zahlung erst noetig, wenn du danach weiternutzen willst.
+                  Testphase: 14 Tage. Zahlung erst nötig, wenn du danach weiternutzen willst.
                 </div>
               </CardContent>
             </Card>
