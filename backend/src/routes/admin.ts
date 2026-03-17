@@ -13,6 +13,7 @@ import {
   DealerDomainCreateSchema,
   DealerDomainVerifySchema,
   DealerSubscriptionUpdateSchema,
+  OnboardingInquiryStatusUpdateSchema,
 } from "../types";
 import { requirePlatformSuperAdmin } from "../lib/request-context";
 import { createFallbackDealerHost, normalizeHost, slugifyDealerName } from "../lib/dealers";
@@ -98,6 +99,22 @@ adminRouter.get("/inquiries", async (c) => {
 
   return c.json({ data: inquiries });
 });
+
+adminRouter.patch(
+  "/inquiries/:inquiryId",
+  zValidator("json", OnboardingInquiryStatusUpdateSchema),
+  async (c) => {
+    const inquiryId = c.req.param("inquiryId");
+    const data = c.req.valid("json");
+
+    const inquiry = await prisma.onboardingInquiry.update({
+      where: { id: inquiryId },
+      data: { status: data.status },
+    });
+
+    return c.json({ data: inquiry });
+  }
+);
 
 adminRouter.get("/plans", async (c) => {
   const plans = await prisma.plan.findMany({

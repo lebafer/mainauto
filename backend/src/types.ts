@@ -226,6 +226,10 @@ export const OnboardingInquirySchema = z.object({
   updatedAt: z.string(),
 });
 
+export const OnboardingInquiryStatusUpdateSchema = z.object({
+  status: z.enum(["new", "in_progress", "converted", "archived"]),
+});
+
 export const SessionContextSchema = z.object({
   user: z.object({
     id: z.string(),

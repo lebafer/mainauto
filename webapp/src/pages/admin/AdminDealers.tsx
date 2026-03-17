@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -60,6 +60,26 @@ type Inquiry = {
   status: string;
   createdAt: string;
 };
+
+function generateUsernameFromInquiry(inquiry: Inquiry): string {
+  const fromEmail = inquiry.email.split("@")[0]?.trim().toLowerCase();
+  if (fromEmail && /^[a-z0-9._-]+$/i.test(fromEmail)) {
+    return fromEmail.replace(/[^a-z0-9._-]/gi, "").slice(0, 24);
+  }
+
+  return inquiry.contactName
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/[\s_-]+/g, ".")
+    .replace(/^\.+|\.+$/g, "")
+    .slice(0, 24);
+}
+
+function generateTemporaryPassword(): string {
+  return `Start-${Math.random().toString(36).slice(2, 10)}!`;
+}
 
 type DealerMembership = {
   id: string;
@@ -128,7 +148,9 @@ export default function AdminDealers() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { session } = useAuth();
+  const createDealerCardRef = useRef<HTMLDivElement | null>(null);
   const [newDomainByDealer, setNewDomainByDealer] = useState<Record<string, string>>({});
+  const [selectedInquiryId, setSelectedInquiryId] = useState<string | null>(null);
   const [newDealer, setNewDealer] = useState({
     name: "",
     slug: "",
@@ -172,6 +194,10 @@ export default function AdminDealers() {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      if (selectedInquiryId) {
+        await api.patch(`/api/admin/inquiries/${selectedInquiryId}`, { status: "converted" });
+        await queryClient.invalidateQueries({ queryKey: ["admin-inquiries"] });
+      }
       setNewDealer({
         name: "",
         slug: "",
@@ -180,6 +206,7 @@ export default function AdminDealers() {
         ownerUsername: "",
         ownerPassword: "",
       });
+      setSelectedInquiryId(null);
       toast({ title: "Dealer angelegt" });
     },
     onError: (error) => {
@@ -291,9 +318,38 @@ export default function AdminDealers() {
     },
   });
 
+  const updateInquiryStatusMutation = useMutation({
+    mutationFn: ({ inquiryId, status }: { inquiryId: string; status: "new" | "in_progress" | "converted" | "archived" }) =>
+      api.patch(`/api/admin/inquiries/${inquiryId}`, { status }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-inquiries"] });
+      toast({ title: "Anfrage aktualisiert" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Anfrage konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const openEditDialog = (dealer: Dealer) => {
     setEditingDealer(dealer);
     setEditForm(createEditForm(dealer));
+  };
+
+  const loadInquiryIntoCreateForm = (inquiry: Inquiry) => {
+    setSelectedInquiryId(inquiry.id);
+    setNewDealer({
+      name: inquiry.businessName,
+      slug: "",
+      ownerName: inquiry.contactName,
+      ownerEmail: inquiry.email,
+      ownerUsername: generateUsernameFromInquiry(inquiry),
+      ownerPassword: generateTemporaryPassword(),
+    });
+    createDealerCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (session?.user.platformRole !== "platform_super_admin") {
@@ -310,18 +366,23 @@ export default function AdminDealers() {
         </p>
       </div>
 
-      <Card>
+      <Card ref={createDealerCardRef}>
         <CardHeader>
           <CardTitle>Neues Autohaus</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
+          {selectedInquiryId ? (
+            <div className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm text-cyan-950 md:col-span-2 dark:text-cyan-50">
+              Anfrage wird gerade in die Neuanlage uebernommen. Pruefe Username und Startpasswort vor dem Anlegen.
+            </div>
+          ) : null}
           {[
             ["name", "Dealer-Name"],
             ["slug", "Slug"],
             ["ownerName", "Owner-Name"],
             ["ownerEmail", "Owner-E-Mail"],
             ["ownerUsername", "Owner-Benutzername"],
-            ["ownerPassword", "Owner-Passwort"],
+            ["ownerPassword", "Start-Passwort"],
           ].map(([key, label]) => (
             <div key={key} className="space-y-2">
               <Label htmlFor={key}>{label}</Label>
@@ -663,10 +724,30 @@ export default function AdminDealers() {
                   {inquiry.contactName} • {inquiry.email}
                   {inquiry.phone ? ` • ${inquiry.phone}` : ""}
                 </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Status: {inquiry.status} • Eingang: {new Date(inquiry.createdAt).toLocaleString("de-DE")}
+                </div>
                 {inquiry.website ? (
                   <div className="text-sm text-muted-foreground">{inquiry.website}</div>
                 ) : null}
                 {inquiry.notes ? <div className="mt-2 text-sm">{inquiry.notes}</div> : null}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" variant="outline" onClick={() => loadInquiryIntoCreateForm(inquiry)}>
+                    In Neuanlage uebernehmen
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      updateInquiryStatusMutation.mutate({
+                        inquiryId: inquiry.id,
+                        status: inquiry.status === "new" ? "in_progress" : "new",
+                      })
+                    }
+                  >
+                    {inquiry.status === "new" ? "Als in Bearbeitung markieren" : "Auf neu zuruecksetzen"}
+                  </Button>
+                </div>
               </div>
             ))
           )}
