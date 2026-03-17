@@ -7,6 +7,7 @@ import {
   LogOut,
   Truck,
   BarChart2,
+  ImageOff,
 } from "lucide-react";
 import {
   Sidebar,
@@ -60,13 +61,7 @@ export function AppSidebar() {
       }}
     >
       <SidebarHeader className="h-16 overflow-hidden p-0">
-        <div
-          className="flex h-full w-full items-center justify-center px-4"
-          style={{
-            background:
-              "linear-gradient(135deg, rgb(var(--tenant-primary-rgb) / 0.20), rgb(var(--tenant-accent-rgb) / 0.32))",
-          }}
-        >
+        <div className="flex h-full w-full items-center justify-center bg-sidebar px-4">
           {session?.dealerSettings?.logoUrl ? (
             <img
               src={session.dealerSettings.logoUrl}
@@ -74,20 +69,10 @@ export function AppSidebar() {
               className="h-10 w-auto object-contain group-data-[collapsible=icon]:h-8"
             />
           ) : (
-            <>
-              <img
-                src="/mainauto-logo-light.png"
-                alt="MainAuto Logo"
-                style={{ transform: "scale(2)" }}
-                className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 dark:hidden"
-              />
-              <img
-                src="/mainauto-logo-dark.png"
-                alt="MainAuto Logo"
-                style={{ transform: "scale(2)" }}
-                className="h-10 w-auto object-contain group-data-[collapsible=icon]:scale-100 group-data-[collapsible=icon]:h-8 hidden dark:block"
-              />
-            </>
+            <div className="flex h-10 w-full max-w-[170px] items-center justify-center rounded-md border border-dashed border-sidebar-border bg-muted/20 text-xs text-muted-foreground group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:rounded-full">
+              <ImageOff className="mr-2 h-4 w-4 group-data-[collapsible=icon]:mr-0" />
+              <span className="group-data-[collapsible=icon]:hidden">Kein Logo</span>
+            </div>
           )}
         </div>
       </SidebarHeader>
