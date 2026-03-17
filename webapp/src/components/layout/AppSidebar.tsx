@@ -7,7 +7,6 @@ import {
   LogOut,
   Truck,
   BarChart2,
-  ImageOff,
 } from "lucide-react";
 import {
   Sidebar,
@@ -26,6 +25,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-client";
+import { DealerLogo } from "@/components/branding/DealerLogo";
 
 export function AppSidebar() {
   const location = useLocation();
@@ -60,20 +60,14 @@ export function AppSidebar() {
         boxShadow: "inset 2px 0 0 rgb(var(--tenant-primary-rgb) / 0.55)",
       }}
     >
-      <SidebarHeader className="h-16 overflow-hidden p-0">
+      <SidebarHeader className="h-24 overflow-hidden p-0">
         <div className="flex h-full w-full items-center justify-center bg-sidebar px-4">
-          {session?.dealerSettings?.logoUrl ? (
-            <img
-              src={session.dealerSettings.logoUrl}
-              alt={session.dealer?.name ?? "Dealer Logo"}
-              className="h-10 w-auto object-contain group-data-[collapsible=icon]:h-8"
-            />
-          ) : (
-            <div className="flex h-10 w-full max-w-[170px] items-center justify-center rounded-md border border-dashed border-sidebar-border bg-muted/20 text-xs text-muted-foreground group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:rounded-full">
-              <ImageOff className="mr-2 h-4 w-4 group-data-[collapsible=icon]:mr-0" />
-              <span className="group-data-[collapsible=icon]:hidden">Kein Logo</span>
-            </div>
-          )}
+          <DealerLogo
+            src={session?.dealerSettings?.logoUrl}
+            alt={session?.dealer?.name ?? "Dealer Logo"}
+            className="h-16 w-full max-w-[220px] group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:max-w-[40px]"
+            placeholderClassName="border-sidebar-border bg-muted/20 group-data-[collapsible=icon]:rounded-full"
+          />
         </div>
       </SidebarHeader>
 

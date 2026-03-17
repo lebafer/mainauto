@@ -6,7 +6,8 @@ import {
   HandoverProtocolDocumentGenerateSchema,
   PurchaseContractGenerateSchema,
 } from "../types";
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import puppeteer, { type Browser } from "puppeteer";
 import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
@@ -21,6 +22,7 @@ const SYSTEM_BROWSER_PATHS = [
   "/usr/bin/google-chrome",
   "/usr/bin/google-chrome-stable",
 ];
+const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
 async function launchWithPuppeteer(): Promise<Browser> {
   return puppeteer.launch({
@@ -200,11 +202,66 @@ function getDealerHeaderHtml(profile: DealerDocumentProfile, logoSrc: string | n
   `;
 }
 
-function resolveDocumentLogoSrc(
+function getMimeTypeForLogo(fileName: string): string {
+  switch (extname(fileName).toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".svg":
+      return "image/svg+xml";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "image/png";
+  }
+}
+
+async function resolveDocumentLogoSrc(
   c: { req: { header: (name: string) => string | undefined } },
   profile?: DealerDocumentProfile
-): string | null {
-  return profile?.logoUrl ?? null;
+): Promise<string | null> {
+  const logoUrl = profile?.logoUrl?.trim();
+  if (!logoUrl) {
+    return null;
+  }
+
+  if (/^data:/i.test(logoUrl) || /^https?:\/\//i.test(logoUrl)) {
+    return logoUrl;
+  }
+
+  if (logoUrl.startsWith("/api/uploads/")) {
+    const fileName = basename(logoUrl);
+    const filePath = join(UPLOADS_DIR, fileName);
+
+    try {
+      const fileBuffer = await readFile(filePath);
+      return `data:${getMimeTypeForLogo(fileName)};base64,${fileBuffer.toString("base64")}`;
+    } catch (error) {
+      console.warn("[documents] dealer_logo_file_missing", { logoUrl, error });
+      return null;
+    }
+  }
+
+  if (logoUrl.startsWith("/")) {
+    const origin = c.req.header("origin");
+    const referer = c.req.header("referer");
+
+    if (origin && /^https?:\/\//i.test(origin)) {
+      return `${origin.replace(/\/$/, "")}${logoUrl}`;
+    }
+
+    if (referer) {
+      try {
+        return `${new URL(referer).origin}${logoUrl}`;
+      } catch {
+        return logoUrl;
+      }
+    }
+  }
+
+  return logoUrl;
 }
 
 function resolveDocumentPublicAssetSrc(
@@ -802,7 +859,7 @@ function generateContract(
   /* Dealer header */
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 148px; max-height: 72px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
@@ -1054,7 +1111,7 @@ function generatePurchaseContract(
   .page { width: 210mm; min-height: 297mm; padding: 14mm 16mm 14mm 16mm; margin: 0 auto; background: white; }
   .dealer-header { margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 148px; max-height: 72px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 12pt; font-weight: bold; color: #111; }
   .dealer-sub { font-size: 8pt; color: #333; margin-top: 3px; line-height: 1.45; }
   .doc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; background: #efefef; padding: 6px 8px; margin-bottom: 10px; }
@@ -1189,7 +1246,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { type, vehicleId, customerId } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     const vehicle = await prisma.vehicle.findFirst({
       where: { id: vehicleId, dealerId },
@@ -1243,7 +1300,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { type, vehicleId, customerId } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     if (type !== "contract") {
       return c.json({ error: { message: "PDF generation only supported for contract", code: "BAD_REQUEST" } }, 400);
@@ -1285,7 +1342,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
@@ -1309,7 +1366,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, sellerSource, sellerId, manualSeller } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) {
@@ -1561,7 +1618,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const body = await c.req.json();
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
 
     if (!vehicleId || !customerId) {
@@ -1602,7 +1659,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const body = await c.req.json();
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
     const { vehicleId, customerId, dateOfReceipt, passportType, passportNumber, passportValidUntil } = body;
     const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
     if (!vehicle) return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
@@ -1778,7 +1835,7 @@ function generateVermittlungsvertrag(
 
   .dealer-header { border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 92px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 148px; max-height: 72px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; color: #000; }
   .dealer-sub { font-size: 8.5pt; color: #333; margin-top: 2px; }
 
@@ -1922,7 +1979,7 @@ documentsRouter.post("/generate-vermittlung-pdf", async (c) => {
   const dealerId = getCurrentDealerId(c);
   const dealerProfile = getDealerDocumentProfile(c);
   const body = await c.req.json();
-  const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+  const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -1981,7 +2038,7 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
   const dealerId = getCurrentDealerId(c);
   const dealerProfile = getDealerDocumentProfile(c);
   const body = await c.req.json();
-  const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+  const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
   const { vehicleId, buyerId, buyerType, sellerId, sellerType, manualSeller } = body as {
     vehicleId: string;
     buyerId: string;
@@ -2019,7 +2076,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, data } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
     const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
     const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });
@@ -2052,7 +2109,7 @@ documentsRouter.post(
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
     const { vehicleId, data } = c.req.valid("json");
-    const logoSrc = resolveDocumentLogoSrc(c, dealerProfile);
+    const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
     const sketchSrc = resolveDocumentPublicAssetSrc(c, "car.png");
 
     const vehicle = await prisma.vehicle.findFirst({ where: { id: vehicleId, dealerId } });

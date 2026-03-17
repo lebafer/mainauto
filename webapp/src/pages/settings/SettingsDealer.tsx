@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Save, Upload } from "lucide-react";
+import { Loader2, Save, Trash2, Upload } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
+import { DealerLogo } from "@/components/branding/DealerLogo";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +134,23 @@ export default function SettingsDealer() {
     },
   });
 
+  const removeLogoMutation = useMutation({
+    mutationFn: () => api.delete<{ logoUrl: null }>("/api/settings/dealer/logo"),
+    onSuccess: async () => {
+      setLogoFile(null);
+      setForm((current) => ({ ...current, logoUrl: "" }));
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["dealer-settings"] }), refetch()]);
+      toast({ title: "Logo entfernt", description: "Das Händlerlogo wurde entfernt." });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Logo konnte nicht entfernt werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!(session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin")) {
     return <div className="text-sm text-muted-foreground">Kein Zugriff auf diese Seite.</div>;
   }
@@ -173,18 +191,17 @@ export default function SettingsDealer() {
             <Label>Logo</Label>
             <div className="flex flex-col gap-4 rounded-lg border border-dashed p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-4">
-                {form.logoUrl ? (
-                  <img src={form.logoUrl} alt="Händlerlogo" className="h-16 w-32 rounded-md object-contain" />
-                ) : (
-                  <div className="flex h-16 w-32 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
-                    Kein Logo
-                  </div>
-                )}
+                <DealerLogo
+                  src={form.logoUrl}
+                  alt="Händlerlogo"
+                  className="h-20 w-44 rounded-md bg-muted/20 p-2"
+                  placeholderClassName="border-border bg-muted"
+                />
                 <div className="text-sm text-muted-foreground">
                   PNG, JPG oder WebP hochladen. Das Logo wird direkt für Sidebar und Dokumente genutzt.
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2 md:min-w-[220px]">
                 <Input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/svg+xml"
@@ -205,6 +222,24 @@ export default function SettingsDealer() {
                     <>
                       <Upload className="mr-2 h-4 w-4" />
                       Logo hochladen
+                    </>
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => removeLogoMutation.mutate()}
+                  disabled={!form.logoUrl || removeLogoMutation.isPending || logoUploadMutation.isPending}
+                >
+                  {removeLogoMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Entfernt...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Logo entfernen
                     </>
                   )}
                 </Button>

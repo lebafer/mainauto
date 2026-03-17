@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
-import { join } from "path";
-import { mkdir } from "fs/promises";
+import { basename, join } from "path";
+import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
 import {
@@ -17,6 +17,21 @@ const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
 if (!existsSync(UPLOADS_DIR)) {
   await mkdir(UPLOADS_DIR, { recursive: true });
+}
+
+async function deleteDealerLogoFile(logoUrl: string | null | undefined) {
+  if (!logoUrl?.startsWith("/api/uploads/")) {
+    return;
+  }
+
+  const fileName = basename(logoUrl);
+  const filePath = join(UPLOADS_DIR, fileName);
+
+  try {
+    await unlink(filePath);
+  } catch {
+    // Missing files should not block settings updates.
+  }
 }
 
 const settingsRouter = new Hono();
@@ -90,6 +105,11 @@ settingsRouter.post("/dealer/logo", async (c) => {
   const arrayBuffer = await file.arrayBuffer();
   await Bun.write(filePath, arrayBuffer);
 
+  const existingSettings = await prisma.dealerSettings.findUnique({
+    where: { dealerId },
+    select: { logoUrl: true },
+  });
+
   const settings = await prisma.dealerSettings.upsert({
     where: { dealerId },
     update: {
@@ -101,9 +121,41 @@ settingsRouter.post("/dealer/logo", async (c) => {
     },
   });
 
+  await deleteDealerLogoFile(existingSettings?.logoUrl);
+
   return c.json({
     data: {
       logoUrl: settings.logoUrl,
+    },
+  });
+});
+
+settingsRouter.delete("/dealer/logo", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  const existingSettings = await prisma.dealerSettings.findUnique({
+    where: { dealerId },
+    select: { logoUrl: true },
+  });
+
+  await prisma.dealerSettings.upsert({
+    where: { dealerId },
+    update: { logoUrl: null },
+    create: {
+      dealerId,
+      logoUrl: null,
+    },
+  });
+
+  await deleteDealerLogoFile(existingSettings?.logoUrl);
+
+  return c.json({
+    data: {
+      logoUrl: null,
     },
   });
 });

@@ -305,7 +305,7 @@ export function generateHandoverProtocolHtml(
   .page { width: 210mm; min-height: 297mm; padding: 12mm 14mm 14mm; margin: 0 auto; background: #fff; }
   .dealer-header { border-bottom: 2px solid #111; padding-bottom: 6px; margin-bottom: 10px; }
   .dealer-brand { display: flex; align-items: flex-start; gap: 12px; }
-  .dealer-logo { width: 84px; height: auto; object-fit: contain; flex-shrink: 0; }
+  .dealer-logo { width: 148px; max-height: 72px; height: auto; object-fit: contain; flex-shrink: 0; }
   .dealer-name { font-size: 13pt; font-weight: bold; }
   .dealer-sub { font-size: 8pt; color: #555; line-height: 1.4; margin-top: 3px; }
   .doc-header { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 8px; }
