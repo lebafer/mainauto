@@ -101,8 +101,9 @@ export async function fetchSession(): Promise<SessionData | null> {
     });
 
     if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || !data.session || !data.user) return null;
+    const payload = await res.json();
+    const data = payload?.data ?? payload;
+    if (!data || !data.user) return null;
     return data as SessionData;
   } catch {
     return null;
