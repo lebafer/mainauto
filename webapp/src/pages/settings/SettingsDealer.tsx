@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Save } from "lucide-react";
+import { Loader2, Save, Upload } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
@@ -49,6 +49,7 @@ export default function SettingsDealer() {
   const { toast } = useToast();
   const { session, refetch } = useAuth();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ["dealer-settings"],
@@ -99,6 +100,39 @@ export default function SettingsDealer() {
     },
   });
 
+  const logoUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch(`${baseUrl}/api/settings/dealer/logo`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const json = await response.json().catch(() => null);
+        throw new Error(json?.error?.message || "Logo konnte nicht hochgeladen werden.");
+      }
+
+      return response.json();
+    },
+    onSuccess: async () => {
+      setLogoFile(null);
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ["dealer-settings"] }), refetch()]);
+      toast({ title: "Logo hochgeladen", description: "Das Händlerlogo wurde aktualisiert." });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Logo-Upload fehlgeschlagen.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (!(session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin")) {
     return <div className="text-sm text-muted-foreground">Kein Zugriff auf diese Seite.</div>;
   }
@@ -124,9 +158,6 @@ export default function SettingsDealer() {
             bankName: "Bank",
             iban: "IBAN",
             bic: "BIC",
-            logoUrl: "Logo-URL",
-            primaryColor: "Primärfarbe",
-            accentColor: "Akzentfarbe",
           }).map(([key, label]) => (
             <div key={key} className="space-y-2">
               <Label htmlFor={key}>{label}</Label>
@@ -137,6 +168,87 @@ export default function SettingsDealer() {
               />
             </div>
           ))}
+
+          <div className="space-y-3 md:col-span-2">
+            <Label>Logo</Label>
+            <div className="flex flex-col gap-4 rounded-lg border border-dashed p-4 md:flex-row md:items-center md:justify-between">
+              <div className="flex items-center gap-4">
+                {form.logoUrl ? (
+                  <img src={form.logoUrl} alt="Händlerlogo" className="h-16 w-32 rounded-md object-contain" />
+                ) : (
+                  <div className="flex h-16 w-32 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+                    Kein Logo
+                  </div>
+                )}
+                <div className="text-sm text-muted-foreground">
+                  PNG, JPG oder WebP hochladen. Das Logo wird direkt für Sidebar und Dokumente genutzt.
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => logoFile && logoUploadMutation.mutate(logoFile)}
+                  disabled={!logoFile || logoUploadMutation.isPending}
+                >
+                  {logoUploadMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Lädt hoch...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Logo hochladen
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="primaryColor">Primärfarbe</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="primaryColorPicker"
+                type="color"
+                value={form.primaryColor || "#f59e0b"}
+                onChange={(event) => setForm((current) => ({ ...current, primaryColor: event.target.value }))}
+                className="h-10 w-16 cursor-pointer p-1"
+              />
+              <Input
+                id="primaryColor"
+                value={form.primaryColor}
+                onChange={(event) => setForm((current) => ({ ...current, primaryColor: event.target.value }))}
+                placeholder="#f59e0b"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="accentColor">Akzentfarbe</Label>
+            <div className="flex items-center gap-3">
+              <Input
+                id="accentColorPicker"
+                type="color"
+                value={form.accentColor || "#111827"}
+                onChange={(event) => setForm((current) => ({ ...current, accentColor: event.target.value }))}
+                className="h-10 w-16 cursor-pointer p-1"
+              />
+              <Input
+                id="accentColor"
+                value={form.accentColor}
+                onChange={(event) => setForm((current) => ({ ...current, accentColor: event.target.value }))}
+                placeholder="#111827"
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 

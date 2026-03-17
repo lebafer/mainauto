@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
+import { join } from "path";
+import { mkdir } from "fs/promises";
+import { randomUUID } from "crypto";
+import { existsSync } from "fs";
 import {
   DealerSettingsUpdateSchema,
   DealerTeamMemberCreateSchema,
@@ -8,6 +12,12 @@ import {
 } from "../types";
 import { getCurrentDealer, getCurrentDealerId, requireDealerRole } from "../lib/request-context";
 import { createCredentialUser } from "../lib/auth-users";
+
+const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
+
+if (!existsSync(UPLOADS_DIR)) {
+  await mkdir(UPLOADS_DIR, { recursive: true });
+}
 
 const settingsRouter = new Hono();
 
@@ -55,6 +65,48 @@ settingsRouter.put(
     return c.json({ data: settings });
   }
 );
+
+settingsRouter.post("/dealer/logo", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  const formData = await c.req.formData();
+  const file = formData.get("file");
+
+  if (!(file instanceof File)) {
+    return c.json({ error: { code: "BAD_REQUEST", message: "Kein Logo hochgeladen" } }, 400);
+  }
+
+  if (!file.type.startsWith("image/")) {
+    return c.json({ error: { code: "BAD_REQUEST", message: "Logo muss eine Bilddatei sein" } }, 400);
+  }
+
+  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+  const fileName = `dealer-logo-${dealerId}-${randomUUID()}.${ext}`;
+  const filePath = join(UPLOADS_DIR, fileName);
+  const arrayBuffer = await file.arrayBuffer();
+  await Bun.write(filePath, arrayBuffer);
+
+  const settings = await prisma.dealerSettings.upsert({
+    where: { dealerId },
+    update: {
+      logoUrl: `/api/uploads/${fileName}`,
+    },
+    create: {
+      dealerId,
+      logoUrl: `/api/uploads/${fileName}`,
+    },
+  });
+
+  return c.json({
+    data: {
+      logoUrl: settings.logoUrl,
+    },
+  });
+});
 
 settingsRouter.get("/team", async (c) => {
   const dealerId = getCurrentDealerId(c);

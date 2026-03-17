@@ -8,7 +8,9 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
+import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Loader2 } from "lucide-react";
 
 // Lazy load pages
@@ -30,6 +32,7 @@ const SupplierEdit = lazy(() => import("@/pages/suppliers/SupplierEdit"));
 const Finances = lazy(() => import("@/pages/Finances"));
 const SettingsDealer = lazy(() => import("@/pages/settings/SettingsDealer"));
 const SettingsTeam = lazy(() => import("@/pages/settings/SettingsTeam"));
+const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
 const AdminDealers = lazy(() => import("@/pages/admin/AdminDealers"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
@@ -72,6 +75,8 @@ const App = () => (
                   </GuestRoute>
                 }
               />
+
+              <Route path="/admin/login" element={<AdminLogin />} />
 
               {/* Protected app routes with layout */}
               <Route
@@ -258,13 +263,22 @@ const App = () => (
               />
 
               <Route
+                path="/admin"
+                element={
+                  <AdminProtectedRoute>
+                    <Navigate to="/admin/dealers" replace />
+                  </AdminProtectedRoute>
+                }
+              />
+
+              <Route
                 path="/admin/dealers"
                 element={
-                  <ProtectedRoute>
-                    <AppLayout>
+                  <AdminProtectedRoute>
+                    <AdminLayout>
                       <AdminDealers />
-                    </AppLayout>
-                  </ProtectedRoute>
+                    </AdminLayout>
+                  </AdminProtectedRoute>
                 }
               />
 

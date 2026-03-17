@@ -102,6 +102,14 @@ export default function AdminDealers() {
 
   return (
     <div className="space-y-6">
+      <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6 text-slate-50">
+        <div className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Plattform</div>
+        <h1 className="mt-2 text-3xl font-semibold">Autohaeuser verwalten</h1>
+        <p className="mt-2 max-w-2xl text-sm text-slate-300">
+          Hier legst du neue Firmen an, setzt Zugangsdaten fuer den ersten Admin und schaltest Tarife frei.
+        </p>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Neues Autohaus</CardTitle>
@@ -148,7 +156,7 @@ export default function AdminDealers() {
                     {dealer._count.memberships} Nutzer • {dealer._count.vehicles} Fahrzeuge • {dealer._count.customers} Kunden
                   </div>
                 </div>
-                <div className="w-full md:w-[220px]">
+                <div className="grid w-full gap-3 md:w-[240px]">
                   <Select
                     value={dealer.subscriptions[0]?.planId ?? ""}
                     onValueChange={(value) => subscriptionMutation.mutate({ dealerId: dealer.id, planId: value })}
@@ -164,6 +172,11 @@ export default function AdminDealers() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <div className="text-xs text-muted-foreground">
+                    Login-Link fuer Haendler: <span className="font-mono">/login</span>
+                    <br />
+                    Admin-Link fuer dich: <span className="font-mono">/admin/login</span>
+                  </div>
                 </div>
               </div>
             </div>
