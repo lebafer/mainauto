@@ -164,6 +164,11 @@ export default function VehicleDetail() {
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
+  const [showNewContractCustomer, setShowNewContractCustomer] = useState(false);
+  const [contractNewFirstName, setContractNewFirstName] = useState("");
+  const [contractNewLastName, setContractNewLastName] = useState("");
+  const [contractNewPhone, setContractNewPhone] = useState("");
+  const [contractNewEmail, setContractNewEmail] = useState("");
   const [purchaseDialogOpen, setPurchaseDialogOpen] = useState(false);
   const [purchaseSellerSource, setPurchaseSellerSource] = useState<"customer" | "supplier" | "manual">("customer");
   const [purchaseSellerId, setPurchaseSellerId] = useState("");
@@ -316,6 +321,29 @@ export default function VehicleDetail() {
   });
 
   const selectedGbCustomer = contractCustomers?.find((c) => c.id === gbCustomerId);
+
+  const createContractCustomerMutation = useMutation({
+    mutationFn: () =>
+      api.post<{ id: string; firstName: string; lastName: string }>("/api/customers", {
+        firstName: contractNewFirstName,
+        lastName: contractNewLastName,
+        phone: contractNewPhone || undefined,
+        email: contractNewEmail || undefined,
+      }),
+    onSuccess: (newCustomer) => {
+      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      setContractCustomerId(newCustomer.id);
+      setShowNewContractCustomer(false);
+      setContractNewFirstName("");
+      setContractNewLastName("");
+      setContractNewPhone("");
+      setContractNewEmail("");
+      toast.success("Kunde angelegt");
+    },
+    onError: () => {
+      toast.error("Fehler beim Anlegen des Kunden");
+    },
+  });
 
   useEffect(() => {
     if (!selectedGbCustomer) return;
@@ -852,6 +880,77 @@ export default function VehicleDetail() {
                 ))}
               </SelectContent>
             </Select>
+
+            <button
+              type="button"
+              className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              onClick={() => setShowNewContractCustomer((value) => !value)}
+            >
+              <UserPlus className="h-3.5 w-3.5" />
+              {showNewContractCustomer ? "Abbrechen" : "Kunden hinzufügen"}
+            </button>
+
+            {showNewContractCustomer ? (
+              <div className="mt-2 space-y-3 rounded-lg border bg-muted/40 p-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Vorname</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder="Max"
+                      value={contractNewFirstName}
+                      onChange={(e) => setContractNewFirstName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nachname</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder="Mustermann"
+                      value={contractNewLastName}
+                      onChange={(e) => setContractNewLastName(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Telefon</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder="+49 ..."
+                      value={contractNewPhone}
+                      onChange={(e) => setContractNewPhone(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">E-Mail</Label>
+                    <Input
+                      className="h-8 text-sm"
+                      placeholder="max@example.com"
+                      value={contractNewEmail}
+                      onChange={(e) => setContractNewEmail(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full"
+                  disabled={
+                    !contractNewFirstName.trim() ||
+                    !contractNewLastName.trim() ||
+                    createContractCustomerMutation.isPending
+                  }
+                  onClick={() => createContractCustomerMutation.mutate()}
+                >
+                  {createContractCustomerMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                  )}
+                  Kunden anlegen und übernehmen
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter>
