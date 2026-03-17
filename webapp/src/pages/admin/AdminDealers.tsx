@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Pencil, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
@@ -8,6 +9,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type Plan = {
   id: string;
@@ -15,11 +35,28 @@ type Plan = {
   slug: string;
 };
 
+type DealerStatus = "active" | "suspended" | "inactive";
+
+type DealerMembership = {
+  id: string;
+  role: "dealer_owner" | "dealer_admin" | "staff";
+  isDefault: boolean;
+  isActive: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    username?: string | null;
+  };
+};
+
 type Dealer = {
   id: string;
   name: string;
   slug: string;
-  status: "active" | "suspended" | "inactive";
+  status: DealerStatus;
+  isDefault?: boolean;
+  memberships: DealerMembership[];
   subscriptions: Array<{ planId: string; plan?: { name: string } }>;
   _count: {
     vehicles: number;
@@ -28,6 +65,38 @@ type Dealer = {
     memberships: number;
   };
 };
+
+type DealerEditForm = {
+  name: string;
+  slug: string;
+  status: DealerStatus;
+  ownerName: string;
+  ownerEmail: string;
+  ownerUsername: string;
+  ownerPassword: string;
+};
+
+function getPrimaryOwner(dealer: Dealer) {
+  return (
+    dealer.memberships.find((membership) => membership.role === "dealer_owner" && membership.isDefault) ??
+    dealer.memberships.find((membership) => membership.role === "dealer_owner") ??
+    null
+  );
+}
+
+function createEditForm(dealer: Dealer): DealerEditForm {
+  const owner = getPrimaryOwner(dealer);
+
+  return {
+    name: dealer.name,
+    slug: dealer.slug,
+    status: dealer.status,
+    ownerName: owner?.user.name ?? "",
+    ownerEmail: owner?.user.email ?? "",
+    ownerUsername: owner?.user.username ?? "",
+    ownerPassword: "",
+  };
+}
 
 export default function AdminDealers() {
   const queryClient = useQueryClient();
@@ -41,6 +110,8 @@ export default function AdminDealers() {
     ownerUsername: "",
     ownerPassword: "",
   });
+  const [editingDealer, setEditingDealer] = useState<Dealer | null>(null);
+  const [editForm, setEditForm] = useState<DealerEditForm | null>(null);
 
   const dealersQuery = useQuery({
     queryKey: ["admin-dealers"],
@@ -87,6 +158,39 @@ export default function AdminDealers() {
     },
   });
 
+  const updateDealerMutation = useMutation({
+    mutationFn: ({ dealerId, data }: { dealerId: string; data: Record<string, unknown> }) =>
+      api.put(`/api/admin/dealers/${dealerId}`, data),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      toast({ title: "Autohaus aktualisiert" });
+      setEditingDealer(null);
+      setEditForm(null);
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Autohaus konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteDealerMutation = useMutation({
+    mutationFn: (dealerId: string) => api.delete(`/api/admin/dealers/${dealerId}`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      toast({ title: "Autohaus gelöscht" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Autohaus konnte nicht gelöscht werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const subscriptionMutation = useMutation({
     mutationFn: ({ dealerId, planId }: { dealerId: string; planId: string }) =>
       api.put(`/api/admin/subscriptions/${dealerId}`, { planId, status: "active" }),
@@ -94,7 +198,19 @@ export default function AdminDealers() {
       await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
       toast({ title: "Tarif aktualisiert" });
     },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Tarif konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
   });
+
+  const openEditDialog = (dealer: Dealer) => {
+    setEditingDealer(dealer);
+    setEditForm(createEditForm(dealer));
+  };
 
   if (session?.user.platformRole !== "platform_super_admin") {
     return <div className="text-sm text-muted-foreground">Kein Zugriff auf diese Seite.</div>;
@@ -106,7 +222,7 @@ export default function AdminDealers() {
         <div className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Plattform</div>
         <h1 className="mt-2 text-3xl font-semibold">Autohaeuser verwalten</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
-          Hier legst du neue Firmen an, setzt Zugangsdaten fuer den ersten Admin und schaltest Tarife frei.
+          Hier legst du neue Firmen an, bearbeitest Owner-Zugangsdaten, passt Status und Tarif an und kannst Autohaeuser auch wieder entfernen.
         </p>
       </div>
 
@@ -134,7 +250,14 @@ export default function AdminDealers() {
             </div>
           ))}
           <Button onClick={() => createDealerMutation.mutate()} disabled={createDealerMutation.isPending} className="w-full md:w-fit">
-            Dealer anlegen
+            {createDealerMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Legt an...
+              </>
+            ) : (
+              "Dealer anlegen"
+            )}
           </Button>
         </CardContent>
       </Card>
@@ -144,45 +267,215 @@ export default function AdminDealers() {
           <CardTitle>Dealer-Übersicht</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {(dealersQuery.data ?? []).map((dealer) => (
-            <div key={dealer.id} className="rounded-lg border p-4">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="font-medium">{dealer.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {dealer.slug} • {dealer.status}
+          {(dealersQuery.data ?? []).map((dealer) => {
+            const owner = getPrimaryOwner(dealer);
+            const isDeleting = deleteDealerMutation.isPending && deleteDealerMutation.variables === dealer.id;
+
+            return (
+              <div key={dealer.id} className="rounded-lg border p-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-1">
+                    <div className="font-medium">{dealer.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {dealer.slug} • {dealer.status}
+                      {dealer.isDefault ? " • Standard-Dealer" : ""}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {dealer._count.memberships} Nutzer • {dealer._count.vehicles} Fahrzeuge • {dealer._count.customers} Kunden
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Owner: {owner?.user.name ?? "Kein Owner"} {owner?.user.email ? `• ${owner.user.email}` : ""}
+                    </div>
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    {dealer._count.memberships} Nutzer • {dealer._count.vehicles} Fahrzeuge • {dealer._count.customers} Kunden
-                  </div>
-                </div>
-                <div className="grid w-full gap-3 md:w-[240px]">
-                  <Select
-                    value={dealer.subscriptions[0]?.planId ?? ""}
-                    onValueChange={(value) => subscriptionMutation.mutate({ dealerId: dealer.id, planId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tarif wählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(plansQuery.data ?? []).map((plan) => (
-                        <SelectItem key={plan.id} value={plan.id}>
-                          {plan.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="text-xs text-muted-foreground">
-                    Login-Link fuer Haendler: <span className="font-mono">/login</span>
-                    <br />
-                    Admin-Link fuer dich: <span className="font-mono">/admin/login</span>
+
+                  <div className="grid w-full gap-3 xl:w-[320px]">
+                    <Select
+                      value={dealer.subscriptions[0]?.planId ?? ""}
+                      onValueChange={(value) => subscriptionMutation.mutate({ dealerId: dealer.id, planId: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Tarif wählen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(plansQuery.data ?? []).map((plan) => (
+                          <SelectItem key={plan.id} value={plan.id}>
+                            {plan.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button type="button" variant="outline" onClick={() => openEditDialog(dealer)} className="flex-1">
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Bearbeiten
+                      </Button>
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            disabled={dealer.isDefault || isDeleting}
+                            className="flex-1"
+                          >
+                            {isDeleting ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Löscht...
+                              </>
+                            ) : (
+                              <>
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Löschen
+                              </>
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Autohaus löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {dealer.name} wird komplett entfernt. Zugehörige Daten dieses Dealers werden gelöscht. Benutzer ohne weitere Autohaus-Zuordnung werden ebenfalls entfernt.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => deleteDealerMutation.mutate(dealer.id)}>
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+
+                    <div className="text-xs text-muted-foreground">
+                      Login-Link fuer Haendler: <span className="font-mono">/login</span>
+                      <br />
+                      Admin-Link fuer dich: <span className="font-mono">/admin/login</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(editingDealer && editForm)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingDealer(null);
+            setEditForm(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Autohaus bearbeiten</DialogTitle>
+            <DialogDescription>
+              Dealer-Daten, Owner-Zugang und Status zentral im Superadmin-Bereich pflegen.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editingDealer && editForm ? (
+            <div className="grid gap-4 py-2 md:grid-cols-2">
+              {[
+                ["name", "Dealer-Name"],
+                ["slug", "Slug"],
+                ["ownerName", "Owner-Name"],
+                ["ownerEmail", "Owner-E-Mail"],
+                ["ownerUsername", "Owner-Benutzername"],
+                ["ownerPassword", "Neues Owner-Passwort"],
+              ].map(([key, label]) => (
+                <div key={key} className="space-y-2">
+                  <Label htmlFor={`edit-${key}`}>{label}</Label>
+                  <Input
+                    id={`edit-${key}`}
+                    type={key === "ownerPassword" ? "password" : "text"}
+                    value={editForm[key as keyof DealerEditForm] as string}
+                    placeholder={key === "ownerPassword" ? "Leer lassen, um es nicht zu ändern" : undefined}
+                    onChange={(event) =>
+                      setEditForm((current) =>
+                        current ? { ...current, [key]: event.target.value } : current
+                      )
+                    }
+                  />
+                </div>
+              ))}
+
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select
+                  value={editForm.status}
+                  onValueChange={(value: DealerStatus) =>
+                    setEditForm((current) => (current ? { ...current, status: value } : current))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Aktiv</SelectItem>
+                    <SelectItem value="suspended">Gesperrt</SelectItem>
+                    <SelectItem value="inactive">Inaktiv</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setEditingDealer(null);
+                setEditForm(null);
+              }}
+            >
+              Abbrechen
+            </Button>
+            <Button
+              type="button"
+              disabled={updateDealerMutation.isPending}
+              onClick={() => {
+                if (!editingDealer || !editForm) return;
+
+                const payload: Record<string, unknown> = {
+                  name: editForm.name,
+                  slug: editForm.slug,
+                  status: editForm.status,
+                  owner: {
+                    name: editForm.ownerName,
+                    email: editForm.ownerEmail,
+                    username: editForm.ownerUsername || null,
+                  },
+                };
+
+                if (editForm.ownerPassword.trim()) {
+                  (payload.owner as Record<string, unknown>).password = editForm.ownerPassword;
+                }
+
+                updateDealerMutation.mutate({
+                  dealerId: editingDealer.id,
+                  data: payload,
+                });
+              }}
+            >
+              {updateDealerMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Speichert...
+                </>
+              ) : (
+                "Änderungen speichern"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

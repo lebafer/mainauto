@@ -306,14 +306,16 @@ settingsRouter.put(
     const normalizedEmail = data.email?.trim().toLowerCase();
     const normalizedUsername = data.username === undefined ? undefined : data.username?.trim() || null;
 
-    if (normalizedEmail || normalizedUsername !== undefined) {
+    const userConflictChecks = [
+      ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+      ...(normalizedUsername ? [{ username: normalizedUsername }] : []),
+    ];
+
+    if (userConflictChecks.length > 0) {
       const conflictingUser = await prisma.user.findFirst({
         where: {
           id: { not: existing.userId },
-          OR: [
-            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-            ...(normalizedUsername ? [{ username: normalizedUsername }] : []),
-          ],
+          OR: userConflictChecks,
         },
       });
 

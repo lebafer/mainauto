@@ -110,6 +110,14 @@ export const AdminDealerUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   slug: z.string().trim().min(2).optional(),
   status: DealerStatusSchema.optional(),
+  owner: z
+    .object({
+      name: z.string().min(2, "Name ist erforderlich").optional(),
+      email: z.string().email("Gueltige E-Mail erforderlich").optional(),
+      username: z.string().min(3, "Benutzername ist erforderlich").nullable().optional(),
+      password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben").optional(),
+    })
+    .optional(),
 });
 
 export const DealerTeamMemberCreateSchema = z.object({
