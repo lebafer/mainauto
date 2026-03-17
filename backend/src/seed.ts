@@ -1,40 +1,57 @@
 import { prisma } from "./prisma";
-import { auth } from "./auth";
 import { env } from "./env";
 import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { ensureCoreSaasData } from "./lib/dealers";
-import { upsertCredentialUser } from "./lib/auth-users";
+import { createCredentialUser } from "./lib/auth-users";
 
 const UPLOADS_DIR = join(import.meta.dir, "../uploads");
 
-function getAdminBootstrapConfig() {
+function getSuperAdminConfig() {
   return {
-    enabled: env.BOOTSTRAP_ADMIN,
-    name: env.INITIAL_ADMIN_NAME?.trim() || "Superadmin",
-    username: env.INITIAL_ADMIN_USERNAME?.trim(),
-    password: env.INITIAL_ADMIN_PASSWORD?.trim(),
-    email: env.INITIAL_ADMIN_EMAIL?.trim() || "admin@platform.local",
+    name: env.SUPERADMIN_NAME?.trim() || "Superadmin",
+    username: env.SUPERADMIN_USERNAME?.trim(),
+    password: env.SUPERADMIN_PASSWORD?.trim(),
+    email: env.SUPERADMIN_EMAIL?.trim() || "superadmin@platform.local",
   };
 }
 
 export async function bootstrapInitialAdmin() {
-  const config = getAdminBootstrapConfig();
-
-  if (!config.enabled) {
-    return;
-  }
+  const config = getSuperAdminConfig();
 
   if (!config.username || !config.password) {
-    console.warn(
-      "[bootstrap] BOOTSTRAP_ADMIN=true but INITIAL_ADMIN_USERNAME or INITIAL_ADMIN_PASSWORD is missing."
-    );
     return;
   }
 
   try {
-    const adminUser = await upsertCredentialUser({
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        OR: [{ email: config.email }, { username: config.username }],
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        platformRole: true,
+      },
+    });
+
+    if (existingUser) {
+      if (existingUser.platformRole === "platform_super_admin") {
+        console.info(
+          `[bootstrap] Superadmin bereits vorhanden username=${existingUser.username ?? "-"} email=${existingUser.email}`
+        );
+        return;
+      }
+
+      console.warn(
+        `[bootstrap] Superadmin nicht angelegt, weil ein normaler Nutzer mit username=${existingUser.username ?? "-"} email=${existingUser.email} bereits existiert.`
+      );
+      return;
+    }
+
+    const adminUser = await createCredentialUser({
       name: config.name,
       email: config.email,
       password: config.password,
@@ -42,32 +59,11 @@ export async function bootstrapInitialAdmin() {
       platformRole: "platform_super_admin",
     });
 
-    const defaultDealer = await ensureCoreSaasData();
-
-    await prisma.dealerMembership.upsert({
-      where: {
-        dealerId_userId: {
-          dealerId: defaultDealer.id,
-          userId: adminUser.id,
-        },
-      },
-      update: {
-        role: "dealer_owner",
-        isDefault: true,
-        isActive: true,
-      },
-      create: {
-        dealerId: defaultDealer.id,
-        userId: adminUser.id,
-        role: "dealer_owner",
-        isDefault: true,
-        isActive: true,
-      },
-    });
-
-    console.info(`[bootstrap] Superadmin bereit username=${adminUser.username ?? "-"} email=${adminUser.email}`);
+    console.info(
+      `[bootstrap] Superadmin angelegt username=${adminUser.username ?? "-"} email=${adminUser.email}`
+    );
   } catch (err) {
-    console.error("[bootstrap] Failed to create initial admin user:", err);
+    console.error("[bootstrap] Failed to create superadmin user:", err);
   }
 }
 

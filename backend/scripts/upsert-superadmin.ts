@@ -8,10 +8,10 @@ function getArg(flag: string): string | undefined {
 }
 
 async function main() {
-  const username = getArg("--username") || process.env.ADMIN_USERNAME;
-  const password = getArg("--password") || process.env.ADMIN_PASSWORD;
-  const email = getArg("--email") || process.env.ADMIN_EMAIL;
-  const name = getArg("--name") || process.env.ADMIN_NAME || "Superadmin";
+  const username = getArg("--username") || process.env.SUPERADMIN_USERNAME || process.env.ADMIN_USERNAME;
+  const password = getArg("--password") || process.env.SUPERADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+  const email = getArg("--email") || process.env.SUPERADMIN_EMAIL || process.env.ADMIN_EMAIL;
+  const name = getArg("--name") || process.env.SUPERADMIN_NAME || process.env.ADMIN_NAME || "Superadmin";
 
   if (!username || !password) {
     console.error(

@@ -35,6 +35,10 @@ const envSchema = z.object({
   INITIAL_ADMIN_USERNAME: z.string().optional(),
   INITIAL_ADMIN_PASSWORD: z.string().optional(),
   INITIAL_ADMIN_EMAIL: z.string().email().optional(),
+  SUPERADMIN_NAME: z.string().optional(),
+  SUPERADMIN_USERNAME: z.string().optional(),
+  SUPERADMIN_PASSWORD: z.string().optional(),
+  SUPERADMIN_EMAIL: z.string().email().optional(),
 
   // Comma-separated list of allowed origins, supports wildcard prefix via https://*.example.com
   CORS_ALLOWED_ORIGINS: z.string().optional(),
