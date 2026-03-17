@@ -135,7 +135,6 @@ export const DealerTeamRoleUpdateSchema = z.object({
   username: z.string().min(3, "Benutzername ist erforderlich").nullable().optional(),
   password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben").optional(),
   isActive: z.boolean().optional(),
-  isDefault: z.boolean().optional(),
 });
 
 export const DealerSubscriptionUpdateSchema = z.object({

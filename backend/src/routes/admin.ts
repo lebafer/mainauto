@@ -185,7 +185,7 @@ adminRouter.put(
       include: {
         memberships: {
           where: { role: "dealer_owner" },
-          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          orderBy: [{ createdAt: "asc" }],
           include: {
             user: true,
           },

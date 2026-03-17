@@ -40,7 +40,6 @@ type DealerStatus = "active" | "suspended" | "inactive";
 type DealerMembership = {
   id: string;
   role: "dealer_owner" | "dealer_admin" | "staff";
-  isDefault: boolean;
   isActive: boolean;
   user: {
     id: string;
@@ -77,11 +76,7 @@ type DealerEditForm = {
 };
 
 function getPrimaryOwner(dealer: Dealer) {
-  return (
-    dealer.memberships.find((membership) => membership.role === "dealer_owner" && membership.isDefault) ??
-    dealer.memberships.find((membership) => membership.role === "dealer_owner") ??
-    null
-  );
+  return dealer.memberships.find((membership) => membership.role === "dealer_owner") ?? null;
 }
 
 function createEditForm(dealer: Dealer): DealerEditForm {

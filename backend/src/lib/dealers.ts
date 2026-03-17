@@ -201,8 +201,7 @@ export function pickActiveMembership(
     return null;
   }
 
-  const preferred = memberships.find((membership) => membership.isDefault) ?? memberships[0];
-  return preferred ?? null;
+  return memberships[0] ?? null;
 }
 
 export function getMembershipEntitlements(membership: ActiveDealerMembership | null): FeatureEntitlements {

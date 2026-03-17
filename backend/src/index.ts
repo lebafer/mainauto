@@ -180,7 +180,7 @@ app.use("/api/*", async (c, next) => {
             },
           },
         },
-        orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+        orderBy: [{ createdAt: "asc" }],
       },
     },
   });

@@ -239,7 +239,6 @@ settingsRouter.post(
         dealerId,
         userId: user.id,
         role: data.role,
-        isDefault: false,
         isActive: true,
       },
       include: {
@@ -332,13 +331,6 @@ settingsRouter.put(
       }
     }
 
-    if (data.isDefault) {
-      await prisma.dealerMembership.updateMany({
-        where: { dealerId },
-        data: { isDefault: false },
-      });
-    }
-
     const passwordHash = data.password ? await hashPassword(data.password) : null;
 
     const membership = await prisma.$transaction(async (tx) => {
@@ -388,7 +380,6 @@ settingsRouter.put(
         data: {
           ...(data.role !== undefined ? { role: data.role } : {}),
           ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
-          ...(data.isDefault !== undefined ? { isDefault: data.isDefault } : {}),
         },
         include: {
           user: {
