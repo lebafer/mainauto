@@ -5,12 +5,14 @@ import { join } from "path";
 import { existsSync, mkdirSync } from "fs";
 import { randomUUID } from "crypto";
 import { ensureCoreSaasData } from "./lib/dealers";
+import { upsertCredentialUser } from "./lib/auth-users";
 
 const UPLOADS_DIR = join(import.meta.dir, "../uploads");
 
 function getAdminBootstrapConfig() {
   return {
     enabled: env.BOOTSTRAP_ADMIN,
+    name: env.INITIAL_ADMIN_NAME?.trim() || "Superadmin",
     username: env.INITIAL_ADMIN_USERNAME?.trim(),
     password: env.INITIAL_ADMIN_PASSWORD?.trim(),
     email: env.INITIAL_ADMIN_EMAIL?.trim() || "admin@platform.local",
@@ -32,56 +34,38 @@ export async function bootstrapInitialAdmin() {
   }
 
   try {
-    const usersCount = await prisma.user.count();
+    const adminUser = await upsertCredentialUser({
+      name: config.name,
+      email: config.email,
+      password: config.password,
+      username: config.username,
+      platformRole: "platform_super_admin",
+    });
 
-    if (usersCount > 0) {
-      console.info("[bootstrap] Initial admin skipped because users already exist.");
-      return;
-    }
+    const defaultDealer = await ensureCoreSaasData();
 
-    await auth.api.signUpEmail({
-      body: {
-        name: "Admin",
-        email: config.email,
-        password: config.password,
-        username: config.username,
+    await prisma.dealerMembership.upsert({
+      where: {
+        dealerId_userId: {
+          dealerId: defaultDealer.id,
+          userId: adminUser.id,
+        },
+      },
+      update: {
+        role: "dealer_owner",
+        isDefault: true,
+        isActive: true,
+      },
+      create: {
+        dealerId: defaultDealer.id,
+        userId: adminUser.id,
+        role: "dealer_owner",
+        isDefault: true,
+        isActive: true,
       },
     });
 
-    const adminUser = await prisma.user.findUnique({
-      where: { email: config.email },
-    });
-    const defaultDealer = await ensureCoreSaasData();
-
-    if (adminUser) {
-      await prisma.user.update({
-        where: { id: adminUser.id },
-        data: { platformRole: "platform_super_admin" },
-      });
-
-      await prisma.dealerMembership.upsert({
-        where: {
-          dealerId_userId: {
-            dealerId: defaultDealer.id,
-            userId: adminUser.id,
-          },
-        },
-        update: {
-          role: "dealer_owner",
-          isDefault: true,
-          isActive: true,
-        },
-        create: {
-          dealerId: defaultDealer.id,
-          userId: adminUser.id,
-          role: "dealer_owner",
-          isDefault: true,
-          isActive: true,
-        },
-      });
-    }
-
-    console.info("[bootstrap] Initial admin user created.");
+    console.info(`[bootstrap] Superadmin bereit username=${adminUser.username ?? "-"} email=${adminUser.email}`);
   } catch (err) {
     console.error("[bootstrap] Failed to create initial admin user:", err);
   }

@@ -31,6 +31,7 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value.toLowerCase() === "true"),
+  INITIAL_ADMIN_NAME: z.string().optional(),
   INITIAL_ADMIN_USERNAME: z.string().optional(),
   INITIAL_ADMIN_PASSWORD: z.string().optional(),
   INITIAL_ADMIN_EMAIL: z.string().email().optional(),
