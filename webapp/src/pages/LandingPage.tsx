@@ -69,7 +69,7 @@ export default function LandingPage() {
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
                 Verwalte Bestand, Verkauf, Dokumente und dein Team in einer gemeinsamen Cloud-Plattform. Schnell
-                startklar, klar bepreist und ohne zusaetzliche Setup-Schleifen.
+                startklar, klar bepreist und ohne versteckte Kosten.
               </p>
             </div>
 
