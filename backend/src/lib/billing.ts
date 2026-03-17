@@ -8,6 +8,7 @@ export type BillingState = {
   status: DealerSubscription["status"] | "none";
   trialEndsAt: Date | null;
   currentPeriodEndsAt: Date | null;
+  isComplimentary: boolean;
   requiresPayment: boolean;
   canAccessApp: boolean;
 };
@@ -41,7 +42,7 @@ export function getCurrentSubscription(
 export function getBillingState(
   subscription: Pick<
     DealerSubscription,
-    "status" | "trialEndsAt" | "currentPeriodEndsAt" | "endsAt"
+    "status" | "trialEndsAt" | "currentPeriodEndsAt" | "endsAt" | "complimentaryAccess"
   > | null | undefined,
   now: Date = new Date()
 ): BillingState {
@@ -50,6 +51,7 @@ export function getBillingState(
       status: "none",
       trialEndsAt: null,
       currentPeriodEndsAt: null,
+      isComplimentary: false,
       requiresPayment: true,
       canAccessApp: false,
     };
@@ -57,17 +59,30 @@ export function getBillingState(
 
   const trialEndsAt = subscription.trialEndsAt ?? null;
   const currentPeriodEndsAt = subscription.currentPeriodEndsAt ?? subscription.endsAt ?? null;
+  const isComplimentary = subscription.complimentaryAccess === true;
   const isTrialing = subscription.status === "trialing";
   const isTrialActive = Boolean(trialEndsAt && trialEndsAt.getTime() > now.getTime());
   const hasCurrentPeriodAccess = Boolean(
     currentPeriodEndsAt && currentPeriodEndsAt.getTime() > now.getTime()
   );
 
+  if (isComplimentary) {
+    return {
+      status: subscription.status,
+      trialEndsAt,
+      currentPeriodEndsAt,
+      isComplimentary,
+      requiresPayment: false,
+      canAccessApp: true,
+    };
+  }
+
   if (subscription.status === "active") {
     return {
       status: subscription.status,
       trialEndsAt,
       currentPeriodEndsAt,
+      isComplimentary: false,
       requiresPayment: false,
       canAccessApp: true,
     };
@@ -78,6 +93,7 @@ export function getBillingState(
       status: subscription.status,
       trialEndsAt,
       currentPeriodEndsAt,
+      isComplimentary: false,
       requiresPayment: !isTrialActive,
       canAccessApp: isTrialActive,
     };
@@ -88,6 +104,7 @@ export function getBillingState(
       status: subscription.status,
       trialEndsAt,
       currentPeriodEndsAt,
+      isComplimentary: false,
       requiresPayment: !hasCurrentPeriodAccess,
       canAccessApp: hasCurrentPeriodAccess,
     };
@@ -97,6 +114,7 @@ export function getBillingState(
     status: subscription.status,
     trialEndsAt,
     currentPeriodEndsAt,
+    isComplimentary: false,
     requiresPayment: true,
     canAccessApp: false,
   };

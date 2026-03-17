@@ -41,6 +41,7 @@ function getState(c: Context): RequestContextState {
         status: "none",
         trialEndsAt: null,
         currentPeriodEndsAt: null,
+        isComplimentary: false,
         requiresPayment: true,
         canAccessApp: false,
       },

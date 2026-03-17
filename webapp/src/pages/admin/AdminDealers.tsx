@@ -1,14 +1,17 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Trash2 } from "lucide-react";
+import type { DealerSubscription as SharedDealerSubscription } from "../../../../backend/src/types";
 import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -105,7 +108,7 @@ type Dealer = {
   } | null;
   domains: DealerDomain[];
   memberships: DealerMembership[];
-  subscriptions: Array<{ planId: string; plan?: { name: string } }>;
+  subscriptions: SharedDealerSubscription[];
   _count: {
     vehicles: number;
     customers: number;
@@ -142,6 +145,10 @@ function createEditForm(dealer: Dealer): DealerEditForm {
     ownerUsername: owner?.user.username ?? "",
     ownerPassword: "",
   };
+}
+
+function getCurrentSubscription(dealer: Dealer) {
+  return dealer.subscriptions[0] ?? null;
 }
 
 export default function AdminDealers() {
@@ -252,8 +259,20 @@ export default function AdminDealers() {
   });
 
   const subscriptionMutation = useMutation({
-    mutationFn: ({ dealerId, planId }: { dealerId: string; planId: string }) =>
-      api.put(`/api/admin/subscriptions/${dealerId}`, { planId, status: "active" }),
+    mutationFn: ({
+      dealerId,
+      planId,
+      complimentaryAccess,
+    }: {
+      dealerId: string;
+      planId: string;
+      complimentaryAccess?: boolean;
+    }) =>
+      api.put(`/api/admin/subscriptions/${dealerId}`, {
+        planId,
+        status: "active",
+        complimentaryAccess,
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
       toast({ title: "Tarif aktualisiert" });
@@ -262,6 +281,24 @@ export default function AdminDealers() {
       toast({
         title: "Fehler",
         description: error instanceof Error ? error.message : "Tarif konnte nicht aktualisiert werden.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const complimentaryMutation = useMutation({
+    mutationFn: ({ dealerId, complimentaryAccess }: { dealerId: string; complimentaryAccess: boolean }) =>
+      api.put(`/api/admin/subscriptions/${dealerId}/complimentary`, { complimentaryAccess }),
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
+      toast({
+        title: variables.complimentaryAccess ? "Kostenlos freigeschaltet" : "Gratis-Freigabe entfernt",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fehler",
+        description: error instanceof Error ? error.message : "Gratis-Freigabe konnte nicht aktualisiert werden.",
         variant: "destructive",
       });
     },
@@ -414,7 +451,10 @@ export default function AdminDealers() {
         <CardContent className="space-y-4">
           {(dealersQuery.data ?? []).map((dealer) => {
             const owner = getPrimaryOwner(dealer);
+            const currentSubscription = getCurrentSubscription(dealer);
             const isDeleting = deleteDealerMutation.isPending && deleteDealerMutation.variables === dealer.id;
+            const isUpdatingComplimentary =
+              complimentaryMutation.isPending && complimentaryMutation.variables?.dealerId === dealer.id;
 
             return (
               <div key={dealer.id} className="rounded-lg border p-4">
@@ -434,6 +474,15 @@ export default function AdminDealers() {
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Owner: {owner?.user.name ?? "Kein Owner"} {owner?.user.email ? `• ${owner.user.email}` : ""}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                      <Badge variant={currentSubscription?.complimentaryAccess ? "default" : "outline"}>
+                        {currentSubscription?.complimentaryAccess ? "Kostenlos aktiv" : "Kostenpflichtig"}
+                      </Badge>
+                      <span className="text-muted-foreground">
+                        {currentSubscription?.plan?.name ?? "Kein Tarif"}
+                        {currentSubscription?.status ? ` • ${currentSubscription.status}` : ""}
+                      </span>
                     </div>
                     <div className="mt-3 space-y-2 rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">
                       <div className="font-medium text-foreground">Domains</div>
@@ -501,8 +550,14 @@ export default function AdminDealers() {
 
                   <div className="grid w-full gap-3 xl:w-[320px]">
                     <Select
-                      value={dealer.subscriptions[0]?.planId ?? ""}
-                      onValueChange={(value) => subscriptionMutation.mutate({ dealerId: dealer.id, planId: value })}
+                      value={currentSubscription?.planId ?? ""}
+                      onValueChange={(value) =>
+                        subscriptionMutation.mutate({
+                          dealerId: dealer.id,
+                          planId: value,
+                          complimentaryAccess: currentSubscription?.complimentaryAccess ?? false,
+                        })
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Tarif wählen" />
@@ -515,6 +570,25 @@ export default function AdminDealers() {
                         ))}
                       </SelectContent>
                     </Select>
+
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium text-foreground">Kostenloser Zugang</div>
+                        <div className="text-xs text-muted-foreground">
+                          Hebt die Paywall fuer dieses Autohaus direkt auf.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={currentSubscription?.complimentaryAccess ?? false}
+                        disabled={!currentSubscription || isUpdatingComplimentary}
+                        onCheckedChange={(checked) =>
+                          complimentaryMutation.mutate({
+                            dealerId: dealer.id,
+                            complimentaryAccess: checked,
+                          })
+                        }
+                      />
+                    </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Button type="button" variant="outline" onClick={() => openEditDialog(dealer)} className="flex-1">

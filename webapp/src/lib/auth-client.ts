@@ -82,6 +82,7 @@ export interface DealerSubscriptionInfo {
   stripeSubscriptionId?: string | null;
   stripeCheckoutSessionId?: string | null;
   stripePriceId?: string | null;
+  complimentaryAccess?: boolean;
   featureOverrides?: Record<string, boolean>;
   billingNotes?: string | null;
   trialEndsAt?: string | null;
@@ -104,6 +105,7 @@ export interface BillingInfo {
   status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
   trialEndsAt: string | null;
   currentPeriodEndsAt: string | null;
+  isComplimentary: boolean;
   requiresPayment: boolean;
   canAccessApp: boolean;
 }

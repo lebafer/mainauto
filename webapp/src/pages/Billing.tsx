@@ -124,7 +124,11 @@ export default function Billing() {
           <CardHeader className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
               <Badge className="rounded-full bg-amber-500/15 px-4 py-1 text-amber-700 hover:bg-amber-500/15 dark:text-amber-300">
-                {session.billing.requiresPayment ? "Zahlung erforderlich" : session.subscription?.plan?.name ?? "Tarif aktiv"}
+                {session.billing.isComplimentary
+                  ? "Kostenlos freigeschaltet"
+                  : session.billing.requiresPayment
+                    ? "Zahlung erforderlich"
+                    : session.subscription?.plan?.name ?? "Tarif aktiv"}
               </Badge>
               {session.billing.status === "trialing" ? (
                 <Badge variant="outline" className="rounded-full">
@@ -134,12 +138,16 @@ export default function Billing() {
             </div>
             <div className="space-y-3">
               <CardTitle className="text-3xl">
-                {session.billing.requiresPayment
+                {session.billing.isComplimentary
+                  ? `${session.subscription?.plan?.name ?? "CarOps"} ist kostenlos fuer dieses Autohaus freigeschaltet.`
+                  : session.billing.requiresPayment
                   ? "Dein Zugang ist aktuell hinter der Paywall."
                   : `Du nutzt gerade ${session.subscription?.plan?.name ?? "CarOps"}.`}
               </CardTitle>
               <CardDescription className="max-w-2xl text-base leading-7">
-                {session.billing.requiresPayment
+                {session.billing.isComplimentary
+                  ? "Dieses Autohaus wurde im Adminbereich kostenlos freigeschaltet. Stripe ist deshalb fuer den Zugriff aktuell nicht noetig."
+                  : session.billing.requiresPayment
                   ? "Waehle jetzt einen Tarif und aktiviere dein Abo, damit du wieder voll auf dein Autohaus zugreifen kannst."
                   : "Verwalte hier Testphase, Upgrade und dein Zahlungsprofil. Alle Tarifwechsel laufen direkt ueber Stripe."}
               </CardDescription>
@@ -158,7 +166,11 @@ export default function Billing() {
               {
                 icon: ShieldCheck,
                 title: "Aktueller Tarif",
-                text: currentPlan ? `${currentPlan.name} fuer ${formatCurrency(currentPlan.monthlyPriceCents)} / Monat` : "Noch kein Tarif aktiv.",
+                text: currentPlan
+                  ? session.billing.isComplimentary
+                    ? `${currentPlan.name} ist kostenlos freigeschaltet.`
+                    : `${currentPlan.name} fuer ${formatCurrency(currentPlan.monthlyPriceCents)} / Monat`
+                  : "Noch kein Tarif aktiv.",
               },
               {
                 icon: Sparkles,

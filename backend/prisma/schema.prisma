@@ -150,6 +150,7 @@ model DealerSubscription {
   stripeSubscriptionId String?
   stripeCheckoutSessionId String?
   stripePriceId    String?
+  complimentaryAccess Boolean              @default(false)
   featureOverrides Json?
   billingNotes     String?
   trialEndsAt      DateTime?

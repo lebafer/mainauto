@@ -111,6 +111,7 @@ export const DealerSubscriptionSchema = z.object({
   stripeSubscriptionId: z.string().nullable().optional(),
   stripeCheckoutSessionId: z.string().nullable().optional(),
   stripePriceId: z.string().nullable().optional(),
+  complimentaryAccess: z.boolean().default(false),
   featureOverrides: FeatureEntitlementsSchema.optional(),
   billingNotes: z.string().nullable().optional(),
   trialEndsAt: z.string().nullable().optional(),
@@ -176,9 +177,14 @@ export const DealerTeamRoleUpdateSchema = z.object({
 export const DealerSubscriptionUpdateSchema = z.object({
   planId: z.string().min(1, "Plan ist erforderlich"),
   status: DealerSubscriptionStatusSchema.default("active"),
+  complimentaryAccess: z.boolean().optional(),
   featureOverrides: FeatureEntitlementsSchema.optional(),
   billingNotes: z.string().optional(),
   endsAt: z.string().nullable().optional(),
+});
+
+export const DealerSubscriptionComplimentaryUpdateSchema = z.object({
+  complimentaryAccess: z.boolean(),
 });
 
 export const DealerDomainCreateSchema = z.object({
@@ -259,6 +265,7 @@ export const BillingStateSchema = z.object({
   status: z.union([DealerSubscriptionStatusSchema, z.literal("none")]),
   trialEndsAt: z.string().nullable(),
   currentPeriodEndsAt: z.string().nullable(),
+  isComplimentary: z.boolean().default(false),
   requiresPayment: z.boolean(),
   canAccessApp: z.boolean(),
 });

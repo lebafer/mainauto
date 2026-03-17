@@ -12,6 +12,7 @@ import {
   DealerDomainActivateSchema,
   DealerDomainCreateSchema,
   DealerDomainVerifySchema,
+  DealerSubscriptionComplimentaryUpdateSchema,
   DealerSubscriptionUpdateSchema,
   OnboardingInquiryStatusUpdateSchema,
 } from "../types";
@@ -487,27 +488,61 @@ adminRouter.put(
     const subscription = existing
       ? await prisma.dealerSubscription.update({
           where: { id: existing.id },
-          data: {
-            status: data.status,
-            featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
-            billingNotes: data.billingNotes ?? null,
-            endsAt: data.endsAt ? new Date(data.endsAt) : null,
+        data: {
+          status: data.status,
+          complimentaryAccess: data.complimentaryAccess,
+          featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
+          billingNotes: data.billingNotes ?? null,
+          endsAt: data.endsAt ? new Date(data.endsAt) : null,
           },
           include: { plan: true },
         })
       : await prisma.dealerSubscription.create({
-          data: {
-            dealerId,
-            planId: data.planId,
-            status: data.status,
-            featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
-            billingNotes: data.billingNotes ?? null,
-            endsAt: data.endsAt ? new Date(data.endsAt) : null,
+        data: {
+          dealerId,
+          planId: data.planId,
+          status: data.status,
+          complimentaryAccess: data.complimentaryAccess ?? false,
+          featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
+          billingNotes: data.billingNotes ?? null,
+          endsAt: data.endsAt ? new Date(data.endsAt) : null,
           },
           include: { plan: true },
         });
 
     return c.json({ data: subscription });
+  }
+);
+
+adminRouter.put(
+  "/subscriptions/:dealerId/complimentary",
+  zValidator("json", DealerSubscriptionComplimentaryUpdateSchema),
+  async (c) => {
+    const dealerId = c.req.param("dealerId");
+    const data = c.req.valid("json");
+
+    const subscription = await prisma.dealerSubscription.findFirst({
+      where: { dealerId },
+      orderBy: [{ createdAt: "desc" }],
+      include: { plan: true },
+    });
+
+    if (!subscription) {
+      return c.json(
+        { error: { code: "SUBSCRIPTION_NOT_FOUND", message: "Fuer dieses Autohaus existiert noch kein Tarif." } },
+        404
+      );
+    }
+
+    const updatedSubscription = await prisma.dealerSubscription.update({
+      where: { id: subscription.id },
+      data: {
+        complimentaryAccess: data.complimentaryAccess,
+      },
+      include: { plan: true },
+    });
+
+    return c.json({ data: updatedSubscription });
   }
 );
 

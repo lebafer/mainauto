@@ -114,7 +114,11 @@ export function AppSidebar() {
           <div className="font-medium text-foreground">
             {session?.dealerSettings?.displayName ?? session?.dealer?.name ?? "Autohaus"}
           </div>
-          <div>{session?.subscription?.plan?.name ?? "Kein Tarif"}</div>
+          <div>
+            {session?.billing.isComplimentary
+              ? `${session?.subscription?.plan?.name ?? "Tarif"} kostenlos`
+              : session?.subscription?.plan?.name ?? "Kein Tarif"}
+          </div>
         </div>
         <div className="flex items-center justify-between px-1 py-1 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
           <ThemeToggle />
