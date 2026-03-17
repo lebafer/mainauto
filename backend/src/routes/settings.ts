@@ -6,8 +6,8 @@ import {
   DealerTeamMemberCreateSchema,
   DealerTeamRoleUpdateSchema,
 } from "../types";
-import { auth } from "../auth";
 import { getCurrentDealer, getCurrentDealerId, requireDealerRole } from "../lib/request-context";
+import { createCredentialUser } from "../lib/auth-users";
 
 const settingsRouter = new Hono();
 
@@ -109,30 +109,12 @@ settingsRouter.post(
       );
     }
 
-    await auth.api.signUpEmail({
-      body: {
-        name: data.name,
-        email: data.email,
-        password: data.password,
-        username: data.username,
-      },
+    const user = await createCredentialUser({
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      username: data.username,
     });
-
-    const user = await prisma.user.findUnique({
-      where: { email: data.email },
-    });
-
-    if (!user) {
-      return c.json(
-        {
-          error: {
-            code: "USER_CREATE_FAILED",
-            message: "Benutzer konnte nicht angelegt werden",
-          },
-        },
-        500
-      );
-    }
 
     const membership = await prisma.dealerMembership.create({
       data: {

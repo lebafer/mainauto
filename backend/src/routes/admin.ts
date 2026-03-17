@@ -7,9 +7,9 @@ import {
   AdminDealerUpdateSchema,
   DealerSubscriptionUpdateSchema,
 } from "../types";
-import { auth } from "../auth";
 import { requirePlatformSuperAdmin } from "../lib/request-context";
 import { slugifyDealerName } from "../lib/dealers";
+import { createCredentialUser } from "../lib/auth-users";
 
 const adminRouter = new Hono();
 
@@ -94,25 +94,12 @@ adminRouter.post(
       );
     }
 
-    await auth.api.signUpEmail({
-      body: {
-        name: data.owner.name,
-        email: data.owner.email,
-        password: data.owner.password,
-        username: data.owner.username,
-      },
+    const owner = await createCredentialUser({
+      name: data.owner.name,
+      email: data.owner.email,
+      password: data.owner.password,
+      username: data.owner.username,
     });
-
-    const owner = await prisma.user.findUnique({
-      where: { email: data.owner.email },
-    });
-
-    if (!owner) {
-      return c.json(
-        { error: { code: "OWNER_CREATE_FAILED", message: "Owner konnte nicht angelegt werden" } },
-        500
-      );
-    }
 
     const basicPlan = await prisma.plan.findFirst({
       where: { slug: "basic" },
