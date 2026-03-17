@@ -191,84 +191,62 @@ export async function ensureDefaultPlans() {
 }
 
 export async function ensureDefaultDealer() {
-  const dealer = await prisma.dealer.upsert({
+  const existingDealer = await prisma.dealer.findUnique({
     where: { slug: DEFAULT_DEALER_SLUG },
-    update: {
-      name: DEFAULT_DEALER_NAME,
-      setupStatus: "active",
-      isDefault: true,
-      status: "active",
-    },
-    create: {
-      name: DEFAULT_DEALER_NAME,
-      slug: DEFAULT_DEALER_SLUG,
-      setupStatus: "active",
-      isDefault: true,
-      status: "active",
+    include: {
+      settings: true,
+      domains: true,
+      subscriptions: true,
     },
   });
 
-  await prisma.dealerSettings.upsert({
-    where: { dealerId: dealer.id },
-    update: {
-      ...DEFAULT_DEALER_SETTINGS,
-    },
-    create: {
-      dealerId: dealer.id,
-      ...DEFAULT_DEALER_SETTINGS,
-    },
-  });
-
-  await prisma.dealerDomain.upsert({
-    where: {
-      host: createFallbackDealerHost(dealer.slug),
-    },
-    update: {
-      dealerId: dealer.id,
-      status: "active",
-      isPrimary: true,
-      verificationToken: null,
-      verifiedAt: new Date(),
-    },
-    create: {
-      dealerId: dealer.id,
-      host: createFallbackDealerHost(dealer.slug),
-      status: "active",
-      isPrimary: true,
-      verificationToken: null,
-      verifiedAt: new Date(),
-    },
-  });
-
-  const defaultPlan = await prisma.plan.findUnique({ where: { slug: "pro" } });
-  if (defaultPlan) {
-    await prisma.dealerSubscription.updateMany({
-      where: {
-        dealerId: dealer.id,
-        NOT: {
-          planId: defaultPlan.id,
+  const dealer = existingDealer
+    ? await prisma.dealer.update({
+        where: { id: existingDealer.id },
+        data: {
+          isDefault: true,
         },
-        status: {
-          in: ["active", "trialing", "past_due"],
+      })
+    : await prisma.dealer.create({
+        data: {
+          name: DEFAULT_DEALER_NAME,
+          slug: DEFAULT_DEALER_SLUG,
+          setupStatus: "active",
+          isDefault: true,
+          status: "active",
         },
-      },
+      });
+
+  if (!existingDealer?.settings) {
+    await prisma.dealerSettings.create({
       data: {
-        status: "canceled",
+        dealerId: dealer.id,
+        ...DEFAULT_DEALER_SETTINGS,
       },
     });
+  }
 
-    await prisma.dealerSubscription.upsert({
-      where: {
-        dealerId_planId: {
-          dealerId: dealer.id,
-          planId: defaultPlan.id,
-        },
-      },
-      update: {
+  const fallbackHost = createFallbackDealerHost(dealer.slug);
+  const hasAnyDomain = (existingDealer?.domains.length ?? 0) > 0;
+  const existingFallbackDomain = existingDealer?.domains.find((domain) => domain.host === fallbackHost);
+  if (!existingFallbackDomain) {
+    await prisma.dealerDomain.create({
+      data: {
+        dealerId: dealer.id,
+        host: fallbackHost,
         status: "active",
-        trialEndsAt: null,
+        isPrimary: !hasAnyDomain,
+        verificationToken: null,
+        verifiedAt: new Date(),
       },
-      create: {
+    });
+  }
+
+  const hasAnySubscription = (existingDealer?.subscriptions.length ?? 0) > 0;
+  const defaultPlan = await prisma.plan.findUnique({ where: { slug: "pro" } });
+  if (!hasAnySubscription && defaultPlan) {
+    await prisma.dealerSubscription.create({
+      data: {
         dealerId: dealer.id,
         planId: defaultPlan.id,
         status: "active",
