@@ -1,8 +1,6 @@
 import type { HandoverProtocol } from "../types";
 import { DEFAULT_DEALER_SETTINGS } from "./dealers";
 
-const LOGO_DATA_URI = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 110"><rect width="320" height="110" fill="transparent"/><text x="8" y="70" font-family="Arial, Helvetica, sans-serif" font-size="72" font-style="italic" font-weight="700" fill="#0a3dff">M</text><text x="72" y="86" font-family="Georgia, Times New Roman, serif" font-size="96" font-style="italic" font-weight="700" fill="#e32119">A</text><text x="150" y="82" font-family="Arial, Helvetica, sans-serif" font-size="74" font-style="italic" font-weight="700" fill="#111111">uto</text></svg>`)}`;
-
 export interface HandoverDealerProfile {
   name: string;
   addressLine1: string;
@@ -151,11 +149,14 @@ function describeWheelCondition(value: HandoverProtocol["mountedWheels"]["condit
   }
 }
 
-function getLogoImgHtml(className: string, logoSrc: string = LOGO_DATA_URI, alt: string = DEFAULT_DEALER_SETTINGS.legalName): string {
+function getLogoImgHtml(className: string, logoSrc: string | null = null, alt: string = DEFAULT_DEALER_SETTINGS.legalName): string {
+  if (!logoSrc) {
+    return "";
+  }
   return `<img src="${logoSrc}" alt="${alt}" class="${className}" />`;
 }
 
-function getDealerHeaderHtml(profile: HandoverDealerProfile, logoSrc: string = LOGO_DATA_URI): string {
+function getDealerHeaderHtml(profile: HandoverDealerProfile, logoSrc: string | null = null): string {
   return `
     <div class="dealer-header">
       <div class="dealer-brand">
@@ -193,23 +194,8 @@ function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"], sketch
   `;
 }
 
-export function resolveDocumentLogoSrc(c: { req: { header: (name: string) => string | undefined } }): string {
-  const origin = c.req.header("origin");
-  const referer = c.req.header("referer");
-
-  if (origin && /^https?:\/\//i.test(origin)) {
-    return `${origin.replace(/\/$/, "")}/mainauto-logo.png`;
-  }
-
-  if (referer) {
-    try {
-      return `${new URL(referer).origin}/mainauto-logo.png`;
-    } catch {
-      return LOGO_DATA_URI;
-    }
-  }
-
-  return LOGO_DATA_URI;
+export function resolveDocumentLogoSrc(profile?: HandoverDealerProfile): string | null {
+  return profile?.logoUrl ?? null;
 }
 
 export function buildDefaultHandoverProtocol(
@@ -300,7 +286,7 @@ export function buildDefaultHandoverProtocol(
 export function generateHandoverProtocolHtml(
   data: HandoverProtocol,
   dealerProfile: HandoverDealerProfile = getDefaultDealerProfile(),
-  logoSrc: string = dealerProfile.logoUrl || LOGO_DATA_URI,
+  logoSrc: string | null = dealerProfile.logoUrl || null,
   sketchSrc: string = "/car.png"
 ): string {
   const keyCount = data.items.keys.count !== null && data.items.keys.count !== undefined
