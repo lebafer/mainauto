@@ -45,7 +45,14 @@ export default function AdminLogin() {
       });
 
       if (result.error) {
-        throw new Error("Benutzername oder Passwort ist falsch.");
+        const authErrorMessage =
+          typeof result.error === "object" &&
+          result.error !== null &&
+          "message" in result.error &&
+          typeof result.error.message === "string"
+            ? result.error.message
+            : "";
+        throw new Error(authErrorMessage || "Benutzername oder Passwort ist falsch.");
       }
 
       const token = (result.data as { token?: string } | null)?.token;

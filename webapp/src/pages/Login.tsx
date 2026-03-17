@@ -33,9 +33,16 @@ export default function Login() {
       });
 
       if (result.error) {
+        const authErrorMessage =
+          typeof result.error === "object" &&
+          result.error !== null &&
+          "message" in result.error &&
+          typeof result.error.message === "string"
+            ? result.error.message
+            : "";
         toast({
           title: "Fehler",
-          description: "Benutzername oder Passwort ist falsch.",
+          description: authErrorMessage || "Benutzername oder Passwort ist falsch.",
           variant: "destructive",
         });
         setIsLoading(false);
