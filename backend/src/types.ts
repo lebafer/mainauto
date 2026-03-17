@@ -121,7 +121,11 @@ export const DealerTeamMemberCreateSchema = z.object({
 });
 
 export const DealerTeamRoleUpdateSchema = z.object({
-  role: DealerMembershipRoleSchema,
+  role: DealerMembershipRoleSchema.optional(),
+  name: z.string().min(2, "Name ist erforderlich").optional(),
+  email: z.string().email("Gueltige E-Mail erforderlich").optional(),
+  username: z.string().min(3, "Benutzername ist erforderlich").nullable().optional(),
+  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben").optional(),
   isActive: z.boolean().optional(),
   isDefault: z.boolean().optional(),
 });

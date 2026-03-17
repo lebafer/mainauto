@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
+import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
 import { basename, join } from "path";
 import { mkdir, unlink } from "fs/promises";
@@ -32,6 +33,19 @@ async function deleteDealerLogoFile(logoUrl: string | null | undefined) {
   } catch {
     // Missing files should not block settings updates.
   }
+}
+
+async function ensureAnotherActiveOwnerExists(dealerId: string, membershipId: string) {
+  const remainingActiveOwners = await prisma.dealerMembership.count({
+    where: {
+      dealerId,
+      role: "dealer_owner",
+      isActive: true,
+      NOT: { id: membershipId },
+    },
+  });
+
+  return remainingActiveOwners > 0;
 }
 
 const settingsRouter = new Hono();
@@ -261,10 +275,59 @@ settingsRouter.put(
 
     const existing = await prisma.dealerMembership.findFirst({
       where: { id: membershipId, dealerId },
+      include: {
+        user: true,
+      },
     });
 
     if (!existing) {
       return c.json({ error: { code: "NOT_FOUND", message: "Teammitglied nicht gefunden" } }, 404);
+    }
+
+    const nextRole = data.role ?? existing.role;
+    const nextIsActive = data.isActive ?? existing.isActive;
+    const removesActiveOwner =
+      existing.role === "dealer_owner" &&
+      existing.isActive &&
+      (nextRole !== "dealer_owner" || !nextIsActive);
+
+    if (removesActiveOwner && !(await ensureAnotherActiveOwnerExists(dealerId, membershipId))) {
+      return c.json(
+        {
+          error: {
+            code: "LAST_OWNER",
+            message: "Mindestens ein aktiver Owner muss im Autohaus verbleiben.",
+          },
+        },
+        400
+      );
+    }
+
+    const normalizedEmail = data.email?.trim().toLowerCase();
+    const normalizedUsername = data.username === undefined ? undefined : data.username?.trim() || null;
+
+    if (normalizedEmail || normalizedUsername !== undefined) {
+      const conflictingUser = await prisma.user.findFirst({
+        where: {
+          id: { not: existing.userId },
+          OR: [
+            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+            ...(normalizedUsername ? [{ username: normalizedUsername }] : []),
+          ],
+        },
+      });
+
+      if (conflictingUser) {
+        return c.json(
+          {
+            error: {
+              code: "USER_EXISTS",
+              message: "Benutzer mit E-Mail oder Benutzername existiert bereits",
+            },
+          },
+          409
+        );
+      }
     }
 
     if (data.isDefault) {
@@ -274,25 +337,126 @@ settingsRouter.put(
       });
     }
 
-    const membership = await prisma.dealerMembership.update({
-      where: { id: membershipId },
-      data,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            username: true,
-            platformRole: true,
-            createdAt: true,
+    const passwordHash = data.password ? await hashPassword(data.password) : null;
+
+    const membership = await prisma.$transaction(async (tx) => {
+      if (
+        data.name !== undefined ||
+        normalizedEmail !== undefined ||
+        normalizedUsername !== undefined
+      ) {
+        await tx.user.update({
+          where: { id: existing.userId },
+          data: {
+            ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+            ...(normalizedEmail !== undefined ? { email: normalizedEmail } : {}),
+            ...(normalizedUsername !== undefined ? { username: normalizedUsername } : {}),
+          },
+        });
+      }
+
+      if (passwordHash) {
+        const account = await tx.account.findFirst({
+          where: {
+            userId: existing.userId,
+            providerId: "credential",
+          },
+        });
+
+        if (account) {
+          await tx.account.update({
+            where: { id: account.id },
+            data: { password: passwordHash },
+          });
+        } else {
+          await tx.account.create({
+            data: {
+              id: randomUUID(),
+              userId: existing.userId,
+              accountId: existing.userId,
+              providerId: "credential",
+              password: passwordHash,
+            },
+          });
+        }
+      }
+
+      return tx.dealerMembership.update({
+        where: { id: membershipId },
+        data: {
+          ...(data.role !== undefined ? { role: data.role } : {}),
+          ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
+          ...(data.isDefault !== undefined ? { isDefault: data.isDefault } : {}),
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              username: true,
+              platformRole: true,
+              createdAt: true,
+            },
           },
         },
-      },
+      });
     });
 
     return c.json({ data: membership });
   }
 );
+
+settingsRouter.delete("/team/:membershipId", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  const membershipId = c.req.param("membershipId");
+
+  const membership = await prisma.dealerMembership.findFirst({
+    where: { id: membershipId, dealerId },
+  });
+
+  if (!membership) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Teammitglied nicht gefunden" } }, 404);
+  }
+
+  if (
+    membership.role === "dealer_owner" &&
+    membership.isActive &&
+    !(await ensureAnotherActiveOwnerExists(dealerId, membershipId))
+  ) {
+    return c.json(
+      {
+        error: {
+          code: "LAST_OWNER",
+          message: "Mindestens ein aktiver Owner muss im Autohaus verbleiben.",
+        },
+      },
+      400
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.dealerMembership.delete({
+      where: { id: membershipId },
+    });
+
+    const remainingMemberships = await tx.dealerMembership.count({
+      where: { userId: membership.userId },
+    });
+
+    if (remainingMemberships === 0) {
+      await tx.user.delete({
+        where: { id: membership.userId },
+      });
+    }
+  });
+
+  return c.json({ data: { success: true } });
+});
 
 export { settingsRouter };
