@@ -12,7 +12,7 @@ export function CarOpsLogo({ className, compact = false }: CarOpsLogoProps) {
       alt="CarOps"
       className={cn(
         "h-auto w-auto object-contain",
-        compact ? "max-h-14 max-w-[12rem]" : "max-h-20 max-w-[18rem]",
+        compact ? "max-h-20 max-w-[16rem]" : "max-h-28 max-w-[24rem]",
         className
       )}
     />
