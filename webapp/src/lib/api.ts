@@ -1,3 +1,5 @@
+import { TOKEN_KEY } from "./auth-client";
+
 // In production use relative URLs, in development allow overriding backend host.
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "";
 
@@ -15,11 +17,13 @@ interface ApiResponse<T> {
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const token = localStorage.getItem(TOKEN_KEY);
 
   const config: RequestInit = {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     credentials: "include",
@@ -56,9 +60,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 // Raw request for non-JSON endpoints (uploads, downloads, streams)
 async function rawRequest(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = `${API_BASE_URL}${endpoint}`;
+  const token = localStorage.getItem(TOKEN_KEY);
   const config: RequestInit = {
     ...options,
     headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     credentials: "include",
