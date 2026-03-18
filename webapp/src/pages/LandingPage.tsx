@@ -76,7 +76,7 @@ export default function LandingPage() {
             <div className="relative overflow-hidden rounded-[2rem] border border-[#19477e]/10 bg-white/85 p-6 shadow-[0_30px_90px_-45px_rgba(25,71,126,0.42)] backdrop-blur dark:border-white/10 dark:bg-white/5">
               <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,rgba(94,129,173,0.2),transparent_70%)]" />
               <div className="relative flex items-center gap-5">
-                <CarOpsLogo compact className="scale-[1.55]" />
+                <CarOpsLogo compact className="max-w-[13rem]" />
                 <div className="space-y-1">
                   <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#456792]">CarOps Cloud</div>
                   <div className="text-xl font-semibold text-slate-900 dark:text-white">
