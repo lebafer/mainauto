@@ -68,6 +68,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useAuth } from "@/lib/auth-client";
 
 const DEFAULT_MANUFACTURERS = [
   "Mercedes-Benz",
@@ -320,6 +321,7 @@ export function VehicleForm({
   submitLabel,
   onExtractedBriefFiles,
 }: VehicleFormProps) {
+  const { session } = useAuth();
   const [purchaseGrossDisplay, setPurchaseGrossDisplay] = useState("");
   const [sellingGrossDisplay, setSellingGrossDisplay] = useState("");
   const [isEditingPurchaseGross, setIsEditingPurchaseGross] = useState(false);
@@ -872,6 +874,7 @@ export function VehicleForm({
   const grossPrice = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
   const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS.filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
+  const aiBriefEnabled = session?.entitlements?.ai_brief_extraction === true;
 
   return (
     <Form {...form}>
@@ -906,6 +909,11 @@ export function VehicleForm({
                 <p className="text-xs text-muted-foreground">
                   Unterstützt: PDF, JPG, PNG, WEBP. Fahrzeugschein und Fahrzeugbrief werden erkannt. Bereits ausgefüllte Felder werden nicht überschrieben.
                 </p>
+                {!aiBriefEnabled ? (
+                  <p className="text-xs text-amber-600">
+                    KI-Briefscan ist in eurem Tarif nicht freigeschaltet.
+                  </p>
+                ) : null}
                 {briefFiles.length > 0 ? (
                   <p className="text-xs text-muted-foreground">
                     Ausgewählt: {briefFiles.map((file) => file.name).join(", ")}
@@ -916,7 +924,7 @@ export function VehicleForm({
               <Button
                 type="button"
                 onClick={handleBriefExtraction}
-                disabled={briefFiles.length === 0 || extractBriefMutation.isPending}
+                disabled={!aiBriefEnabled || briefFiles.length === 0 || extractBriefMutation.isPending}
               >
                 {extractBriefMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

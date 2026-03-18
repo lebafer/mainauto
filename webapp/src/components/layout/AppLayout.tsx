@@ -20,7 +20,14 @@ const pageTitles: Record<string, string> = {
   "/vehicles/new": "Neues Fahrzeug",
   "/customers": "Kunden",
   "/customers/new": "Neuer Kunde",
-  "/sales": "Verkaufe",
+  "/sales": "Verkäufe",
+  "/suppliers": "Lieferanten",
+  "/suppliers/new": "Neuer Lieferant",
+  "/finances": "Finanzen",
+  "/billing": "Tarif & Abrechnung",
+  "/settings/dealer": "Unternehmen & Dokumente",
+  "/settings/team": "Teamverwaltung",
+  "/admin/dealers": "Super-Admin",
 };
 
 function getPageTitle(pathname: string): { parent?: string; current: string } {
@@ -64,7 +71,11 @@ export function AppLayout({ children }: AppLayoutProps) {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <header className="relative flex h-14 shrink-0 items-center gap-2 border-b px-4">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-px"
+            style={{ background: "linear-gradient(90deg, transparent, rgb(var(--tenant-primary-rgb) / 0.85), transparent)" }}
+          />
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 h-4" />
           <Breadcrumb>

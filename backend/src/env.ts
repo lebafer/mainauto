@@ -16,6 +16,11 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(1),
   BACKEND_URL: z.string().url(),
   COOKIE_DOMAIN: z.string().optional(),
+  PLATFORM_DOMAIN: z
+    .string()
+    .optional()
+    .default("tenant.local")
+    .transform((value) => value.trim().replace(/^\.+/, "").toLowerCase()),
   AUTH_DISABLE_CSRF_CHECK: z
     .string()
     .optional()
@@ -26,9 +31,14 @@ const envSchema = z.object({
     .optional()
     .default("false")
     .transform((value) => value.toLowerCase() === "true"),
+  INITIAL_ADMIN_NAME: z.string().optional(),
   INITIAL_ADMIN_USERNAME: z.string().optional(),
   INITIAL_ADMIN_PASSWORD: z.string().optional(),
   INITIAL_ADMIN_EMAIL: z.string().email().optional(),
+  SUPERADMIN_NAME: z.string().optional(),
+  SUPERADMIN_USERNAME: z.string().optional(),
+  SUPERADMIN_PASSWORD: z.string().optional(),
+  SUPERADMIN_EMAIL: z.string().email().optional(),
 
   // Comma-separated list of allowed origins, supports wildcard prefix via https://*.example.com
   CORS_ALLOWED_ORIGINS: z.string().optional(),
@@ -45,6 +55,12 @@ const envSchema = z.object({
     .optional()
     .default("gpt-4o")
     .transform((value) => value.trim() || "gpt-4o"),
+
+  // Billing
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_STANDARD_PRICE_ID: z.string().optional(),
+  STRIPE_PRO_PRICE_ID: z.string().optional(),
 });
 
 /**

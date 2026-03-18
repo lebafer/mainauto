@@ -410,7 +410,7 @@ export function VehicleHandoverProtocolDialog({
   const lastAppliedCustomerIdRef = useRef<string | null>(null);
 
   const form = useForm<HandoverProtocol>({
-    resolver: zodResolver(HandoverProtocolSchema),
+    resolver: zodResolver(HandoverProtocolSchema as never),
     defaultValues: EMPTY_PROTOCOL,
   });
 

@@ -12,6 +12,8 @@ COPY backend/src/types.ts /backend/src/types.ts
 
 ARG VITE_BACKEND_URL=
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
+ARG VITE_PUBLIC_APP_URL=
+ENV VITE_PUBLIC_APP_URL=${VITE_PUBLIC_APP_URL}
 
 RUN bun run build
 

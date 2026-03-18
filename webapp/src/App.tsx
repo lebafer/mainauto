@@ -8,11 +8,16 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { AuthProvider } from "@/components/AuthProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { GuestRoute } from "@/components/GuestRoute";
+import { AdminProtectedRoute } from "@/components/AdminProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AdminLayout } from "@/components/layout/AdminLayout";
 import { Loader2 } from "lucide-react";
 
 // Lazy load pages
 const Login = lazy(() => import("@/pages/Login"));
+const LandingPage = lazy(() => import("@/pages/LandingPage"));
+const Signup = lazy(() => import("@/pages/Signup"));
+const Billing = lazy(() => import("@/pages/Billing"));
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const VehicleList = lazy(() => import("@/pages/vehicles/VehicleList"));
 const VehicleNew = lazy(() => import("@/pages/vehicles/VehicleNew"));
@@ -28,6 +33,10 @@ const SupplierNew = lazy(() => import("@/pages/suppliers/SupplierNew"));
 const SupplierDetail = lazy(() => import("@/pages/suppliers/SupplierDetail"));
 const SupplierEdit = lazy(() => import("@/pages/suppliers/SupplierEdit"));
 const Finances = lazy(() => import("@/pages/Finances"));
+const SettingsDealer = lazy(() => import("@/pages/settings/SettingsDealer"));
+const SettingsTeam = lazy(() => import("@/pages/settings/SettingsTeam"));
+const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
+const AdminDealers = lazy(() => import("@/pages/admin/AdminDealers"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -50,15 +59,7 @@ const App = () => (
         <BrowserRouter>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* Redirect root to dashboard */}
-              <Route
-                path="/"
-                element={
-                  <ProtectedRoute>
-                    <Navigate to="/dashboard" replace />
-                  </ProtectedRoute>
-                }
-              />
+              <Route path="/" element={<LandingPage />} />
 
               {/* Auth routes (guest only) */}
               <Route
@@ -69,8 +70,29 @@ const App = () => (
                   </GuestRoute>
                 }
               />
+              <Route
+                path="/signup"
+                element={
+                  <GuestRoute>
+                    <Signup />
+                  </GuestRoute>
+                }
+              />
+
+              <Route path="/admin/login" element={<AdminLogin />} />
 
               {/* Protected app routes with layout */}
+              <Route
+                path="/billing"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <Billing />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
               <Route
                 path="/dashboard"
                 element={
@@ -229,6 +251,48 @@ const App = () => (
                       <Finances />
                     </AppLayout>
                   </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/settings/dealer"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsDealer />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/settings/team"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsTeam />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin"
+                element={
+                  <AdminProtectedRoute>
+                    <Navigate to="/admin/dealers" replace />
+                  </AdminProtectedRoute>
+                }
+              />
+
+              <Route
+                path="/admin/dealers"
+                element={
+                  <AdminProtectedRoute>
+                    <AdminLayout>
+                      <AdminDealers />
+                    </AdminLayout>
+                  </AdminProtectedRoute>
                 }
               />
 

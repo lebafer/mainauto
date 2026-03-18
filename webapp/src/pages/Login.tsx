@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { User, Lock, Loader2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Lock, Loader2, User } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,74 +10,73 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
-import { authClient, TOKEN_KEY } from "@/lib/auth-client";
+import { authClient, TOKEN_KEY, useAuth } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
+import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const { session } = useAuth();
+  const isTenantBlocked = session?.tenantStatus === "suspended" || session?.tenantStatus === "inactive";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!username.trim() || !password.trim()) return;
-
-    setIsLoading(true);
-    try {
+  const signInMutation = useMutation({
+    mutationFn: async () => {
       const result = await authClient.signIn.username({
         username: username.trim(),
         password: password.trim(),
       });
 
       if (result.error) {
-        toast({
-          title: "Fehler",
-          description: "Benutzername oder Passwort ist falsch.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return;
+        const authErrorMessage =
+          typeof result.error === "object" &&
+          result.error !== null &&
+          "message" in result.error &&
+          typeof result.error.message === "string"
+            ? result.error.message
+            : "";
+        throw new Error(authErrorMessage || "Benutzername oder Passwort ist falsch.");
       }
 
-      // Save the short token from response body (required for Bearer auth)
       const token = (result.data as { token?: string } | null)?.token;
       if (token) {
         localStorage.setItem(TOKEN_KEY, token);
       }
+    },
+    onSuccess: () => {
       window.location.replace("/dashboard");
-    } catch {
+    },
+    onError: (error) => {
       toast({
         title: "Fehler",
-        description: "Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.",
+        description: error instanceof Error ? error.message : "Anmeldung fehlgeschlagen.",
         variant: "destructive",
       });
-      setIsLoading(false);
-    }
+    },
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username.trim() || !password.trim()) return;
+    signInMutation.mutate();
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background via-background to-muted/50 p-4">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,119,198,0.15),transparent)]" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(180deg,#edf4fb_0%,#f8fbff_35%,#ffffff_100%)] p-4 dark:bg-[linear-gradient(180deg,#020617_0%,#0b1730_50%,#020617_100%)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,78,129,0.18),transparent_35%)]" />
 
-      <Card className="relative z-10 w-full max-w-md border-border/50 shadow-2xl">
-        <CardHeader className="space-y-4 text-center">
-          <div className="mx-auto">
-            <img
-              src="/mainauto-logo-light.png"
-              alt="MainAuto Logo"
-              className="h-20 w-auto object-contain mx-auto dark:hidden"
-            />
-            <img
-              src="/mainauto-logo-dark.png"
-              alt="MainAuto Logo"
-              className="h-20 w-auto object-contain mx-auto hidden dark:block"
-            />
+      <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
+        <CardHeader className="space-y-6 text-center">
+          <div className="flex justify-center">
+            <CarOpsLogo className="max-h-40 max-w-[26rem]" />
           </div>
-          <div>
-            <CardDescription className="mt-1.5 text-base">
-              Melden Sie sich mit Ihren Zugangsdaten an
+          <div className="space-y-2">
+            <CardTitle className="text-2xl">Willkommen zurueck</CardTitle>
+            <CardDescription className="text-base">
+              Melde dich an und steuere dein Autohaus in CarOps.
             </CardDescription>
           </div>
         </CardHeader>
@@ -98,6 +99,7 @@ export default function Login() {
                   required
                   autoComplete="username"
                   autoFocus
+                  disabled={isTenantBlocked}
                 />
               </div>
             </div>
@@ -117,17 +119,24 @@ export default function Login() {
                   className="pl-10"
                   required
                   autoComplete="current-password"
+                  disabled={isTenantBlocked}
                 />
               </div>
             </div>
+
+            {isTenantBlocked ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                Dieser Zugang ist derzeit nicht verfügbar. Bitte wende dich an den Support.
+              </div>
+            ) : null}
 
             <Button
               type="submit"
               className="w-full"
               size="lg"
-              disabled={isLoading || !username.trim() || !password.trim()}
+              disabled={isTenantBlocked || signInMutation.isPending || !username.trim() || !password.trim()}
             >
-              {isLoading ? (
+              {signInMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Wird angemeldet...
@@ -136,6 +145,13 @@ export default function Login() {
                 "Anmelden"
               )}
             </Button>
+
+            <div className="text-center text-sm text-muted-foreground">
+              Noch kein Account?{" "}
+              <Link to="/signup" className="font-medium text-[#19477e] hover:text-[#123965]">
+                Jetzt kostenlos starten
+              </Link>
+            </div>
           </form>
         </CardContent>
       </Card>

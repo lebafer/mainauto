@@ -2,12 +2,15 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
 import { SaleCreateSchema } from "../types";
+import { getCurrentDealerId } from "../lib/request-context";
 
 const salesRouter = new Hono();
 
 // GET /api/sales - list all sales with vehicle and customer info
 salesRouter.get("/", async (c) => {
+  const dealerId = getCurrentDealerId(c);
   const sales = await prisma.sale.findMany({
+    where: { dealerId },
     include: {
       vehicle: {
         include: { images: true },
@@ -25,19 +28,20 @@ salesRouter.post(
   "/",
   zValidator("json", SaleCreateSchema),
   async (c) => {
+    const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
     // Check vehicle exists
-    const vehicle = await prisma.vehicle.findUnique({
-      where: { id: data.vehicleId },
+    const vehicle = await prisma.vehicle.findFirst({
+      where: { id: data.vehicleId, dealerId },
     });
     if (!vehicle) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
     // Check customer exists
-    const customer = await prisma.customer.findUnique({
-      where: { id: data.customerId },
+    const customer = await prisma.customer.findFirst({
+      where: { id: data.customerId, dealerId },
     });
     if (!customer) {
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
@@ -47,6 +51,7 @@ salesRouter.post(
     const sale = await prisma.$transaction(async (tx) => {
       const newSale = await tx.sale.create({
         data: {
+          dealerId,
           vehicleId: data.vehicleId,
           customerId: data.customerId,
           salePrice: data.salePrice,
@@ -79,9 +84,10 @@ salesRouter.post(
 // DELETE /api/sales/:id - delete sale (revert vehicle status)
 salesRouter.delete("/:id", async (c) => {
   const id = c.req.param("id");
+  const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.sale.findUnique({
-    where: { id },
+  const existing = await prisma.sale.findFirst({
+    where: { id, dealerId },
     include: { vehicle: true },
   });
 

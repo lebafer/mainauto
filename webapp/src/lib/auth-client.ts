@@ -19,13 +19,121 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
-  username: string;
+  username?: string | null;
   image: string | null;
+  platformRole: "user" | "platform_super_admin";
+}
+
+export interface DealerInfo {
+  id: string;
+  name: string;
+  slug: string;
+  status: "active" | "suspended" | "inactive";
+  setupStatus: "pending_setup" | "ready_for_dns" | "active" | "suspended";
+  isDefault: boolean;
+}
+
+export interface DealerSettingsInfo {
+  dealerId: string;
+  displayName?: string | null;
+  legalName?: string | null;
+  addressLine1?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  supportEmail?: string | null;
+  website?: string | null;
+  taxId?: string | null;
+  legalRepresentative?: string | null;
+  bankName?: string | null;
+  iban?: string | null;
+  bic?: string | null;
+  logoUrl?: string | null;
+  faviconUrl?: string | null;
+  primaryColor?: string | null;
+  accentColor?: string | null;
+  loginHeadline?: string | null;
+  documentFooterText?: string | null;
+  documentLegalText?: string | null;
+  purchaseTerms?: string | null;
+  saleTerms?: string | null;
+}
+
+export interface DealerDomainInfo {
+  id: string;
+  dealerId: string;
+  host: string;
+  status: "pending_dns" | "active" | "failed" | "disabled";
+  isPrimary: boolean;
+  verificationToken?: string | null;
+  verifiedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DealerSubscriptionInfo {
+  id: string;
+  dealerId: string;
+  planId: string;
+  status: "active" | "trialing" | "past_due" | "suspended" | "canceled";
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  stripePriceId?: string | null;
+  complimentaryAccess?: boolean;
+  featureOverrides?: Record<string, boolean>;
+  billingNotes?: string | null;
+  trialEndsAt?: string | null;
+  currentPeriodEndsAt?: string | null;
+  startsAt: string;
+  endsAt?: string | null;
+  plan?: {
+    id: string;
+    slug: string;
+    name: string;
+    description?: string | null;
+    monthlyPriceCents: number;
+    stripePriceMonthlyId?: string | null;
+    featureEntitlements: Record<string, boolean>;
+    isActive: boolean;
+  };
+}
+
+export interface BillingInfo {
+  status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
+  trialEndsAt: string | null;
+  currentPeriodEndsAt: string | null;
+  isComplimentary: boolean;
+  requiresPayment: boolean;
+  canAccessApp: boolean;
 }
 
 export interface SessionData {
-  session: { token: string; userId: string; expiresAt: string };
   user: SessionUser;
+  dealer: DealerInfo | null;
+  dealerRole: "dealer_owner" | "dealer_admin" | "staff" | null;
+  dealerSettings: DealerSettingsInfo | null;
+  activeDomain?: DealerDomainInfo | null;
+  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  resolvedHost?: string | null;
+  entitlements: Record<string, boolean>;
+  billing: BillingInfo;
+  subscription?: DealerSubscriptionInfo | null;
+}
+
+export interface PublicTenantContext {
+  displayName: string;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  primaryColor: string | null;
+  accentColor: string | null;
+  loginHeadline: string | null;
+  supportEmail: string | null;
+  tenantStatus: "unknown" | "pending_setup" | "ready_for_dns" | "active" | "suspended" | "inactive";
+  dealer: DealerInfo | null;
+  activeDomain: DealerDomainInfo | null;
 }
 
 // Direct session fetch that bypasses Better Auth's useSession hook
@@ -37,15 +145,16 @@ export async function fetchSession(): Promise<SessionData | null> {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const res = await fetch(`${AUTH_BASE_URL}/api/auth/get-session`, {
+    const res = await fetch(`${AUTH_BASE_URL}/api/session/me`, {
       method: "GET",
       credentials: "include",
       headers,
     });
 
     if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || !data.session || !data.user) return null;
+    const payload = await res.json();
+    const data = payload?.data ?? payload;
+    if (!data || !data.user) return null;
     return data as SessionData;
   } catch {
     return null;
@@ -55,12 +164,14 @@ export async function fetchSession(): Promise<SessionData | null> {
 // React context for session
 export interface AuthContextType {
   session: SessionData | null;
+  tenant: PublicTenantContext | null;
   isPending: boolean;
   refetch: () => Promise<void>;
 }
 
 export const AuthContext = createContext<AuthContextType>({
   session: null,
+  tenant: null,
   isPending: true,
   refetch: async () => {},
 });

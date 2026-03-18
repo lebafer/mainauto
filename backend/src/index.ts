@@ -6,6 +6,15 @@ import { auth } from "./auth";
 import { env } from "./env";
 import { prisma } from "./prisma";
 import { bootstrapInitialAdmin } from "./seed";
+import {
+  ensureCoreSaasData,
+  getMembershipEntitlements,
+  getTenantStatus as deriveTenantStatus,
+  normalizeHost,
+  pickActiveMembership,
+  type ActiveDealerMembership,
+} from "./lib/dealers";
+import { getBillingState, getCurrentSubscription } from "./lib/billing";
 import { vehiclesRouter } from "./routes/vehicles";
 import { customersRouter } from "./routes/customers";
 import { salesRouter } from "./routes/sales";
@@ -16,10 +25,39 @@ import { suppliersRouter } from "./routes/suppliers";
 import { connectorTypesRouter } from "./routes/connectorTypes";
 import { suppliersDbRouter } from "./routes/suppliersDb";
 import { financesRouter } from "./routes/finances";
+import { sessionRouter } from "./routes/session";
+import { settingsRouter } from "./routes/settings";
+import { adminRouter } from "./routes/admin";
+import { publicRouter } from "./routes/public";
+import { billingRouter } from "./routes/billing";
 
 type Variables = {
-  user: typeof auth.$Infer.Session.user | null;
+  user: {
+    id: string;
+    name?: string | null;
+    email?: string | null;
+    username?: string | null;
+    platformRole?: string | null;
+  } | null;
   session: typeof auth.$Infer.Session.session | null;
+  membership: ActiveDealerMembership | null;
+  entitlements: Record<string, boolean>;
+  resolvedHost: string | null;
+  resolvedDealer:
+    | (ActiveDealerMembership["dealer"] & {
+        createdAt: Date;
+        updatedAt: Date;
+      })
+    | null;
+  resolvedDomain: null;
+  tenantStatus: "unknown" | "pending_setup" | "active" | "suspended" | "inactive";
+  billing: {
+    status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
+    trialEndsAt: Date | null;
+    currentPeriodEndsAt: Date | null;
+    requiresPayment: boolean;
+    canAccessApp: boolean;
+  };
 };
 
 const app = new Hono<{ Variables: Variables }>();
@@ -84,6 +122,16 @@ app.use(
 
 app.use("*", logger());
 
+app.use("*", async (c, next) => {
+  const host = normalizeHost(c.req.header("host"));
+  c.set("resolvedHost", host || null);
+  c.set("resolvedDealer", null);
+  c.set("resolvedDomain", null);
+  c.set("tenantStatus", "unknown");
+
+  return next();
+});
+
 app.get("/health", async (c) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
@@ -113,7 +161,11 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
 app.options("/api/auth/*", (c) => c.text("", 204));
 
 app.use("/api/*", async (c, next) => {
-  if (c.req.path.startsWith("/api/auth")) {
+  if (
+    c.req.path.startsWith("/api/auth") ||
+    c.req.path.startsWith("/api/public") ||
+    c.req.path === "/api/billing/webhook"
+  ) {
     return next();
   }
 
@@ -138,8 +190,141 @@ app.use("/api/*", async (c, next) => {
     );
   }
 
-  c.set("user", session.user);
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    include: {
+      memberships: {
+        where: {
+          isActive: true,
+          dealer: {
+            is: {
+              status: {
+                in: ["active", "suspended"],
+              },
+            },
+          },
+        },
+        include: {
+          dealer: {
+            include: {
+              settings: true,
+              subscriptions: {
+                include: { plan: true },
+                orderBy: { createdAt: "desc" },
+              },
+            },
+          },
+        },
+        orderBy: [{ createdAt: "asc" }],
+      },
+    },
+  });
+
+  const resolvedDealer = c.get("resolvedDealer");
+  const memberships = (dbUser?.memberships ?? []) as ActiveDealerMembership[];
+  const activeMembership = pickActiveMembership(memberships);
+  const entitlements = getMembershipEntitlements(activeMembership);
+  const effectiveDealer = activeMembership?.dealer ?? null;
+  const billing = getBillingState(getCurrentSubscription(activeMembership?.dealer.subscriptions));
+
+  if (!activeMembership && dbUser?.platformRole !== "platform_super_admin") {
+    return c.json(
+      {
+        error: {
+          code: "NO_ACTIVE_DEALER",
+          message: "No active dealer membership found",
+        },
+      },
+      403
+    );
+  }
+
+  c.set("user", {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    username: session.user.username,
+    platformRole: dbUser?.platformRole ?? "user",
+  });
   c.set("session", session.session);
+  c.set("membership", activeMembership as Variables["membership"]);
+  c.set("entitlements", entitlements);
+  c.set("billing", billing);
+
+  if (effectiveDealer) {
+    c.set("resolvedDealer", effectiveDealer as Variables["resolvedDealer"]);
+    c.set(
+      "tenantStatus",
+      deriveTenantStatus({
+        dealerStatus: effectiveDealer.status,
+        setupStatus: effectiveDealer.setupStatus,
+      })
+    );
+  }
+
+  if (dbUser?.platformRole === "platform_super_admin" && c.req.path.startsWith("/api/admin")) {
+    return next();
+  }
+
+  const tenantStatus = c.get("tenantStatus");
+  const path = c.req.path;
+  const allowWithoutTenant = path.startsWith("/api/session") || path.startsWith("/api/billing");
+
+  if (!effectiveDealer && !allowWithoutTenant) {
+    return c.json(
+      {
+        error: {
+          code: "UNKNOWN_TENANT",
+          message: "Kein aktives Autohaus gefunden",
+        },
+      },
+      404
+    );
+  }
+
+  if (tenantStatus === "suspended" || tenantStatus === "inactive") {
+    if (!allowWithoutTenant) {
+      return c.json(
+        {
+          error: {
+            code: "TENANT_UNAVAILABLE",
+            message: "Dieser Mandant ist derzeit nicht verfuegbar",
+          },
+        },
+        403
+      );
+    }
+  }
+
+  if (tenantStatus === "pending_setup") {
+    const allowedPrefixes = ["/api/session", "/api/settings", "/api/billing"];
+    if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
+      return c.json(
+        {
+          error: {
+            code: "TENANT_SETUP_INCOMPLETE",
+            message: "Dieser Mandant befindet sich noch im Onboarding",
+          },
+        },
+        403
+      );
+    }
+  }
+
+  if (billing.requiresPayment) {
+    const allowedPrefixes = ["/api/session", "/api/billing"];
+    if (!allowedPrefixes.some((prefix) => path.startsWith(prefix))) {
+      return c.json(
+        {
+          error: {
+            code: "PAYMENT_REQUIRED",
+            message: "Dein Testzeitraum ist abgelaufen oder dein Abo ist nicht aktiv.",
+          },
+        },
+        402
+      );
+    }
+  }
 
   return next();
 });
@@ -162,8 +347,17 @@ app.route("/api/suppliers", suppliersRouter);
 app.route("/api/connector-types", connectorTypesRouter);
 app.route("/api/suppliers-db", suppliersDbRouter);
 app.route("/api/finances", financesRouter);
+app.route("/api/public", publicRouter);
+app.route("/api/session", sessionRouter);
+app.route("/api/billing", billingRouter);
+app.route("/api/settings", settingsRouter);
+app.route("/api/admin", adminRouter);
 
 const port = Number(env.PORT) || 3000;
+
+ensureCoreSaasData().catch((error) => {
+  console.error("[bootstrap] core_saas_data_failed", error);
+});
 
 bootstrapInitialAdmin().catch((error) => {
   console.error("[bootstrap] initial_admin_failed", error);
