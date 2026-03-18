@@ -71,7 +71,7 @@ export default function Login() {
       <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
         <CardHeader className="space-y-6 text-center">
           <div className="flex justify-center">
-            <CarOpsLogo className="max-h-32 max-w-[22rem]" />
+            <CarOpsLogo className="max-h-40 max-w-[26rem]" />
           </div>
           <div className="space-y-2">
             <CardTitle className="text-2xl">Willkommen zurueck</CardTitle>

@@ -68,6 +68,7 @@ services:
       dockerfile: webapp/Dockerfile
       args:
         VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
+        VITE_PUBLIC_APP_URL: ${BACKEND_URL:-}
     restart: unless-stopped
     depends_on:
       backend:
