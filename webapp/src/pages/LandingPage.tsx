@@ -73,19 +73,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="relative overflow-hidden rounded-[2rem] border border-[#19477e]/10 bg-white/85 p-6 shadow-[0_30px_90px_-45px_rgba(25,71,126,0.42)] backdrop-blur dark:border-white/10 dark:bg-white/5">
-              <div className="absolute inset-y-0 right-0 w-40 bg-[radial-gradient(circle_at_center,rgba(94,129,173,0.2),transparent_70%)]" />
-              <div className="relative flex items-center gap-5">
-                <CarOpsLogo compact className="max-h-28 max-w-[22rem]" />
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-[#456792]">CarOps Cloud</div>
-                  <div className="text-xl font-semibold text-slate-900 dark:text-white">
-                    Klar gebrandet, direkt startklar und ohne White-Label-Ballast.
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-3">
               {[
                 {
@@ -96,12 +83,12 @@ export default function LandingPage() {
                 {
                   icon: Users2,
                   title: "Team im Blick",
-                  body: "Owner, Admins und Mitarbeiter arbeiten mit klaren Rollen.",
+                  body: "Verwalte deine Mitarbeiter und gib Zugriffe passend zu ihren Rollen frei.",
                 },
                 {
                   icon: Bot,
-                  title: "KI für Briefe",
-                  body: "Pro liest Fahrzeugbriefe aus und spart dir manuelle Erfassung.",
+                  title: "KI Features",
+                  body: "Im Pro-Plan beschleunigt KI das Anlegen von Fahrzeugen, indem Fahrzeugdaten aus Dokumenten ausgelesen werden.",
                 },
               ].map((item) => (
                 <Card key={item.title} className="border-border/70 bg-card/75 shadow-xl backdrop-blur">
