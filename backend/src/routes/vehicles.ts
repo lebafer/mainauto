@@ -980,6 +980,7 @@ vehiclesRouter.post(
 
     // Convert power (number) to string for Prisma, strip empty strings
     const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
+    const isPrivateVehicle = data.isPrivate === true;
     const vehicleData = {
       ...data,
       vehicleNumber: data.vehicleNumber.trim(),
@@ -992,10 +993,14 @@ vehiclesRouter.post(
       color: data.color || null,
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
+      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
+      taxRate: isPrivateVehicle ? 19 : data.taxRate,
+      marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
       isPrivate: data.isPrivate,
+      status: isPrivateVehicle ? "available" : data.status,
       notes: data.notes || null,
       internalNotes: data.internalNotes || null,
-      customerId: data.customerId || null,
+      customerId: isPrivateVehicle ? null : data.customerId || null,
       features: data.features || null,
       // New nullable string/number fields
       damageDescription: data.damageDescription || null,
@@ -1007,11 +1012,11 @@ vehiclesRouter.post(
       batteryCapacity: data.batteryCapacity ?? null,
       electricRange: data.electricRange ?? null,
       batterySoh: data.batterySoh ?? null,
-      transportCostDomestic: data.transportCostDomestic ?? null,
-      transportCostAbroad: data.transportCostAbroad ?? null,
-      customsDuties: data.customsDuties ?? null,
-      registrationFees: data.registrationFees ?? null,
-      repairCostsAbroad: data.repairCostsAbroad ?? null,
+      transportCostDomestic: isPrivateVehicle ? null : data.transportCostDomestic ?? null,
+      transportCostAbroad: isPrivateVehicle ? null : data.transportCostAbroad ?? null,
+      customsDuties: isPrivateVehicle ? null : data.customsDuties ?? null,
+      registrationFees: isPrivateVehicle ? null : data.registrationFees ?? null,
+      repairCostsAbroad: isPrivateVehicle ? null : data.repairCostsAbroad ?? null,
       // Additional fields
       firstRegistration: data.firstRegistration ? new Date(data.firstRegistration) : null,
       supplier: data.supplier || null,
@@ -1030,7 +1035,8 @@ vehiclesRouter.post(
       seats: data.seats ?? null,
       driveType: data.driveType || null,
       emissionClass: data.emissionClass || null,
-      dealerPrice: data.dealerPrice ?? null,
+      exportEnabled: isPrivateVehicle ? false : data.exportEnabled,
+      dealerPrice: isPrivateVehicle ? null : data.dealerPrice ?? null,
     };
 
     try {
@@ -1091,6 +1097,7 @@ vehiclesRouter.put(
     }
 
     // Handle nullable customerId: convert null to disconnect
+    const isPrivateVehicle = data.isPrivate === true;
     const updateData: Record<string, unknown> = {
       ...data,
       vehicleNumber: data.vehicleNumber !== undefined ? data.vehicleNumber.trim() : undefined,
@@ -1102,9 +1109,18 @@ vehiclesRouter.put(
       color: data.color !== undefined ? (data.color || null) : undefined,
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
+      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
+      taxRate: isPrivateVehicle ? 19 : data.taxRate,
+      marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
       isPrivate: data.isPrivate,
+      status: isPrivateVehicle ? "available" : data.status,
       notes: data.notes !== undefined ? (data.notes || null) : undefined,
       internalNotes: data.internalNotes !== undefined ? (data.internalNotes || null) : undefined,
+      customerId: isPrivateVehicle
+        ? null
+        : data.customerId !== undefined
+          ? (data.customerId || null)
+          : undefined,
       // New nullable string fields
       damageDescription: data.damageDescription !== undefined ? (data.damageDescription || null) : undefined,
       batteryType: data.batteryType !== undefined ? (data.batteryType || null) : undefined,
@@ -1126,7 +1142,33 @@ vehiclesRouter.put(
       seats: data.seats !== undefined ? (data.seats ?? null) : undefined,
       driveType: data.driveType !== undefined ? (data.driveType || null) : undefined,
       emissionClass: data.emissionClass !== undefined ? (data.emissionClass || null) : undefined,
-      dealerPrice: data.dealerPrice !== undefined ? (data.dealerPrice ?? null) : undefined,
+      exportEnabled: isPrivateVehicle ? false : data.exportEnabled,
+      transportCostDomestic: isPrivateVehicle
+        ? null
+        : data.transportCostDomestic !== undefined
+          ? (data.transportCostDomestic ?? null)
+          : undefined,
+      transportCostAbroad: isPrivateVehicle
+        ? null
+        : data.transportCostAbroad !== undefined
+          ? (data.transportCostAbroad ?? null)
+          : undefined,
+      customsDuties: isPrivateVehicle
+        ? null
+        : data.customsDuties !== undefined
+          ? (data.customsDuties ?? null)
+          : undefined,
+      registrationFees: isPrivateVehicle
+        ? null
+        : data.registrationFees !== undefined
+          ? (data.registrationFees ?? null)
+          : undefined,
+      repairCostsAbroad: isPrivateVehicle
+        ? null
+        : data.repairCostsAbroad !== undefined
+          ? (data.repairCostsAbroad ?? null)
+          : undefined,
+      dealerPrice: isPrivateVehicle ? null : data.dealerPrice !== undefined ? (data.dealerPrice ?? null) : undefined,
     };
 
     try {

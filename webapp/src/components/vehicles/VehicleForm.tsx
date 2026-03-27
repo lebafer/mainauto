@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent, type FocusEvent } from "react";
+import { useState, useEffect, useRef, type ChangeEvent, type FocusEvent } from "react";
 import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -339,6 +339,7 @@ export function VehicleForm({
   const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
+  const previousIsPrivate = useRef<boolean | undefined>(undefined);
   const [briefResult, setBriefResult] = useState<{
     documentType: VehicleBriefDocumentType;
     detectedFieldCount: number;
@@ -358,6 +359,8 @@ export function VehicleForm({
         return "Fahrzeugpapiere";
     }
   }
+
+  const initialIsPrivate = vehicle?.isPrivate ?? defaultValues?.isPrivate ?? false;
 
   const initialValues: Partial<VehicleFormValues> = {
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
@@ -379,10 +382,13 @@ export function VehicleForm({
       ? parseFeatures(vehicle.features).join(", ")
       : defaultValues?.features ?? "",
     purchasePrice: vehicle?.purchasePrice ?? defaultValues?.purchasePrice,
-    sellingPrice: vehicle?.sellingPrice ?? defaultValues?.sellingPrice,
+    sellingPrice:
+      vehicle?.sellingPrice ??
+      defaultValues?.sellingPrice ??
+      (initialIsPrivate ? 0 : undefined),
     taxRate: vehicle?.taxRate ?? defaultValues?.taxRate ?? 19,
     marginTaxed: vehicle?.marginTaxed ?? defaultValues?.marginTaxed ?? false,
-    isPrivate: vehicle?.isPrivate ?? defaultValues?.isPrivate ?? false,
+    isPrivate: initialIsPrivate,
     status: vehicle?.status ?? defaultValues?.status ?? "available",
     notes: vehicle?.notes ?? defaultValues?.notes ?? "",
     internalNotes: vehicle?.internalNotes ?? defaultValues?.internalNotes ?? "",
@@ -639,6 +645,7 @@ export function VehicleForm({
   const watchedSellingPrice = form.watch("sellingPrice");
   const watchedTaxRate = form.watch("taxRate") ?? 19;
   const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
+  const watchedIsPrivate = form.watch("isPrivate") ?? false;
   const watchedPurchasePrice = form.watch("purchasePrice");
   const watchedFuelType = form.watch("fuelType");
   const watchedHasDamage = form.watch("hasDamage");
@@ -702,6 +709,49 @@ export function VehicleForm({
     const gross = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
     setSellingGrossDisplay(gross.toFixed(2));
   }, [isEditingSellingGross, numericSellingPrice, watchedSellingPrice, watchedTaxRate, watchedMarginTaxed]);
+
+  useEffect(() => {
+    const previousValue = previousIsPrivate.current;
+    const shouldDirty = previousValue !== undefined && previousValue !== watchedIsPrivate;
+
+    if (watchedIsPrivate) {
+      if ((form.getValues("sellingPrice") ?? 0) !== 0) {
+        form.setValue("sellingPrice", 0, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("dealerPrice") ?? undefined) !== undefined) {
+        form.setValue("dealerPrice", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("transportCostDomestic") ?? undefined) !== undefined) {
+        form.setValue("transportCostDomestic", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if (form.getValues("exportEnabled")) {
+        form.setValue("exportEnabled", false, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("transportCostAbroad") ?? undefined) !== undefined) {
+        form.setValue("transportCostAbroad", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("customsDuties") ?? undefined) !== undefined) {
+        form.setValue("customsDuties", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("registrationFees") ?? undefined) !== undefined) {
+        form.setValue("registrationFees", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("repairCostsAbroad") ?? undefined) !== undefined) {
+        form.setValue("repairCostsAbroad", undefined, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("marginTaxed") ?? false) !== false) {
+        form.setValue("marginTaxed", false, { shouldValidate: true, shouldDirty });
+      }
+      if ((form.getValues("taxRate") ?? 19) !== 19) {
+        form.setValue("taxRate", 19, { shouldValidate: true, shouldDirty });
+      }
+      if (form.getValues("status") !== "available") {
+        form.setValue("status", "available", { shouldValidate: true, shouldDirty });
+      }
+    }
+
+    previousIsPrivate.current = watchedIsPrivate;
+  }, [form, watchedIsPrivate]);
 
   function handlePurchaseNetChange(nettoStr: string) {
     if (nettoStr.trim() === "") {
@@ -813,8 +863,13 @@ export function VehicleForm({
   }
 
   function handleSubmit(values: VehicleFormValues) {
+    const isPrivateVehicle = values.isPrivate;
     const processed: VehicleFormSubmitValues = {
       ...values,
+      sellingPrice: isPrivateVehicle ? 0 : values.sellingPrice,
+      taxRate: isPrivateVehicle ? 19 : values.taxRate,
+      marginTaxed: isPrivateVehicle ? false : values.marginTaxed,
+      status: isPrivateVehicle ? "available" : values.status,
       features: featuresToJson(values.features ?? ""),
       customerId: undefined,
       power: values.power ?? undefined,
@@ -850,12 +905,13 @@ export function VehicleForm({
       chargingTime: values.chargingTime || undefined,
       connectorType: values.connectorType || undefined,
       // Export
-      exportEnabled: values.exportEnabled,
-      transportCostDomestic: values.transportCostDomestic ?? undefined,
-      transportCostAbroad: values.transportCostAbroad ?? undefined,
-      customsDuties: values.customsDuties ?? undefined,
-      registrationFees: values.registrationFees ?? undefined,
-      repairCostsAbroad: values.repairCostsAbroad ?? undefined,
+      exportEnabled: isPrivateVehicle ? false : values.exportEnabled,
+      transportCostDomestic: isPrivateVehicle ? undefined : values.transportCostDomestic ?? undefined,
+      transportCostAbroad: isPrivateVehicle ? undefined : values.transportCostAbroad ?? undefined,
+      customsDuties: isPrivateVehicle ? undefined : values.customsDuties ?? undefined,
+      registrationFees: isPrivateVehicle ? undefined : values.registrationFees ?? undefined,
+      repairCostsAbroad: isPrivateVehicle ? undefined : values.repairCostsAbroad ?? undefined,
+      dealerPrice: isPrivateVehicle ? undefined : values.dealerPrice ?? undefined,
     };
     onSubmit(processed);
   }
@@ -874,7 +930,9 @@ export function VehicleForm({
     existingAdditionalCosts;
   const margin = numericSellingPrice - numericPurchasePrice - totalAdditionalCosts;
   const grossPrice = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
-  const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS.filter((field) => Boolean(form.formState.errors[field]));
+  const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS
+    .filter((field) => (watchedIsPrivate ? field !== "sellingPrice" : true))
+    .filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
   const aiBriefEnabled = session?.entitlements?.ai_brief_extraction === true;
 
@@ -892,6 +950,31 @@ export function VehicleForm({
             {requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}
           </div>
         ) : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Fahrzeugtyp</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FormField
+              control={form.control}
+              name="isPrivate"
+              render={({ field }) => (
+                <FormItem className="flex items-start justify-between gap-4 rounded-xl border bg-muted/30 p-4">
+                  <div className="space-y-1.5">
+                    <FormLabel className="cursor-pointer">Privatfahrzeug</FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Wenn aktiv, wird das Fahrzeug nicht verkauft und nicht in Bestand, Gewinn oder Exportlogik einbezogen.
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -1986,55 +2069,44 @@ export function VehicleForm({
         {/* Section 5: Preise & Steuern */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Preise & Steuern</CardTitle>
+            <CardTitle className="text-lg">
+              {watchedIsPrivate ? "Einkauf" : "Preise & Steuern"}
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Margin tax toggle */}
-            <FormField
-              control={form.control}
-              name="marginTaxed"
-              render={({ field }) => (
-                <FormItem className="flex items-start gap-3">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                      className="mt-0.5"
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel className="cursor-pointer">
-                      Differenzbesteuerung (&sect;25a UStG)
-                    </FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      {watchedMarginTaxed
-                        ? "Der Verkaufspreis ist der Endpreis (Brutto = Netto)."
-                        : "Regelbesteuerung: MwSt wird auf den Nettopreis aufgeschlagen."}
-                    </p>
-                  </div>
-                </FormItem>
-              )}
-            />
+            {watchedIsPrivate ? (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted-foreground">
+                Für Privatfahrzeuge werden Verkaufs-, Händler- und Exportdaten ausgeblendet und beim Speichern entfernt.
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="marginTaxed"
+                render={({ field }) => (
+                  <FormItem className="flex items-start gap-3">
+                    <FormControl>
+                      <Checkbox
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        className="mt-0.5"
+                      />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel className="cursor-pointer">
+                        Differenzbesteuerung (&sect;25a UStG)
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        {watchedMarginTaxed
+                          ? "Der Verkaufspreis ist der Endpreis (Brutto = Netto)."
+                          : "Regelbesteuerung: MwSt wird auf den Nettopreis aufgeschlagen."}
+                      </p>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            )}
 
-            <FormField
-              control={form.control}
-              name="isPrivate"
-              render={({ field }) => (
-                <FormItem className="flex items-start justify-between gap-4 rounded-xl border bg-muted/30 p-4">
-                  <div className="space-y-1.5">
-                    <FormLabel className="cursor-pointer">Privatfahrzeug</FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Private Fahrzeuge werden nicht in Bestand, Finanzen oder Verkaufsauswahl einbezogen.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={`grid gap-4 ${watchedIsPrivate ? "sm:grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               {/* Purchase price */}
               <FormField
                 control={form.control}
@@ -2042,7 +2114,7 @@ export function VehicleForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Einkaufspreis Netto
+                      {watchedIsPrivate ? "Einkaufspreis" : "Einkaufspreis Netto"}
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
@@ -2059,176 +2131,182 @@ export function VehicleForm({
                 )}
               />
 
-              <FormItem>
-                <FormLabel>Einkaufspreis Brutto</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={purchaseGrossDisplay}
-                    onChange={(e) => handlePurchaseGrossChange(e.target.value)}
-                    onFocus={() => setIsEditingPurchaseGross(true)}
-                    onBlur={handlePurchaseGrossBlur}
-                  />
-                </FormControl>
-                <p className="text-xs text-muted-foreground">
-                  Wird mit {watchedTaxRate}% MwSt berechnet.
-                </p>
-              </FormItem>
-
-              <FormField
-                control={form.control}
-                name="taxRate"
-                render={({ field }) => (
+              {watchedIsPrivate ? null : (
+                <>
                   <FormItem>
-                    <FormLabel>MwSt-Satz (%)</FormLabel>
+                    <FormLabel>Einkaufspreis Brutto</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.1" {...field} />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={purchaseGrossDisplay}
+                        onChange={(e) => handlePurchaseGrossChange(e.target.value)}
+                        onFocus={() => setIsEditingPurchaseGross(true)}
+                        onBlur={handlePurchaseGrossBlur}
+                      />
                     </FormControl>
-                    <FormMessage />
+                    <p className="text-xs text-muted-foreground">
+                      Wird mit {watchedTaxRate}% MwSt berechnet.
+                    </p>
                   </FormItem>
-                )}
-              />
+
+                  <FormField
+                    control={form.control}
+                    name="taxRate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>MwSt-Satz (%)</FormLabel>
+                        <FormControl>
+                          <Input type="number" step="0.1" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </>
+              )}
             </div>
 
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">
-                Verkaufspreis
-                <RequiredMark />
-              </Label>
+            {watchedIsPrivate ? null : (
+              <>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium">
+                    Verkaufspreis
+                    <RequiredMark />
+                  </Label>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="sellingPrice"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Verkaufspreis Netto</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              value={field.value ?? ""}
+                              onChange={(e) => handleSellingNetChange(e.target.value)}
+                              className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormItem>
+                      <FormLabel>
+                        Verkaufspreis Brutto
+                        {watchedMarginTaxed ? " / Endpreis" : ""}
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={sellingGrossDisplay}
+                          onChange={(e) => handleSellingGrossChange(e.target.value)}
+                          onFocus={() => setIsEditingSellingGross(true)}
+                          onBlur={handleSellingGrossBlur}
+                          className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
+                        />
+                      </FormControl>
+                      {sellingPriceHasError ? (
+                        <p className="text-sm font-medium text-destructive">
+                          {form.formState.errors.sellingPrice?.message as string}
+                        </p>
+                      ) : null}
+                      <p className="text-xs text-muted-foreground">
+                        {watchedMarginTaxed
+                          ? "Bei Differenzbesteuerung ist Brutto gleich Netto."
+                          : `Wird mit ${watchedTaxRate}% MwSt berechnet.`}
+                      </p>
+                    </FormItem>
+                  </div>
+                </div>
+
                 <FormField
                   control={form.control}
-                  name="sellingPrice"
+                  name="transportCostDomestic"
                   render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Verkaufspreis Netto</FormLabel>
+                    <FormItem className="max-w-xs">
+                      <FormLabel>Transportkosten Inland (€)</FormLabel>
                       <FormControl>
                         <Input
                           type="number"
                           step="0.01"
                           placeholder="0.00"
                           value={field.value ?? ""}
-                          onChange={(e) => handleSellingNetChange(e.target.value)}
-                          className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormItem>
-                  <FormLabel>
-                    Verkaufspreis Brutto
-                    {watchedMarginTaxed ? " / Endpreis" : ""}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={sellingGrossDisplay}
-                      onChange={(e) => handleSellingGrossChange(e.target.value)}
-                      onFocus={() => setIsEditingSellingGross(true)}
-                      onBlur={handleSellingGrossBlur}
-                      className={sellingPriceHasError ? "border-destructive focus-visible:ring-destructive" : ""}
-                    />
-                  </FormControl>
-                  {sellingPriceHasError ? (
-                    <p className="text-sm font-medium text-destructive">
-                      {form.formState.errors.sellingPrice?.message as string}
-                    </p>
+
+                <FormField
+                  control={form.control}
+                  name="dealerPrice"
+                  render={({ field }) => (
+                    <FormItem className="max-w-xs">
+                      <FormLabel>Händlerpreis (EUR)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Preis für Händler, die das Fahrzeug im Ist-Zustand ankaufen.
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="grid gap-2 text-sm sm:grid-cols-4">
+                    <div>
+                      <p className="text-muted-foreground">Einkauf</p>
+                      <p className="font-semibold">{formatPrice(numericPurchasePrice)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Verkauf (Brutto)</p>
+                      <p className="font-semibold">{formatPrice(grossPrice)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Nebenkosten</p>
+                      <p className="font-semibold text-orange-500">{formatPrice(totalAdditionalCosts)}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Marge (Netto)</p>
+                      <p className={`font-semibold ${margin >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                        {formatPrice(margin)}
+                      </p>
+                    </div>
+                  </div>
+                  {totalAdditionalCosts > 0 ? (
+                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      {domesticTransportCost > 0 ? <p>Transport Inland: {formatPrice(domesticTransportCost)}</p> : null}
+                      {watchedExportEnabled && exportOnlyCosts > 0 ? <p>Exportkosten: {formatPrice(exportOnlyCosts)}</p> : null}
+                      {existingAdditionalCosts > 0 ? <p>Bereits erfasste Zusatzkosten: {formatPrice(existingAdditionalCosts)}</p> : null}
+                    </div>
                   ) : null}
-                  <p className="text-xs text-muted-foreground">
-                    {watchedMarginTaxed
-                      ? "Bei Differenzbesteuerung ist Brutto gleich Netto."
-                      : `Wird mit ${watchedTaxRate}% MwSt berechnet.`}
-                  </p>
-                </FormItem>
-              </div>
-            </div>
-
-            {/* Transportkosten Inland - always visible */}
-            <FormField
-              control={form.control}
-              name="transportCostDomestic"
-              render={({ field }) => (
-                <FormItem className="max-w-xs">
-                  <FormLabel>Transportkosten Inland (€)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={field.value ?? ""}
-                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Dealer price */}
-            <FormField
-              control={form.control}
-              name="dealerPrice"
-              render={({ field }) => (
-                <FormItem className="max-w-xs">
-                  <FormLabel>Händlerpreis (EUR)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={field.value ?? ""}
-                      onChange={(e) => field.onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-                    />
-                  </FormControl>
-                  <p className="text-xs text-muted-foreground">
-                    Preis für Händler, die das Fahrzeug im Ist-Zustand ankaufen.
-                  </p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Margin summary */}
-            <div className="rounded-lg border bg-muted/30 p-4">
-              <div className="grid gap-2 text-sm sm:grid-cols-4">
-                <div>
-                  <p className="text-muted-foreground">Einkauf</p>
-                  <p className="font-semibold">{formatPrice(numericPurchasePrice)}</p>
                 </div>
-                <div>
-                  <p className="text-muted-foreground">Verkauf (Brutto)</p>
-                  <p className="font-semibold">{formatPrice(grossPrice)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Nebenkosten</p>
-                  <p className="font-semibold text-orange-500">{formatPrice(totalAdditionalCosts)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Marge (Netto)</p>
-                  <p className={`font-semibold ${margin >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {formatPrice(margin)}
-                  </p>
-                </div>
-              </div>
-              {totalAdditionalCosts > 0 ? (
-                <div className="mt-3 space-y-1 text-xs text-muted-foreground">
-                  {domesticTransportCost > 0 ? <p>Transport Inland: {formatPrice(domesticTransportCost)}</p> : null}
-                  {watchedExportEnabled && exportOnlyCosts > 0 ? <p>Exportkosten: {formatPrice(exportOnlyCosts)}</p> : null}
-                  {existingAdditionalCosts > 0 ? <p>Bereits erfasste Zusatzkosten: {formatPrice(existingAdditionalCosts)}</p> : null}
-                </div>
-              ) : null}
-            </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         {/* Section 6: Export / Portugal */}
+        {watchedIsPrivate ? null : (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-3">
@@ -2343,6 +2421,7 @@ export function VehicleForm({
             </CardContent>
           ) : null}
         </Card>
+        )}
 
         {/* Section 7: Status */}
         <Card>
@@ -2350,33 +2429,39 @@ export function VehicleForm({
             <CardTitle className="text-lg">Status & Besondere Informationen</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem className="max-w-xs">
-                  <FormLabel>Status</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {STATUS_OPTIONS.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {watchedIsPrivate ? (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Privatfahrzeuge bleiben automatisch auf <span className="font-medium text-foreground">Verfügbar</span> und können nicht verkauft werden.
+              </div>
+            ) : (
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem className="max-w-xs">
+                    <FormLabel>Status</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>
+                            {s.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
               control={form.control}
               name="notes"
