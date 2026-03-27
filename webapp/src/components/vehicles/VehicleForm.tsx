@@ -953,31 +953,6 @@ export function VehicleForm({
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Fahrzeugtyp</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <FormField
-              control={form.control}
-              name="isPrivate"
-              render={({ field }) => (
-                <FormItem className="flex items-start justify-between gap-4 rounded-xl border bg-muted/30 p-4">
-                  <div className="space-y-1.5">
-                    <FormLabel className="cursor-pointer">Privatfahrzeug</FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Wenn aktiv, wird das Fahrzeug nicht verkauft und nicht in Bestand, Gewinn oder Exportlogik einbezogen.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
             <CardTitle className="text-lg">Fahrzeugpapiere analysieren (Brief/Schein, PDF/Bild)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -1041,8 +1016,25 @@ export function VehicleForm({
 
         {/* Section 1: Fahrzeugdaten */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">Fahrzeugdaten</CardTitle>
+            <FormField
+              control={form.control}
+              name="isPrivate"
+              render={({ field }) => (
+                <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
+                  <div className="space-y-0.5">
+                    <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
+                    <p className="text-[11px] text-muted-foreground">
+                      Nicht im Verkauf
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Brand Section */}
