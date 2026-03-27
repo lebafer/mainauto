@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { Search, Plus, Car, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -13,9 +13,11 @@ import {
   STATUS_CONFIG,
   getFileUrl,
 } from "@/lib/vehicles";
+import { getAutoscoutTarget, getMarketplaceStatusLabel } from "@/lib/marketplaces";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -28,6 +30,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type StatusFilter = "all" | "available" | "reserved" | "sold";
 type VisibilityFilter = "all" | "business" | "private";
+type MarketplaceFilter = "all" | "autoscout" | "not_selected";
 
 function getPrimaryImage(vehicle: Vehicle) {
   return vehicle.images?.find((image) => image.isPrimary) ?? vehicle.images?.[0];
@@ -35,11 +38,15 @@ function getPrimaryImage(vehicle: Vehicle) {
 
 export default function VehicleList() {
   const { session } = useAuth();
+  const queryClient = useQueryClient();
   const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
+  const marketplaceExportsEnabled = session?.entitlements?.marketplace_exports === true;
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
+  const [marketplaceFilter, setMarketplaceFilter] = useState<MarketplaceFilter>("all");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const { data: vehicles, isLoading } = useQuery({
     queryKey: ["vehicles", statusFilter, visibilityFilter, search],
@@ -53,6 +60,36 @@ export default function VehicleList() {
       return api.get<Vehicle[]>(`/api/vehicles${qs ? `?${qs}` : ""}`);
     },
   });
+
+  const bulkTargetMutation = useMutation({
+    mutationFn: (enabled: boolean) =>
+      api.post("/api/marketplaces/vehicles/bulk-targets", {
+        vehicleIds: selectedIds,
+        target: {
+          platform: "autoscout24",
+          enabled,
+        },
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      setSelectedIds([]);
+    },
+  });
+
+  const filteredVehicles = useMemo(() => {
+    const currentVehicles = vehicles ?? [];
+    if (!marketplaceExportsEnabled || marketplaceFilter === "all") {
+      return currentVehicles;
+    }
+
+    return currentVehicles.filter((vehicle) => {
+      const autoscoutTarget = getAutoscoutTarget(vehicle);
+      if (marketplaceFilter === "autoscout") {
+        return autoscoutTarget?.enabled === true;
+      }
+      return autoscoutTarget?.enabled !== true;
+    });
+  }, [vehicles, marketplaceExportsEnabled, marketplaceFilter]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -106,14 +143,45 @@ export default function VehicleList() {
             </TabsList>
           </Tabs>
         ) : null}
+        {marketplaceExportsEnabled ? (
+          <Tabs
+            value={marketplaceFilter}
+            onValueChange={(value) => setMarketplaceFilter(value as MarketplaceFilter)}
+          >
+            <TabsList>
+              <TabsTrigger value="all">Alle Plattformen</TabsTrigger>
+              <TabsTrigger value="autoscout">AutoScout24</TabsTrigger>
+              <TabsTrigger value="not_selected">Nicht markiert</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : null}
       </div>
+
+      {marketplaceExportsEnabled ? (
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="outline"
+            disabled={selectedIds.length === 0 || bulkTargetMutation.isPending}
+            onClick={() => bulkTargetMutation.mutate(true)}
+          >
+            Für AutoScout24 markieren
+          </Button>
+          <Button
+            variant="outline"
+            disabled={selectedIds.length === 0 || bulkTargetMutation.isPending}
+            onClick={() => bulkTargetMutation.mutate(false)}
+          >
+            AutoScout24 entfernen
+          </Button>
+        </div>
+      ) : null}
 
       {/* Table */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
-      ) : !vehicles || vehicles.length === 0 ? (
+      ) : !filteredVehicles || filteredVehicles.length === 0 ? (
         <EmptyState
           search={search}
           statusFilter={statusFilter}
@@ -124,18 +192,28 @@ export default function VehicleList() {
           <Table>
             <TableHeader>
               <TableRow>
+                {marketplaceExportsEnabled ? <TableHead className="w-12">
+                  <Checkbox
+                    checked={filteredVehicles.length > 0 && selectedIds.length === filteredVehicles.length}
+                    onCheckedChange={(checked) =>
+                      setSelectedIds(checked ? filteredVehicles.map((vehicle) => vehicle.id) : [])
+                    }
+                  />
+                </TableHead> : null}
                 <TableHead>Fahrzeug</TableHead>
                 <TableHead className="hidden sm:table-cell">Baujahr</TableHead>
                 <TableHead className="hidden md:table-cell">
                   Kilometerstand
                 </TableHead>
                 <TableHead className="text-right">Preis (Brutto)</TableHead>
+                {marketplaceExportsEnabled ? <TableHead>AutoScout24</TableHead> : null}
                 <TableHead className="text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {vehicles.map((vehicle) => {
+              {filteredVehicles.map((vehicle) => {
                 const primaryImage = getPrimaryImage(vehicle);
+                const autoscoutTarget = getAutoscoutTarget(vehicle);
 
                 return (
                   <TableRow
@@ -143,6 +221,20 @@ export default function VehicleList() {
                     className="cursor-pointer"
                     onClick={() => navigate(`/vehicles/${vehicle.id}`)}
                   >
+                    {marketplaceExportsEnabled ? (
+                      <TableCell onClick={(event) => event.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.includes(vehicle.id)}
+                          onCheckedChange={(checked) =>
+                            setSelectedIds((current) =>
+                              checked
+                                ? [...new Set([...current, vehicle.id])]
+                                : current.filter((item) => item !== vehicle.id)
+                            )
+                          }
+                        />
+                      </TableCell>
+                    ) : null}
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/60">
@@ -199,6 +291,18 @@ export default function VehicleList() {
                         )
                       )}
                     </TableCell>
+                    {marketplaceExportsEnabled ? (
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={autoscoutTarget?.enabled ? "default" : "outline"}>
+                            {autoscoutTarget?.enabled ? "Markiert" : "Nicht gewählt"}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {getMarketplaceStatusLabel(autoscoutTarget?.remoteStatus)}
+                          </span>
+                        </div>
+                      </TableCell>
+                    ) : null}
                     <TableCell className="text-right">
                       <StatusBadge status={vehicle.status} />
                     </TableCell>

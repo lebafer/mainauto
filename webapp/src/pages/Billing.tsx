@@ -25,7 +25,12 @@ type PublicPlan = {
 
 const PLAN_FEATURES: Record<PlanSlug, string[]> = {
   standard: ["Core-CRM und Fahrzeugverwaltung", "1 Owner-Zugang", "Cloud-Zugang unter CarOps"],
-  pro: ["Teamverwaltung", "Dokumentenbranding mit Autohaus-Logo", "KI-Fahrzeugbrief-Extraktion"],
+  pro: [
+    "Teamverwaltung",
+    "Dokumentenbranding mit Autohaus-Logo",
+    "KI-Fahrzeugbrief-Extraktion",
+    "Vertriebskanäle mit AutoScout24",
+  ],
 };
 
 const formatCurrency = (cents: number) =>

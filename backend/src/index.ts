@@ -30,6 +30,8 @@ import { settingsRouter } from "./routes/settings";
 import { adminRouter } from "./routes/admin";
 import { publicRouter } from "./routes/public";
 import { billingRouter } from "./routes/billing";
+import { marketplacesRouter } from "./routes/marketplaces";
+import { runMarketplaceSchedules } from "./lib/marketplace-sync";
 
 type Variables = {
   user: {
@@ -352,6 +354,7 @@ app.route("/api/session", sessionRouter);
 app.route("/api/billing", billingRouter);
 app.route("/api/settings", settingsRouter);
 app.route("/api/admin", adminRouter);
+app.route("/api/marketplaces", marketplacesRouter);
 
 const port = Number(env.PORT) || 3000;
 
@@ -362,6 +365,12 @@ ensureCoreSaasData().catch((error) => {
 bootstrapInitialAdmin().catch((error) => {
   console.error("[bootstrap] initial_admin_failed", error);
 });
+
+setInterval(() => {
+  runMarketplaceSchedules().catch((error) => {
+    console.error("[marketplaces] scheduler_failed", error);
+  });
+}, 60_000);
 
 process.on("unhandledRejection", (reason) => {
   console.error("[runtime] unhandled_rejection", reason);

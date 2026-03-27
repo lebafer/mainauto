@@ -20,6 +20,7 @@ export type TenantStatus =
   | "inactive";
 
 export const PRIVATE_VEHICLES_FEATURE_KEY = "private_vehicles";
+export const MARKETPLACE_EXPORTS_FEATURE_KEY = "marketplace_exports";
 
 export const DEFAULT_PLATFORM_NAME = "CarOps";
 export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem für dein Autohaus";
@@ -67,12 +68,13 @@ export const DEFAULT_PLAN_DEFINITIONS = [
       document_branding: false,
       ai_brief_extraction: false,
       private_vehicles: false,
+      marketplace_exports: false,
     },
   },
   {
     slug: "pro",
     name: "Pro",
-    description: "Für Autohäuser mit Team, Dokumentenbranding und KI-Briefscan.",
+    description: "Für Autohäuser mit Team, Dokumentenbranding, KI-Briefscan und Vertriebskanälen.",
     monthlyPriceCents: 8900,
     stripePriceMonthlyId: env.STRIPE_PRO_PRICE_ID?.trim() || null,
     featureEntitlements: {
@@ -80,6 +82,7 @@ export const DEFAULT_PLAN_DEFINITIONS = [
       document_branding: true,
       ai_brief_extraction: true,
       private_vehicles: false,
+      marketplace_exports: true,
     },
   },
 ] as const;

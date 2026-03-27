@@ -40,6 +40,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -275,13 +276,35 @@ const vehicleFormSchema = z.object({
   repairCostsAbroad: z.coerce.number().optional(),
   // Pricing extras
   dealerPrice: z.coerce.number().min(0).optional(),
+  autoscout24Enabled: z.boolean().default(false),
+  queueUploadNow: z.boolean().default(false),
 });
 
 export type VehicleFormValues = z.infer<typeof vehicleFormSchema>;
 
 export type VehicleFormSubmitValues = Omit<
   VehicleFormValues,
-  "power" | "vin" | "hsn" | "tsn" | "registrationDocNumber" | "color" | "fuelType" | "transmission" | "notes" | "internalNotes" | "customerId" | "damageDescription" | "batteryType" | "connectorType" | "supplierId" | "huDue" | "previousOwners" | "serviceDueKm" | "serviceDueDate"
+  | "power"
+  | "vin"
+  | "hsn"
+  | "tsn"
+  | "registrationDocNumber"
+  | "color"
+  | "fuelType"
+  | "transmission"
+  | "notes"
+  | "internalNotes"
+  | "customerId"
+  | "damageDescription"
+  | "batteryType"
+  | "connectorType"
+  | "supplierId"
+  | "huDue"
+  | "previousOwners"
+  | "serviceDueKm"
+  | "serviceDueDate"
+  | "autoscout24Enabled"
+  | "queueUploadNow"
 > & {
   power?: number;
   vin?: string;
@@ -303,6 +326,11 @@ export type VehicleFormSubmitValues = Omit<
   previousOwners?: number;
   serviceDueKm?: number;
   serviceDueDate?: string;
+  marketplaceTargets: Array<{
+    platform: "autoscout24";
+    enabled: boolean;
+  }>;
+  queueUploadNow?: boolean;
 };
 
 interface VehicleFormProps {
@@ -324,6 +352,7 @@ export function VehicleForm({
 }: VehicleFormProps) {
   const { session } = useAuth();
   const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
+  const marketplaceExportsEnabled = session?.entitlements?.marketplace_exports === true;
   const [purchaseGrossDisplay, setPurchaseGrossDisplay] = useState("");
   const [sellingGrossDisplay, setSellingGrossDisplay] = useState("");
   const [isEditingPurchaseGross, setIsEditingPurchaseGross] = useState(false);
@@ -432,6 +461,13 @@ export function VehicleForm({
     customsDuties: vehicle?.customsDuties ?? defaultValues?.customsDuties ?? undefined,
     registrationFees: vehicle?.registrationFees ?? defaultValues?.registrationFees ?? undefined,
     repairCostsAbroad: vehicle?.repairCostsAbroad ?? defaultValues?.repairCostsAbroad ?? undefined,
+    autoscout24Enabled:
+      marketplaceExportsEnabled
+        ? (vehicle?.marketplaceTargets?.some((target) => target.platform === "autoscout24" && target.enabled) ??
+          defaultValues?.autoscout24Enabled ??
+          false)
+        : false,
+    queueUploadNow: defaultValues?.queueUploadNow ?? false,
   };
 
   const form = useForm<VehicleFormValues>({
@@ -659,6 +695,7 @@ export function VehicleForm({
   const watchedRegistrationFees = form.watch("registrationFees");
   const watchedRepairCostsAbroad = form.watch("repairCostsAbroad");
   const watchedTransportCostDomestic = form.watch("transportCostDomestic");
+  const watchedAutoscout24Enabled = form.watch("autoscout24Enabled") ?? false;
 
   const isElectricOrHybrid =
     watchedFuelType === "Elektro" || watchedFuelType === "Hybrid";
@@ -868,8 +905,9 @@ export function VehicleForm({
 
   function handleSubmit(values: VehicleFormValues) {
     const isPrivateVehicle = privateVehiclesEnabled && values.isPrivate;
+    const { autoscout24Enabled, queueUploadNow, ...restValues } = values;
     const processed: VehicleFormSubmitValues = {
-      ...values,
+      ...restValues,
       sellingPrice: isPrivateVehicle ? 0 : values.sellingPrice,
       taxRate: isPrivateVehicle ? 19 : values.taxRate,
       marginTaxed: isPrivateVehicle ? false : values.marginTaxed,
@@ -916,6 +954,15 @@ export function VehicleForm({
       registrationFees: isPrivateVehicle ? undefined : values.registrationFees ?? undefined,
       repairCostsAbroad: isPrivateVehicle ? undefined : values.repairCostsAbroad ?? undefined,
       dealerPrice: isPrivateVehicle ? undefined : values.dealerPrice ?? undefined,
+      marketplaceTargets: isPrivateVehicle
+        ? []
+        : marketplaceExportsEnabled
+          ? [{ platform: "autoscout24", enabled: autoscout24Enabled }]
+          : [],
+      queueUploadNow:
+        isPrivateVehicle || !marketplaceExportsEnabled || !autoscout24Enabled
+          ? false
+          : queueUploadNow,
     };
     onSubmit(processed);
   }
@@ -2420,6 +2467,66 @@ export function VehicleForm({
           ) : null}
         </Card>
         )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Vertriebskanäle</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!marketplaceExportsEnabled ? (
+              <Alert>
+                <AlertTitle>Pro-Feature</AlertTitle>
+                <AlertDescription>
+                  AutoScout24-Markierung, Uploads und automatische Synchronisierung sind im Pro-Tarif enthalten.
+                </AlertDescription>
+              </Alert>
+            ) : isPrivateMode ? (
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                Privatfahrzeuge können nicht auf externe Plattformen hochgeladen werden.
+              </div>
+            ) : (
+              <>
+                <FormField
+                  control={form.control}
+                  name="autoscout24Enabled"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border bg-muted/20 px-4 py-3">
+                      <div className="space-y-1">
+                        <FormLabel className="cursor-pointer text-sm font-medium">AutoScout24</FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Fahrzeug für AutoScout24 vormerken. Neue Listings werden zunächst inaktiv angelegt.
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {watchedAutoscout24Enabled ? (
+                  <FormField
+                    control={form.control}
+                    name="queueUploadNow"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
+                        <div className="space-y-1">
+                          <FormLabel className="cursor-pointer text-sm font-medium">Nach dem Speichern hochladen</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Erstellt oder aktualisiert das AutoScout24-Listing direkt beim Speichern.
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                ) : null}
+              </>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Section 7: Status */}
         <Card>

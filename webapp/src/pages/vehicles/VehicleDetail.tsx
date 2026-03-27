@@ -19,6 +19,9 @@ import {
   PlusCircle,
   Receipt,
   X,
+  PlugZap,
+  UploadCloud,
+  Rocket,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
@@ -38,6 +41,7 @@ import {
   getVehicleManualCostsTotal,
   getVehicleMargin,
 } from "@/lib/vehicles";
+import { getAutoscoutTarget, getMarketplaceStatusLabel } from "@/lib/marketplaces";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -158,6 +162,7 @@ function openPrintWindow(html: string) {
 export default function VehicleDetail() {
   const { session } = useAuth();
   const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
+  const marketplaceExportsEnabled = session?.entitlements?.marketplace_exports === true;
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -226,6 +231,36 @@ export default function VehicleDetail() {
     },
     onError: () => {
       toast.error("Fehler beim Löschen");
+    },
+  });
+
+  const marketplaceActionMutation = useMutation({
+    mutationFn: (action: "sync" | "activate" | "deactivate" | "delete") =>
+      api.post(`/api/marketplaces/autoscout24/vehicles/${id}/${action}`),
+    onSuccess: async (_, action) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["vehicle", id] }),
+        queryClient.invalidateQueries({ queryKey: ["vehicles"] }),
+        queryClient.invalidateQueries({ queryKey: ["marketplaces", "autoscout24", "vehicles"] }),
+      ]);
+      toast.success(
+        action === "sync"
+          ? "AutoScout24-Upload abgeschlossen"
+          : action === "activate"
+            ? "Listing live geschaltet"
+            : action === "deactivate"
+              ? "Listing auf inaktiv gesetzt"
+              : "Remote-Listing gelöscht"
+      );
+    },
+    onError: (error, action) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : action === "delete"
+            ? "Remote-Listing konnte nicht gelöscht werden"
+            : "Marketplace-Aktion fehlgeschlagen"
+      );
     },
   });
 
@@ -453,6 +488,8 @@ export default function VehicleDetail() {
       </div>
     );
   }
+
+  const autoscoutTarget = getAutoscoutTarget(vehicle);
 
   const grossPrice = calculateGrossPrice(
     vehicle.sellingPrice,
@@ -1548,75 +1585,143 @@ export default function VehicleDetail() {
           </CardContent>
         </Card>
 
-        {/* Price section */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Preise</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {vehicle.marginTaxed ? (
-              <>
-                <div>
-                  <p className="text-xs text-muted-foreground">Differenzbesteuert (&sect;25a UStG)</p>
-                  <p className="text-2xl font-bold">{formatPrice(vehicle.sellingPrice)}</p>
-                  <p className="text-xs text-muted-foreground">Endpreis</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <p className="text-xs text-muted-foreground">Netto</p>
-                  <p className="text-lg font-semibold">{formatPrice(vehicle.sellingPrice)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">MwSt ({vehicle.taxRate}%)</p>
-                  <p className="text-sm">{formatPrice(taxAmount)}</p>
-                </div>
-                <div className="border-t pt-3">
-                  <p className="text-xs text-muted-foreground">Brutto</p>
-                  <p className="text-2xl font-bold">{formatPrice(grossPrice)}</p>
-                </div>
-              </>
-            )}
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Preise</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {vehicle.marginTaxed ? (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Differenzbesteuert (&sect;25a UStG)</p>
+                    <p className="text-2xl font-bold">{formatPrice(vehicle.sellingPrice)}</p>
+                    <p className="text-xs text-muted-foreground">Endpreis</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Netto</p>
+                    <p className="text-lg font-semibold">{formatPrice(vehicle.sellingPrice)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">MwSt ({vehicle.taxRate}%)</p>
+                    <p className="text-sm">{formatPrice(taxAmount)}</p>
+                  </div>
+                  <div className="border-t pt-3">
+                    <p className="text-xs text-muted-foreground">Brutto</p>
+                    <p className="text-2xl font-bold">{formatPrice(grossPrice)}</p>
+                  </div>
+                </>
+              )}
 
-            <div className="border-t pt-3 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Einkauf</span>
-                <span>{formatPrice(vehicle.purchasePrice)}</span>
+              <div className="border-t pt-3 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Einkauf</span>
+                  <span>{formatPrice(vehicle.purchasePrice)}</span>
+                </div>
+                {exportAdditionalCosts > 0 ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Exportkosten</span>
+                    <span className="text-orange-500">{formatPrice(exportAdditionalCosts)}</span>
+                  </div>
+                ) : null}
+                {manualAdditionalCosts > 0 ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Sonstige Zusatzkosten</span>
+                    <span className="text-orange-500">{formatPrice(manualAdditionalCosts)}</span>
+                  </div>
+                ) : null}
+                {totalAdditionalCosts > 0 ? (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Gesamtkosten</span>
+                    <span className="font-medium">{formatPrice(totalInvested)}</span>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Marge</span>
+                  <span className={margin >= 0 ? "text-emerald-500 font-medium" : "text-red-500 font-medium"}>
+                    {formatPrice(margin)}
+                  </span>
+                </div>
+                {vehicle.dealerPrice != null ? (
+                  <div className="flex items-center justify-between text-sm border-t pt-2 mt-2">
+                    <span className="text-muted-foreground">Händlerpreis</span>
+                    <span className="font-medium">{formatPrice(vehicle.dealerPrice)}</span>
+                  </div>
+                ) : null}
               </div>
-              {exportAdditionalCosts > 0 ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Exportkosten</span>
-                  <span className="text-orange-500">{formatPrice(exportAdditionalCosts)}</span>
+            </CardContent>
+          </Card>
+
+          {marketplaceExportsEnabled ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <PlugZap className="h-5 w-5 text-amber-500" />
+                  AutoScout24
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={autoscoutTarget?.enabled ? "default" : "outline"}>
+                    {autoscoutTarget?.enabled ? "Als Ziel markiert" : "Nicht markiert"}
+                  </Badge>
+                  <Badge variant="outline">{getMarketplaceStatusLabel(autoscoutTarget?.remoteStatus)}</Badge>
                 </div>
-              ) : null}
-              {manualAdditionalCosts > 0 ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Sonstige Zusatzkosten</span>
-                  <span className="text-orange-500">{formatPrice(manualAdditionalCosts)}</span>
+
+                {autoscoutTarget?.remoteUrl ? (
+                  <a href={autoscoutTarget.remoteUrl} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">
+                    Listing bei AutoScout24 öffnen
+                  </a>
+                ) : null}
+
+                {autoscoutTarget?.lastSyncedAt ? (
+                  <div className="text-xs text-muted-foreground">
+                    Letzte Synchronisierung: {new Date(autoscoutTarget.lastSyncedAt).toLocaleString("de-DE")}
+                  </div>
+                ) : null}
+
+                <div className="grid gap-2">
+                  <Button
+                    onClick={() => marketplaceActionMutation.mutate("sync")}
+                    disabled={!autoscoutTarget?.enabled || marketplaceActionMutation.isPending}
+                  >
+                    <UploadCloud className="mr-2 h-4 w-4" />
+                    Jetzt synchronisieren
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => marketplaceActionMutation.mutate("activate")}
+                    disabled={!autoscoutTarget?.remoteListingId || marketplaceActionMutation.isPending}
+                  >
+                    <Rocket className="mr-2 h-4 w-4" />
+                    Live schalten
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => marketplaceActionMutation.mutate("deactivate")}
+                    disabled={!autoscoutTarget?.remoteListingId || marketplaceActionMutation.isPending}
+                  >
+                    Inaktiv setzen
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => marketplaceActionMutation.mutate("delete")}
+                    disabled={!autoscoutTarget?.remoteListingId || marketplaceActionMutation.isPending}
+                  >
+                    Remote-Listing löschen
+                  </Button>
                 </div>
-              ) : null}
-              {totalAdditionalCosts > 0 ? (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Gesamtkosten</span>
-                  <span className="font-medium">{formatPrice(totalInvested)}</span>
+
+                <div className="rounded-lg border bg-muted/20 p-3 text-xs text-muted-foreground">
+                  {autoscoutTarget?.lastError || "Kein aktueller Fehler vorhanden."}
                 </div>
-              ) : null}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Marge</span>
-                <span className={margin >= 0 ? "text-emerald-500 font-medium" : "text-red-500 font-medium"}>
-                  {formatPrice(margin)}
-                </span>
-              </div>
-              {vehicle.dealerPrice != null ? (
-                <div className="flex items-center justify-between text-sm border-t pt-2 mt-2">
-                  <span className="text-muted-foreground">Händlerpreis</span>
-                  <span className="font-medium">{formatPrice(vehicle.dealerPrice)}</span>
-                </div>
-              ) : null}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       </div>
 
       {/* Tabs */}

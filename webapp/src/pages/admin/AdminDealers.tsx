@@ -85,6 +85,7 @@ type DealerEditForm = {
 };
 
 const PRIVATE_VEHICLES_FEATURE_KEY = "private_vehicles";
+const MARKETPLACE_EXPORTS_FEATURE_KEY = "marketplace_exports";
 
 function getPrimaryOwner(dealer: Dealer) {
   return dealer.memberships.find((membership) => membership.role === "dealer_owner") ?? null;
@@ -425,6 +426,32 @@ export default function AdminDealers() {
                                 },
                               })
                             : undefined
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                      <div className="space-y-1 pr-4">
+                        <div className="text-sm font-medium text-foreground">Vertriebskanäle</div>
+                        <div className="text-xs text-muted-foreground">
+                          Aktiviert AutoScout24-Connectors, Upload-Zentrale und automatische Exporte.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={getFeatureEnabled(currentSubscription, MARKETPLACE_EXPORTS_FEATURE_KEY)}
+                        disabled={!currentSubscription || subscriptionMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          currentSubscription
+                            ? subscriptionMutation.mutate({
+                                dealerId: dealer.id,
+                                planId: currentSubscription.planId,
+                                complimentaryAccess: currentSubscription.complimentaryAccess,
+                                featureOverrides: {
+                                  ...(currentSubscription.featureOverrides ?? {}),
+                                  [MARKETPLACE_EXPORTS_FEATURE_KEY]: checked,
+                                },
+                              })
+                            : null
                         }
                       />
                     </div>

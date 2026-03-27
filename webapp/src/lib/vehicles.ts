@@ -1,3 +1,5 @@
+import type { VehicleMarketplaceTarget } from "../../../backend/src/types";
+
 // Vehicle types and utilities
 
 export interface VehicleImage {
@@ -128,6 +130,7 @@ export interface Vehicle {
   serviceDueDate?: string | null;
   // Pricing
   dealerPrice?: number | null;
+  marketplaceTargets?: VehicleMarketplaceTarget[];
 }
 
 export interface VehicleCostBreakdownItem {

@@ -37,6 +37,7 @@ const PLAN_FEATURES: Record<PlanSlug, string[]> = {
     "Teamverwaltung für Mitarbeiter",
     "Eigenes Logo in Dokumenten",
     "KI-Fahrzeugbrief-Extraktion",
+    "Vertriebskanäle mit AutoScout24",
   ],
 };
 

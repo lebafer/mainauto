@@ -46,6 +46,38 @@ enum DealerDomainStatus {
   disabled
 }
 
+enum MarketplacePlatform {
+  autoscout24
+}
+
+enum MarketplaceConnectionStatus {
+  disconnected
+  pending
+  connected
+  error
+}
+
+enum MarketplaceScheduleFrequency {
+  hourly
+  daily
+}
+
+enum MarketplaceSyncTriggerType {
+  manual
+  schedule
+  vehicle_create
+  vehicle_update
+  manual_action
+}
+
+enum MarketplaceSyncJobStatus {
+  queued
+  running
+  succeeded
+  failed
+  skipped
+}
+
 // ─── Dealer / SaaS Models ──────────────────────────────────────
 
 model Dealer {
@@ -76,6 +108,10 @@ model Dealer {
   customColors         CustomColor[]
   customSuppliers      CustomSupplier[]
   customConnectorTypes CustomConnectorType[]
+  marketplaceConnections MarketplaceConnection[]
+  marketplaceTargets   VehicleMarketplaceTarget[]
+  marketplaceSchedules MarketplaceSyncSchedule[]
+  marketplaceSyncJobs  MarketplaceSyncJob[]
 }
 
 model DealerSettings {
@@ -323,6 +359,8 @@ model Vehicle {
   sales                  Sale[]
   costs                  VehicleCost[]
   workLog                WorkLogItem[]
+  marketplaceTargets     VehicleMarketplaceTarget[]
+  marketplaceSyncJobs    MarketplaceSyncJob[]
   co2Emission            Float?
   displacement           Int?
   powerKw                Float?
@@ -481,6 +519,89 @@ model WorkLogItem {
   dueDate     DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model MarketplaceConnection {
+  id             String                      @id @default(cuid())
+  dealerId       String
+  dealer         Dealer                      @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  platform       MarketplacePlatform
+  status         MarketplaceConnectionStatus @default(disconnected)
+  displayName    String?
+  username       String?
+  encryptedSecret String?
+  customerId     String?
+  lastVerifiedAt DateTime?
+  lastError      String?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  @@unique([dealerId, platform])
+  @@index([dealerId, status])
+}
+
+model VehicleMarketplaceTarget {
+  id            String               @id @default(cuid())
+  dealerId      String
+  dealer        Dealer               @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  vehicleId     String
+  vehicle       Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  platform      MarketplacePlatform
+  enabled       Boolean              @default(true)
+  remoteListingId String?
+  remoteUrl     String?
+  remoteStatus  String               @default("unknown")
+  lastSyncedAt  DateTime?
+  lastError     String?
+  lastSyncJobId String?
+  lastSyncJob   MarketplaceSyncJob?  @relation("VehicleTargetLastSyncJob", fields: [lastSyncJobId], references: [id], onDelete: SetNull)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  @@unique([vehicleId, platform])
+  @@index([dealerId, platform, enabled])
+}
+
+model MarketplaceSyncSchedule {
+  id         String                      @id @default(cuid())
+  dealerId   String
+  dealer     Dealer                      @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  platform   MarketplacePlatform
+  enabled    Boolean                     @default(false)
+  frequency  MarketplaceScheduleFrequency
+  hour       Int                         @default(0)
+  minute     Int                         @default(0)
+  timezone   String                      @default("Europe/Berlin")
+  nextRunAt  DateTime?
+  lastRunAt  DateTime?
+  lockedAt   DateTime?
+  createdAt  DateTime                    @default(now())
+  updatedAt  DateTime                    @updatedAt
+
+  @@unique([dealerId, platform])
+}
+
+model MarketplaceSyncJob {
+  id           String                   @id @default(cuid())
+  dealerId     String
+  dealer       Dealer                   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  platform     MarketplacePlatform
+  vehicleId    String?
+  vehicle      Vehicle?                 @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  triggerType  MarketplaceSyncTriggerType
+  status       MarketplaceSyncJobStatus @default(queued)
+  action       String                   @default("sync")
+  payload      Json?
+  result       Json?
+  errorSummary String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  updatedTargets VehicleMarketplaceTarget[] @relation("VehicleTargetLastSyncJob")
+
+  @@index([dealerId, platform, status, createdAt])
+  @@index([vehicleId, platform, createdAt])
 }
 
 model CustomBrand {

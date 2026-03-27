@@ -25,6 +25,10 @@ import { tmpdir } from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements, requireEntitlement } from "../lib/request-context";
+import {
+  enqueueAndRunMarketplaceJob,
+  upsertVehicleMarketplaceTargets,
+} from "../lib/marketplace-sync";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -819,6 +823,7 @@ vehiclesRouter.get("/", async (c) => {
       images: { orderBy: vehicleImageOrderBy },
       customer: true,
       supplierRel: true,
+      marketplaceTargets: true,
       _count: {
         select: { sales: true, documents: true },
       },
@@ -851,6 +856,7 @@ vehiclesRouter.get("/:id", async (c) => {
       documents: { orderBy: { createdAt: "desc" } },
       customer: true,
       supplierRel: true,
+      marketplaceTargets: true,
       sales: {
         include: { customer: true },
         orderBy: { saleDate: "desc" },
@@ -980,19 +986,24 @@ vehiclesRouter.post(
     const dealerId = getCurrentDealerId(c);
     const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
     const data = c.req.valid("json");
+    const {
+      marketplaceTargets = [],
+      queueUploadNow = false,
+      ...input
+    } = data;
 
-    if (data.customerId) {
+    if (input.customerId) {
       const customer = await prisma.customer.findFirst({
-        where: { id: data.customerId, dealerId },
+        where: { id: input.customerId, dealerId },
       });
       if (!customer) {
         return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
       }
     }
 
-    if (data.supplierId) {
+    if (input.supplierId) {
       const supplier = await prisma.supplier.findFirst({
-        where: { id: data.supplierId, dealerId },
+        where: { id: input.supplierId, dealerId },
       });
       if (!supplier) {
         return c.json({ error: { message: "Supplier not found", code: "NOT_FOUND" } }, 404);
@@ -1000,64 +1011,64 @@ vehiclesRouter.post(
     }
 
     // Convert power (number) to string for Prisma, strip empty strings
-    const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
-    const isPrivateVehicle = privateVehiclesEnabled && data.isPrivate === true;
+    const firstReg = input.firstRegistration ? new Date(input.firstRegistration) : null;
+    const isPrivateVehicle = privateVehiclesEnabled && input.isPrivate === true;
     const vehicleData = {
-      ...data,
-      vehicleNumber: data.vehicleNumber.trim(),
-      year: data.year ?? (firstReg ? firstReg.getFullYear() : new Date().getFullYear()),
-      power: data.power !== undefined ? String(data.power) : undefined,
-      vin: data.vin || null,
-      hsn: data.hsn || null,
-      tsn: data.tsn || null,
-      registrationDocNumber: data.registrationDocNumber || null,
-      color: data.color || null,
-      fuelType: data.fuelType || null,
-      transmission: data.transmission || null,
-      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
-      taxRate: isPrivateVehicle ? 19 : data.taxRate,
-      marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
-      isPrivate: data.isPrivate,
-      status: isPrivateVehicle ? "available" : data.status,
-      notes: data.notes || null,
-      internalNotes: data.internalNotes || null,
-      customerId: isPrivateVehicle ? null : data.customerId || null,
-      features: data.features || null,
+      ...input,
+      vehicleNumber: input.vehicleNumber.trim(),
+      year: input.year ?? (firstReg ? firstReg.getFullYear() : new Date().getFullYear()),
+      power: input.power !== undefined ? String(input.power) : undefined,
+      vin: input.vin || null,
+      hsn: input.hsn || null,
+      tsn: input.tsn || null,
+      registrationDocNumber: input.registrationDocNumber || null,
+      color: input.color || null,
+      fuelType: input.fuelType || null,
+      transmission: input.transmission || null,
+      sellingPrice: isPrivateVehicle ? 0 : input.sellingPrice,
+      taxRate: isPrivateVehicle ? 19 : input.taxRate,
+      marginTaxed: isPrivateVehicle ? false : input.marginTaxed,
+      isPrivate: input.isPrivate,
+      status: isPrivateVehicle ? "available" : input.status,
+      notes: input.notes || null,
+      internalNotes: input.internalNotes || null,
+      customerId: isPrivateVehicle ? null : input.customerId || null,
+      features: input.features || null,
       // New nullable string/number fields
-      damageDescription: data.damageDescription || null,
-      batteryType: data.batteryType || null,
-      co2Emission: data.co2Emission ?? null,
-      displacement: data.displacement ?? null,
-      powerKw: data.powerKw ?? null,
-      damageAmount: data.damageAmount ?? null,
-      batteryCapacity: data.batteryCapacity ?? null,
-      electricRange: data.electricRange ?? null,
-      batterySoh: data.batterySoh ?? null,
-      transportCostDomestic: isPrivateVehicle ? null : data.transportCostDomestic ?? null,
-      transportCostAbroad: isPrivateVehicle ? null : data.transportCostAbroad ?? null,
-      customsDuties: isPrivateVehicle ? null : data.customsDuties ?? null,
-      registrationFees: isPrivateVehicle ? null : data.registrationFees ?? null,
-      repairCostsAbroad: isPrivateVehicle ? null : data.repairCostsAbroad ?? null,
+      damageDescription: input.damageDescription || null,
+      batteryType: input.batteryType || null,
+      co2Emission: input.co2Emission ?? null,
+      displacement: input.displacement ?? null,
+      powerKw: input.powerKw ?? null,
+      damageAmount: input.damageAmount ?? null,
+      batteryCapacity: input.batteryCapacity ?? null,
+      electricRange: input.electricRange ?? null,
+      batterySoh: input.batterySoh ?? null,
+      transportCostDomestic: isPrivateVehicle ? null : input.transportCostDomestic ?? null,
+      transportCostAbroad: isPrivateVehicle ? null : input.transportCostAbroad ?? null,
+      customsDuties: isPrivateVehicle ? null : input.customsDuties ?? null,
+      registrationFees: isPrivateVehicle ? null : input.registrationFees ?? null,
+      repairCostsAbroad: isPrivateVehicle ? null : input.repairCostsAbroad ?? null,
       // Additional fields
-      firstRegistration: data.firstRegistration ? new Date(data.firstRegistration) : null,
-      supplier: data.supplier || null,
-      chargingTime: data.chargingTime ?? null,
-      connectorType: data.connectorType || null,
+      firstRegistration: input.firstRegistration ? new Date(input.firstRegistration) : null,
+      supplier: input.supplier || null,
+      chargingTime: input.chargingTime ?? null,
+      connectorType: input.connectorType || null,
       // Supplier relation
-      supplierId: data.supplierId ?? null,
+      supplierId: input.supplierId ?? null,
       // Inspection / Service
-      huDue: data.huDue ? new Date(data.huDue) : null,
-      previousOwners: data.previousOwners ?? null,
-      serviceDueKm: data.serviceDueKm ?? null,
-      serviceDueDate: data.serviceDueDate ? new Date(data.serviceDueDate) : null,
+      huDue: input.huDue ? new Date(input.huDue) : null,
+      previousOwners: input.previousOwners ?? null,
+      serviceDueKm: input.serviceDueKm ?? null,
+      serviceDueDate: input.serviceDueDate ? new Date(input.serviceDueDate) : null,
       // Body / Configuration
-      bodyType: data.bodyType || null,
-      doors: data.doors ?? null,
-      seats: data.seats ?? null,
-      driveType: data.driveType || null,
-      emissionClass: data.emissionClass || null,
-      exportEnabled: isPrivateVehicle ? false : data.exportEnabled,
-      dealerPrice: isPrivateVehicle ? null : data.dealerPrice ?? null,
+      bodyType: input.bodyType || null,
+      doors: input.doors ?? null,
+      seats: input.seats ?? null,
+      driveType: input.driveType || null,
+      emissionClass: input.emissionClass || null,
+      exportEnabled: isPrivateVehicle ? false : input.exportEnabled,
+      dealerPrice: isPrivateVehicle ? null : input.dealerPrice ?? null,
     };
 
     try {
@@ -1069,10 +1080,46 @@ vehiclesRouter.post(
         include: {
           images: true,
           customer: true,
+          marketplaceTargets: true,
         },
       });
 
-      return c.json({ data: vehicle }, 201);
+      if (marketplaceTargets.length > 0) {
+        await upsertVehicleMarketplaceTargets(
+          dealerId,
+          vehicle.id,
+          marketplaceTargets.map((item) => ({
+            ...item,
+            enabled: isPrivateVehicle ? false : item.enabled,
+          }))
+        );
+      }
+
+      if (queueUploadNow && !isPrivateVehicle) {
+        const autoscoutEnabled = marketplaceTargets.some(
+          (item) => item.platform === "autoscout24" && item.enabled
+        );
+        if (autoscoutEnabled) {
+          await enqueueAndRunMarketplaceJob({
+            dealerId,
+            platform: "autoscout24",
+            vehicleId: vehicle.id,
+            triggerType: "vehicle_create",
+            action: "sync",
+          });
+        }
+      }
+
+      const refreshedVehicle = await prisma.vehicle.findUnique({
+        where: { id: vehicle.id },
+        include: {
+          images: true,
+          customer: true,
+          marketplaceTargets: true,
+        },
+      });
+
+      return c.json({ data: refreshedVehicle ?? vehicle }, 201);
     } catch (error) {
       if (isVehicleNumberConflict(error)) {
         return c.json(
@@ -1094,24 +1141,29 @@ vehiclesRouter.put(
     const dealerId = getCurrentDealerId(c);
     const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
     const data = c.req.valid("json");
+    const {
+      marketplaceTargets,
+      queueUploadNow = false,
+      ...input
+    } = data;
 
     const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
     if (!existing) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    if (data.customerId) {
+    if (input.customerId) {
       const customer = await prisma.customer.findFirst({
-        where: { id: data.customerId, dealerId },
+        where: { id: input.customerId, dealerId },
       });
       if (!customer) {
         return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
       }
     }
 
-    if (data.supplierId) {
+    if (input.supplierId) {
       const supplier = await prisma.supplier.findFirst({
-        where: { id: data.supplierId, dealerId },
+        where: { id: input.supplierId, dealerId },
       });
       if (!supplier) {
         return c.json({ error: { message: "Supplier not found", code: "NOT_FOUND" } }, 404);
@@ -1119,78 +1171,78 @@ vehiclesRouter.put(
     }
 
     // Handle nullable customerId: convert null to disconnect
-    const isPrivateVehicle = privateVehiclesEnabled && data.isPrivate === true;
+    const isPrivateVehicle = privateVehiclesEnabled && input.isPrivate === true;
     const updateData: Record<string, unknown> = {
-      ...data,
-      vehicleNumber: data.vehicleNumber !== undefined ? data.vehicleNumber.trim() : undefined,
-      power: data.power !== undefined ? String(data.power) : undefined,
-      vin: data.vin !== undefined ? (data.vin || null) : undefined,
-      hsn: data.hsn !== undefined ? (data.hsn || null) : undefined,
-      tsn: data.tsn !== undefined ? (data.tsn || null) : undefined,
-      registrationDocNumber: data.registrationDocNumber !== undefined ? (data.registrationDocNumber || null) : undefined,
-      color: data.color !== undefined ? (data.color || null) : undefined,
-      fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
-      transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
-      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
-      taxRate: isPrivateVehicle ? 19 : data.taxRate,
-      marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
-      isPrivate: data.isPrivate,
-      status: isPrivateVehicle ? "available" : data.status,
-      notes: data.notes !== undefined ? (data.notes || null) : undefined,
-      internalNotes: data.internalNotes !== undefined ? (data.internalNotes || null) : undefined,
+      ...input,
+      vehicleNumber: input.vehicleNumber !== undefined ? input.vehicleNumber.trim() : undefined,
+      power: input.power !== undefined ? String(input.power) : undefined,
+      vin: input.vin !== undefined ? (input.vin || null) : undefined,
+      hsn: input.hsn !== undefined ? (input.hsn || null) : undefined,
+      tsn: input.tsn !== undefined ? (input.tsn || null) : undefined,
+      registrationDocNumber: input.registrationDocNumber !== undefined ? (input.registrationDocNumber || null) : undefined,
+      color: input.color !== undefined ? (input.color || null) : undefined,
+      fuelType: input.fuelType !== undefined ? (input.fuelType || null) : undefined,
+      transmission: input.transmission !== undefined ? (input.transmission || null) : undefined,
+      sellingPrice: isPrivateVehicle ? 0 : input.sellingPrice,
+      taxRate: isPrivateVehicle ? 19 : input.taxRate,
+      marginTaxed: isPrivateVehicle ? false : input.marginTaxed,
+      isPrivate: input.isPrivate,
+      status: isPrivateVehicle ? "available" : input.status,
+      notes: input.notes !== undefined ? (input.notes || null) : undefined,
+      internalNotes: input.internalNotes !== undefined ? (input.internalNotes || null) : undefined,
       customerId: isPrivateVehicle
         ? null
-        : data.customerId !== undefined
-          ? (data.customerId || null)
+        : input.customerId !== undefined
+          ? (input.customerId || null)
           : undefined,
       // New nullable string fields
-      damageDescription: data.damageDescription !== undefined ? (data.damageDescription || null) : undefined,
-      batteryType: data.batteryType !== undefined ? (data.batteryType || null) : undefined,
+      damageDescription: input.damageDescription !== undefined ? (input.damageDescription || null) : undefined,
+      batteryType: input.batteryType !== undefined ? (input.batteryType || null) : undefined,
       // Additional new fields
-      firstRegistration: data.firstRegistration !== undefined ? (data.firstRegistration ? new Date(data.firstRegistration) : null) : undefined,
-      supplier: data.supplier !== undefined ? (data.supplier || null) : undefined,
-      chargingTime: data.chargingTime !== undefined ? (data.chargingTime ?? null) : undefined,
-      connectorType: data.connectorType !== undefined ? (data.connectorType || null) : undefined,
+      firstRegistration: input.firstRegistration !== undefined ? (input.firstRegistration ? new Date(input.firstRegistration) : null) : undefined,
+      supplier: input.supplier !== undefined ? (input.supplier || null) : undefined,
+      chargingTime: input.chargingTime !== undefined ? (input.chargingTime ?? null) : undefined,
+      connectorType: input.connectorType !== undefined ? (input.connectorType || null) : undefined,
       // Supplier relation
-      supplierId: data.supplierId !== undefined ? (data.supplierId ?? null) : undefined,
+      supplierId: input.supplierId !== undefined ? (input.supplierId ?? null) : undefined,
       // Inspection / Service
-      huDue: data.huDue !== undefined ? (data.huDue ? new Date(data.huDue) : null) : undefined,
-      previousOwners: data.previousOwners !== undefined ? (data.previousOwners ?? null) : undefined,
-      serviceDueKm: data.serviceDueKm !== undefined ? (data.serviceDueKm ?? null) : undefined,
-      serviceDueDate: data.serviceDueDate !== undefined ? (data.serviceDueDate ? new Date(data.serviceDueDate) : null) : undefined,
+      huDue: input.huDue !== undefined ? (input.huDue ? new Date(input.huDue) : null) : undefined,
+      previousOwners: input.previousOwners !== undefined ? (input.previousOwners ?? null) : undefined,
+      serviceDueKm: input.serviceDueKm !== undefined ? (input.serviceDueKm ?? null) : undefined,
+      serviceDueDate: input.serviceDueDate !== undefined ? (input.serviceDueDate ? new Date(input.serviceDueDate) : null) : undefined,
       // Body / Configuration
-      bodyType: data.bodyType !== undefined ? (data.bodyType || null) : undefined,
-      doors: data.doors !== undefined ? (data.doors ?? null) : undefined,
-      seats: data.seats !== undefined ? (data.seats ?? null) : undefined,
-      driveType: data.driveType !== undefined ? (data.driveType || null) : undefined,
-      emissionClass: data.emissionClass !== undefined ? (data.emissionClass || null) : undefined,
-      exportEnabled: isPrivateVehicle ? false : data.exportEnabled,
+      bodyType: input.bodyType !== undefined ? (input.bodyType || null) : undefined,
+      doors: input.doors !== undefined ? (input.doors ?? null) : undefined,
+      seats: input.seats !== undefined ? (input.seats ?? null) : undefined,
+      driveType: input.driveType !== undefined ? (input.driveType || null) : undefined,
+      emissionClass: input.emissionClass !== undefined ? (input.emissionClass || null) : undefined,
+      exportEnabled: isPrivateVehicle ? false : input.exportEnabled,
       transportCostDomestic: isPrivateVehicle
         ? null
-        : data.transportCostDomestic !== undefined
-          ? (data.transportCostDomestic ?? null)
+        : input.transportCostDomestic !== undefined
+          ? (input.transportCostDomestic ?? null)
           : undefined,
       transportCostAbroad: isPrivateVehicle
         ? null
-        : data.transportCostAbroad !== undefined
-          ? (data.transportCostAbroad ?? null)
+        : input.transportCostAbroad !== undefined
+          ? (input.transportCostAbroad ?? null)
           : undefined,
       customsDuties: isPrivateVehicle
         ? null
-        : data.customsDuties !== undefined
-          ? (data.customsDuties ?? null)
+        : input.customsDuties !== undefined
+          ? (input.customsDuties ?? null)
           : undefined,
       registrationFees: isPrivateVehicle
         ? null
-        : data.registrationFees !== undefined
-          ? (data.registrationFees ?? null)
+        : input.registrationFees !== undefined
+          ? (input.registrationFees ?? null)
           : undefined,
       repairCostsAbroad: isPrivateVehicle
         ? null
-        : data.repairCostsAbroad !== undefined
-          ? (data.repairCostsAbroad ?? null)
+        : input.repairCostsAbroad !== undefined
+          ? (input.repairCostsAbroad ?? null)
           : undefined,
-      dealerPrice: isPrivateVehicle ? null : data.dealerPrice !== undefined ? (data.dealerPrice ?? null) : undefined,
+      dealerPrice: isPrivateVehicle ? null : input.dealerPrice !== undefined ? (input.dealerPrice ?? null) : undefined,
     };
 
     try {
@@ -1203,10 +1255,79 @@ vehiclesRouter.put(
           customer: true,
           supplierRel: true,
           workLog: { orderBy: { createdAt: "asc" } },
+          marketplaceTargets: true,
         },
       });
 
-      return c.json({ data: vehicle });
+      if (marketplaceTargets) {
+        const disabledTargets = await upsertVehicleMarketplaceTargets(
+          dealerId,
+          id,
+          marketplaceTargets.map((item) => ({
+            ...item,
+            enabled: isPrivateVehicle ? false : item.enabled,
+          }))
+        );
+
+        for (const disabledTarget of disabledTargets) {
+          if (disabledTarget.platform === "autoscout24" && disabledTarget.remoteListingId) {
+            await enqueueAndRunMarketplaceJob({
+              dealerId,
+              platform: "autoscout24",
+              vehicleId: id,
+              triggerType: "vehicle_update",
+              action: "deactivate",
+            });
+          }
+        }
+      } else if (isPrivateVehicle) {
+        const disabledTargets = await upsertVehicleMarketplaceTargets(dealerId, id, []);
+        for (const disabledTarget of disabledTargets) {
+          if (disabledTarget.platform === "autoscout24" && disabledTarget.remoteListingId) {
+            await enqueueAndRunMarketplaceJob({
+              dealerId,
+              platform: "autoscout24",
+              vehicleId: id,
+              triggerType: "vehicle_update",
+              action: "deactivate",
+            });
+          }
+        }
+      }
+
+      if (queueUploadNow && !isPrivateVehicle) {
+        const autoscoutEnabled =
+          marketplaceTargets?.some((item) => item.platform === "autoscout24" && item.enabled) ??
+          vehicle.marketplaceTargets.some((item) => item.platform === "autoscout24" && item.enabled);
+        if (autoscoutEnabled) {
+          await enqueueAndRunMarketplaceJob({
+            dealerId,
+            platform: "autoscout24",
+            vehicleId: id,
+            triggerType: "vehicle_update",
+            action: "sync",
+          });
+        }
+      }
+
+      const refreshedVehicle = await prisma.vehicle.findUnique({
+        where: { id },
+        include: {
+          images: { orderBy: vehicleImageOrderBy },
+          documents: { orderBy: { createdAt: "desc" } },
+          customer: true,
+          supplierRel: true,
+          sales: {
+            include: { customer: true },
+            orderBy: { saleDate: "desc" },
+          },
+          costs: { orderBy: { createdAt: "asc" } },
+          workLog: { orderBy: { createdAt: "asc" } },
+          marketplaceTargets: true,
+        },
+      });
+
+      return c.json({ data: refreshedVehicle ?? vehicle });
     } catch (error) {
       if (isVehicleNumberConflict(error)) {
         return c.json(

@@ -290,6 +290,161 @@ export type PublicTenantContext = z.infer<typeof PublicTenantContextSchema>;
 export type PublicPlan = z.infer<typeof PublicPlanSchema>;
 export type SessionContext = z.infer<typeof SessionContextSchema>;
 
+// ─── Marketplace / Vertriebskanäle ──────────────────────────
+
+export const MarketplacePlatformSchema = z.enum(["autoscout24"]);
+export const MarketplaceConnectionStatusSchema = z.enum([
+  "disconnected",
+  "pending",
+  "connected",
+  "error",
+]);
+export const MarketplacePublicationStatusSchema = z.enum([
+  "unknown",
+  "inactive",
+  "active",
+  "deleted",
+]);
+export const MarketplaceSyncJobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "skipped",
+]);
+export const MarketplaceSyncTriggerTypeSchema = z.enum([
+  "manual",
+  "schedule",
+  "vehicle_create",
+  "vehicle_update",
+  "manual_action",
+]);
+export const MarketplaceScheduleFrequencySchema = z.enum(["hourly", "daily"]);
+
+export const MarketplaceCustomerSchema = z.object({
+  id: z.string(),
+  sellId: z.string().nullable().optional(),
+  canSetMiaRequestedTier: z.boolean().optional(),
+});
+
+export const MarketplaceConnectionSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  platform: MarketplacePlatformSchema,
+  status: MarketplaceConnectionStatusSchema,
+  displayName: z.string().nullable().optional(),
+  username: z.string().nullable().optional(),
+  customerId: z.string().nullable().optional(),
+  lastVerifiedAt: z.string().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const MarketplaceConnectionUpsertSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  username: z.string().trim().min(1, "Benutzername ist erforderlich"),
+  password: z.string().min(1, "Passwort ist erforderlich"),
+  customerId: z.string().trim().min(1, "customerId ist erforderlich").optional(),
+  displayName: z.string().trim().optional(),
+});
+
+export const MarketplaceConnectionVerifySchema = z.object({
+  platform: MarketplacePlatformSchema,
+  username: z.string().trim().min(1, "Benutzername ist erforderlich"),
+  password: z.string().min(1, "Passwort ist erforderlich"),
+});
+
+export const MarketplaceConnectionVerifyResponseSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  username: z.string(),
+  customers: z.array(MarketplaceCustomerSchema),
+});
+
+export const VehicleMarketplaceTargetSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  vehicleId: z.string(),
+  platform: MarketplacePlatformSchema,
+  enabled: z.boolean(),
+  remoteListingId: z.string().nullable().optional(),
+  remoteUrl: z.string().nullable().optional(),
+  remoteStatus: MarketplacePublicationStatusSchema.default("unknown"),
+  lastSyncedAt: z.string().nullable().optional(),
+  lastError: z.string().nullable().optional(),
+  lastSyncJobId: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const VehicleMarketplaceTargetInputSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  enabled: z.boolean().default(true),
+});
+
+export const MarketplaceSyncScheduleSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  platform: MarketplacePlatformSchema,
+  enabled: z.boolean(),
+  frequency: MarketplaceScheduleFrequencySchema,
+  hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59),
+  timezone: z.string(),
+  nextRunAt: z.string().nullable().optional(),
+  lastRunAt: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const MarketplaceSyncScheduleUpsertSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  enabled: z.boolean(),
+  frequency: MarketplaceScheduleFrequencySchema,
+  hour: z.number().int().min(0).max(23).default(0),
+  minute: z.number().int().min(0).max(59).default(0),
+  timezone: z.string().trim().min(1).default("Europe/Berlin"),
+});
+
+export const MarketplaceSyncJobSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  platform: MarketplacePlatformSchema,
+  vehicleId: z.string().nullable().optional(),
+  triggerType: MarketplaceSyncTriggerTypeSchema,
+  status: MarketplaceSyncJobStatusSchema,
+  action: z.enum(["sync", "activate", "deactivate", "delete"]),
+  payload: z.record(z.string(), z.unknown()).nullable().optional(),
+  result: z.record(z.string(), z.unknown()).nullable().optional(),
+  errorSummary: z.string().nullable().optional(),
+  startedAt: z.string().nullable().optional(),
+  finishedAt: z.string().nullable().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const MarketplaceVehicleBulkUpdateSchema = z.object({
+  vehicleIds: z.array(z.string().min(1)).min(1, "Mindestens ein Fahrzeug ist erforderlich"),
+  target: VehicleMarketplaceTargetInputSchema,
+});
+
+export const MarketplaceSyncRequestSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  vehicleIds: z.array(z.string().min(1)).min(1, "Mindestens ein Fahrzeug ist erforderlich"),
+});
+
+export const MarketplaceListingActionSchema = z.object({
+  platform: MarketplacePlatformSchema,
+  vehicleId: z.string().min(1),
+});
+
+export type MarketplacePlatform = z.infer<typeof MarketplacePlatformSchema>;
+export type MarketplaceConnection = z.infer<typeof MarketplaceConnectionSchema>;
+export type MarketplaceCustomer = z.infer<typeof MarketplaceCustomerSchema>;
+export type VehicleMarketplaceTarget = z.infer<typeof VehicleMarketplaceTargetSchema>;
+export type MarketplaceSyncSchedule = z.infer<typeof MarketplaceSyncScheduleSchema>;
+export type MarketplaceSyncJob = z.infer<typeof MarketplaceSyncJobSchema>;
+
 // ─── Vehicle Schemas ─────────────────────────────────────────
 
 export const VehicleCreateSchema = z.object({
@@ -355,6 +510,8 @@ export const VehicleCreateSchema = z.object({
   driveType: z.string().optional(),       // Antriebsart z.B. FWD, RWD, AWD, 4x4
   emissionClass: z.string().optional(),   // Schadstoffklasse z.B. Euro 6
   dealerPrice: z.number().optional(),     // Händlerpreis EUR
+  marketplaceTargets: z.array(VehicleMarketplaceTargetInputSchema).optional().default([]),
+  queueUploadNow: z.boolean().optional().default(false),
 });
 
 export const VehicleUpdateSchema = z.object({
@@ -420,6 +577,8 @@ export const VehicleUpdateSchema = z.object({
   driveType: z.string().optional(),       // Antriebsart z.B. FWD, RWD, AWD, 4x4
   emissionClass: z.string().optional(),   // Schadstoffklasse z.B. Euro 6
   dealerPrice: z.number().optional(),     // Händlerpreis EUR
+  marketplaceTargets: z.array(VehicleMarketplaceTargetInputSchema).optional(),
+  queueUploadNow: z.boolean().optional(),
 });
 
 export type VehicleCreate = z.infer<typeof VehicleCreateSchema>;

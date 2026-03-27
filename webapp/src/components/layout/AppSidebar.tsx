@@ -9,6 +9,8 @@ import {
   BarChart2,
   CreditCard,
   Building2,
+  PlugZap,
+  UploadCloud,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,11 +42,15 @@ export function AppSidebar() {
     { to: "/suppliers", label: "Lieferanten", icon: Truck },
     { to: "/sales", label: "Verkäufe", icon: Receipt },
     { to: "/finances", label: "Finanzen", icon: BarChart2 },
-    { to: "/billing", label: "Tarif", icon: CreditCard },
+          { to: "/billing", label: "Tarif", icon: CreditCard },
     ...(session?.dealerRole && ["dealer_owner", "dealer_admin"].includes(session.dealerRole)
       ? [
+          ...(session?.entitlements?.marketplace_exports
+            ? [{ to: "/marketplaces/uploads", label: "Uploads", icon: UploadCloud }]
+            : []),
           { to: "/settings/dealer", label: "Unternehmen", icon: Building2 },
           ...(session?.entitlements?.team_management ? [{ to: "/settings/team", label: "Team", icon: Users }] : []),
+          { to: "/settings/marketplaces", label: "Vertriebskanäle", icon: PlugZap },
         ]
       : []),
   ];

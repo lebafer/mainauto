@@ -35,6 +35,8 @@ const SupplierEdit = lazy(() => import("@/pages/suppliers/SupplierEdit"));
 const Finances = lazy(() => import("@/pages/Finances"));
 const SettingsDealer = lazy(() => import("@/pages/settings/SettingsDealer"));
 const SettingsTeam = lazy(() => import("@/pages/settings/SettingsTeam"));
+const SettingsMarketplaces = lazy(() => import("@/pages/settings/SettingsMarketplaces"));
+const MarketplaceUploads = lazy(() => import("@/pages/marketplaces/MarketplaceUploads"));
 const AdminLogin = lazy(() => import("@/pages/admin/AdminLogin"));
 const AdminDealers = lazy(() => import("@/pages/admin/AdminDealers"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -271,6 +273,26 @@ const App = () => (
                   <ProtectedRoute>
                     <AppLayout>
                       <SettingsTeam />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings/marketplaces"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <SettingsMarketplaces />
+                    </AppLayout>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/marketplaces/uploads"
+                element={
+                  <ProtectedRoute>
+                    <AppLayout>
+                      <MarketplaceUploads />
                     </AppLayout>
                   </ProtectedRoute>
                 }
