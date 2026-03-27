@@ -788,11 +788,18 @@ vehiclesRouter.get("/", async (c) => {
   const dealerId = getCurrentDealerId(c);
   const status = c.req.query("status");
   const search = c.req.query("search");
+  const isPrivate = c.req.query("isPrivate");
 
   const where: Record<string, unknown> = { dealerId };
 
   if (status) {
     where.status = status;
+  }
+
+  if (isPrivate === "true") {
+    where.isPrivate = true;
+  } else if (isPrivate === "false") {
+    where.isPrivate = false;
   }
 
   if (search) {
@@ -985,6 +992,7 @@ vehiclesRouter.post(
       color: data.color || null,
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
+      isPrivate: data.isPrivate,
       notes: data.notes || null,
       internalNotes: data.internalNotes || null,
       customerId: data.customerId || null,
@@ -1094,6 +1102,7 @@ vehiclesRouter.put(
       color: data.color !== undefined ? (data.color || null) : undefined,
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
+      isPrivate: data.isPrivate,
       notes: data.notes !== undefined ? (data.notes || null) : undefined,
       internalNotes: data.internalNotes !== undefined ? (data.internalNotes || null) : undefined,
       // New nullable string fields

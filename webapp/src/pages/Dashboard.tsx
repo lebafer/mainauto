@@ -20,6 +20,7 @@ interface Vehicle {
   sellingPrice: number;
   taxRate: number;
   marginTaxed: boolean;
+  isPrivate: boolean;
   status: "available" | "reserved" | "sold";
   createdAt: string;
 }
@@ -214,6 +215,9 @@ const statusVariants: Record<string, string> = {
   sold: "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/20",
 };
 
+const privateBadgeClassName =
+  "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20";
+
 export default function Dashboard() {
   const { data: vehicles, isLoading: vehiclesLoading } = useQuery({
     queryKey: ["vehicles"],
@@ -232,12 +236,16 @@ export default function Dashboard() {
 
   const isLoading = vehiclesLoading || customersLoading || salesLoading;
 
-  const totalVehicles = vehicles?.length ?? 0;
-  const availableVehicles = vehicles?.filter((v) => v.status === "available").length ?? 0;
+  const businessVehicles = vehicles?.filter((v) => !v.isPrivate) ?? [];
+  const totalVehicles = businessVehicles.length;
+  const availableVehicles = businessVehicles.filter((v) => v.status === "available").length;
   const totalCustomers = customers?.length ?? 0;
   const totalSales = sales?.length ?? 0;
   const totalRevenue = sales?.reduce((sum, s) => sum + s.salePrice, 0) ?? 0;
-  const bestandswert = vehicles?.filter(v => v.status === "available").reduce((sum, v) => sum + (v.marginTaxed ? v.sellingPrice : v.sellingPrice * (1 + v.taxRate / 100)), 0) ?? 0;
+  const privateVehicles = vehicles?.filter((v) => v.isPrivate).length ?? 0;
+  const bestandswert = businessVehicles
+    .filter((v) => v.status === "available")
+    .reduce((sum, v) => sum + (v.marginTaxed ? v.sellingPrice : v.sellingPrice * (1 + v.taxRate / 100)), 0);
 
   const recentVehicles = vehicles
     ? [...vehicles]
@@ -261,7 +269,13 @@ export default function Dashboard() {
     { value: totalVehicles, subtitle: undefined },
     { value: availableVehicles, subtitle: undefined },
     { value: totalCustomers, subtitle: undefined },
-    { value: formatCurrency(bestandswert), subtitle: `${availableVehicles} verfügbare Fahrzeuge` },
+    {
+      value: formatCurrency(bestandswert),
+      subtitle:
+        privateVehicles > 0
+          ? `${availableVehicles} verfügbare Fahrzeuge · ${privateVehicles} privat`
+          : `${availableVehicles} verfügbare Fahrzeuge`,
+    },
   ];
 
   return (
@@ -341,9 +355,9 @@ export default function Dashboard() {
                     </div>
                     <Badge
                       variant="outline"
-                      className={`shrink-0 text-[10px] font-medium ${statusVariants[vehicle.status] ?? ""}`}
+                      className={`shrink-0 text-[10px] font-medium ${vehicle.isPrivate ? privateBadgeClassName : statusVariants[vehicle.status] ?? ""}`}
                     >
-                      {statusLabels[vehicle.status] ?? vehicle.status}
+                      {vehicle.isPrivate ? "Privat" : statusLabels[vehicle.status] ?? vehicle.status}
                     </Badge>
                   </Link>
                 ))}

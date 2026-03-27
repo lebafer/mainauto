@@ -29,6 +29,7 @@ import {
   calculateGrossPrice,
   calculateTaxAmount,
   parseFeatures,
+  PRIVATE_VEHICLE_BADGE_CLASSNAME,
   STATUS_CONFIG,
   getFileUrl,
   getVehicleAdditionalCostsTotal,
@@ -487,6 +488,11 @@ export default function VehicleDetail() {
               <Badge variant="outline" className={statusConfig.className}>
                 {statusConfig.label}
               </Badge>
+              {vehicle.isPrivate ? (
+                <Badge variant="outline" className={PRIVATE_VEHICLE_BADGE_CLASSNAME}>
+                  Privat
+                </Badge>
+              ) : null}
             </div>
             <p className="text-muted-foreground">
               {vehicle.firstRegistration

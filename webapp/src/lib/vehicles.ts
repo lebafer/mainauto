@@ -76,6 +76,7 @@ export interface Vehicle {
   sellingPrice: number;
   taxRate: number;
   marginTaxed: boolean;
+  isPrivate: boolean;
   status: "available" | "reserved" | "sold";
   notes: string;
   internalNotes?: string | null;
@@ -137,6 +138,9 @@ export interface VehicleCostBreakdownItem {
   notes?: string | null;
   createdAt?: string | null;
 }
+
+export const PRIVATE_VEHICLE_BADGE_CLASSNAME =
+  "bg-slate-500/10 text-slate-700 border-slate-500/20 dark:text-slate-300";
 
 export type VehicleCreateInput = Omit<
   Vehicle,

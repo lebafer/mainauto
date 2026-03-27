@@ -186,6 +186,9 @@ export default function Finances() {
         <p className="text-muted-foreground mt-1 text-sm">
           Umsatz- und Gewinnauswertung
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Private Fahrzeuge werden in dieser Auswertung automatisch ausgeschlossen.
+        </p>
       </div>
 
       {/* ── Filter bar */}

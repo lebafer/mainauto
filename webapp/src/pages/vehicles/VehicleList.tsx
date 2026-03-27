@@ -5,6 +5,7 @@ import { Search, Plus, Car, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import {
   type Vehicle,
+  PRIVATE_VEHICLE_BADGE_CLASSNAME,
   formatPrice,
   formatMileage,
   calculateGrossPrice,
@@ -25,6 +26,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type StatusFilter = "all" | "available" | "reserved" | "sold";
+type VisibilityFilter = "all" | "business" | "private";
 
 function getPrimaryImage(vehicle: Vehicle) {
   return vehicle.images?.find((image) => image.isPrimary) ?? vehicle.images?.[0];
@@ -34,12 +36,15 @@ export default function VehicleList() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<VisibilityFilter>("all");
 
   const { data: vehicles, isLoading } = useQuery({
-    queryKey: ["vehicles", statusFilter, search],
+    queryKey: ["vehicles", statusFilter, visibilityFilter, search],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
+      if (visibilityFilter === "private") params.set("isPrivate", "true");
+      if (visibilityFilter === "business") params.set("isPrivate", "false");
       if (search.trim()) params.set("search", search.trim());
       const qs = params.toString();
       return api.get<Vehicle[]>(`/api/vehicles${qs ? `?${qs}` : ""}`);
@@ -86,6 +91,16 @@ export default function VehicleList() {
             <TabsTrigger value="sold">Verkauft</TabsTrigger>
           </TabsList>
         </Tabs>
+        <Tabs
+          value={visibilityFilter}
+          onValueChange={(v) => setVisibilityFilter(v as VisibilityFilter)}
+        >
+          <TabsList>
+            <TabsTrigger value="all">Alle Fahrzeuge</TabsTrigger>
+            <TabsTrigger value="business">Bestand</TabsTrigger>
+            <TabsTrigger value="private">Privat</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Table */}
@@ -94,7 +109,11 @@ export default function VehicleList() {
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       ) : !vehicles || vehicles.length === 0 ? (
-        <EmptyState search={search} statusFilter={statusFilter} />
+        <EmptyState
+          search={search}
+          statusFilter={statusFilter}
+          visibilityFilter={visibilityFilter}
+        />
       ) : (
         <div className="rounded-lg border bg-card">
           <Table>
@@ -136,6 +155,14 @@ export default function VehicleList() {
                           <p className="font-medium">
                             {vehicle.brand} {vehicle.model}
                           </p>
+                          {vehicle.isPrivate ? (
+                            <Badge
+                              variant="outline"
+                              className={`mt-1 ${PRIVATE_VEHICLE_BADGE_CLASSNAME}`}
+                            >
+                              Privat
+                            </Badge>
+                          ) : null}
                           <p className="text-xs text-muted-foreground font-mono">
                             {vehicle.vehicleNumber}
                           </p>
@@ -191,11 +218,14 @@ function StatusBadge({ status }: { status: string }) {
 function EmptyState({
   search,
   statusFilter,
+  visibilityFilter,
 }: {
   search: string;
   statusFilter: StatusFilter;
+  visibilityFilter: VisibilityFilter;
 }) {
-  const hasFilters = search.trim() || statusFilter !== "all";
+  const hasFilters =
+    search.trim() || statusFilter !== "all" || visibilityFilter !== "all";
 
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 py-20">

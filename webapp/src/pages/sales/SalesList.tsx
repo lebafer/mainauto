@@ -62,6 +62,7 @@ interface Vehicle {
   sellingPrice: number;
   taxRate: number;
   marginTaxed: boolean;
+  isPrivate: boolean;
   status: "available" | "reserved" | "sold";
 }
 
@@ -177,7 +178,8 @@ function CreateSaleDialog() {
     queryFn: () => api.get<Customer[]>("/api/customers"),
   });
 
-  const availableVehicles = vehicles?.filter((v) => v.status === "available") ?? [];
+  const availableVehicles =
+    vehicles?.filter((v) => v.status === "available" && !v.isPrivate) ?? [];
 
   const createMutation = useMutation({
     mutationFn: (payload: SaleCreatePayload) =>

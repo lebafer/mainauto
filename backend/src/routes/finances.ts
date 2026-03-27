@@ -107,6 +107,7 @@ financesRouter.get("/", async (c) => {
   const salesInPeriod = await prisma.sale.findMany({
     where: {
       dealerId,
+      vehicle: { isPrivate: false },
       ...(saleDateFilter ? { saleDate: saleDateFilter } : {}),
     },
     include: {
@@ -122,6 +123,7 @@ financesRouter.get("/", async (c) => {
   const vehiclesBoughtInPeriod = await prisma.vehicle.findMany({
     where: {
       dealerId,
+      isPrivate: false,
       ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
     },
     include: { costs: true },
@@ -129,7 +131,7 @@ financesRouter.get("/", async (c) => {
 
   // --- Vehicles currently in stock (not sold, regardless of date filter) ---
   const vehiclesInStock = await prisma.vehicle.findMany({
-    where: { dealerId, status: { not: "sold" } },
+    where: { dealerId, isPrivate: false, status: { not: "sold" } },
     select: { purchasePrice: true },
   });
 

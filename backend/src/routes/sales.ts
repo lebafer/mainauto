@@ -39,6 +39,13 @@ salesRouter.post(
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
+    if (vehicle.isPrivate) {
+      return c.json(
+        { error: { message: "Private Fahrzeuge koennen nicht verkauft werden", code: "PRIVATE_VEHICLE" } },
+        400
+      );
+    }
+
     // Check customer exists
     const customer = await prisma.customer.findFirst({
       where: { id: data.customerId, dealerId },

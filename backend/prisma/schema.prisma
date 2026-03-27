@@ -309,6 +309,7 @@ model Vehicle {
   sellingPrice           Float
   taxRate                Float                   @default(19.0)
   marginTaxed            Boolean                 @default(false)
+  isPrivate              Boolean                 @default(false)
   status                 String                  @default("available")
   notes                  String?
   internalNotes          String?

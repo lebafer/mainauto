@@ -234,6 +234,7 @@ const vehicleFormSchema = z.object({
   sellingPrice: requiredNonNegativeNumber("Verkaufspreis"),
   taxRate: z.coerce.number().min(0).max(100).default(19),
   marginTaxed: z.boolean().default(false),
+  isPrivate: z.boolean().default(false),
   status: z.string().default("available"),
   notes: z.string().optional().default(""),
   internalNotes: z.string().optional().default(""),
@@ -381,6 +382,7 @@ export function VehicleForm({
     sellingPrice: vehicle?.sellingPrice ?? defaultValues?.sellingPrice,
     taxRate: vehicle?.taxRate ?? defaultValues?.taxRate ?? 19,
     marginTaxed: vehicle?.marginTaxed ?? defaultValues?.marginTaxed ?? false,
+    isPrivate: vehicle?.isPrivate ?? defaultValues?.isPrivate ?? false,
     status: vehicle?.status ?? defaultValues?.status ?? "available",
     notes: vehicle?.notes ?? defaultValues?.notes ?? "",
     internalNotes: vehicle?.internalNotes ?? defaultValues?.internalNotes ?? "",
@@ -2010,6 +2012,24 @@ export function VehicleForm({
                         : "Regelbesteuerung: MwSt wird auf den Nettopreis aufgeschlagen."}
                     </p>
                   </div>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="isPrivate"
+              render={({ field }) => (
+                <FormItem className="flex items-start justify-between gap-4 rounded-xl border bg-muted/30 p-4">
+                  <div className="space-y-1.5">
+                    <FormLabel className="cursor-pointer">Privatfahrzeug</FormLabel>
+                    <p className="text-xs text-muted-foreground">
+                      Private Fahrzeuge werden nicht in Bestand, Finanzen oder Verkaufsauswahl einbezogen.
+                    </p>
+                  </div>
+                  <FormControl>
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  </FormControl>
                 </FormItem>
               )}
             />
