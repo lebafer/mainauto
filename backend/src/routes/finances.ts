@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { prisma } from "../prisma";
-import { getCurrentDealerId } from "../lib/request-context";
+import { getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
 
 const financesRouter = new Hono();
 
@@ -75,6 +75,7 @@ function getCostBreakdown(vehicle: {
 // GET /api/finances?from=ISO_DATE&to=ISO_DATE
 financesRouter.get("/", async (c) => {
   const dealerId = getCurrentDealerId(c);
+  const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
   const fromParam = c.req.query("from");
   const toParam = c.req.query("to");
 
@@ -107,7 +108,7 @@ financesRouter.get("/", async (c) => {
   const salesInPeriod = await prisma.sale.findMany({
     where: {
       dealerId,
-      vehicle: { isPrivate: false },
+      ...(privateVehiclesEnabled ? { vehicle: { isPrivate: false } } : {}),
       ...(saleDateFilter ? { saleDate: saleDateFilter } : {}),
     },
     include: {
@@ -123,7 +124,7 @@ financesRouter.get("/", async (c) => {
   const vehiclesBoughtInPeriod = await prisma.vehicle.findMany({
     where: {
       dealerId,
-      isPrivate: false,
+      ...(privateVehiclesEnabled ? { isPrivate: false } : {}),
       ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
     },
     include: { costs: true },
@@ -131,7 +132,11 @@ financesRouter.get("/", async (c) => {
 
   // --- Vehicles currently in stock (not sold, regardless of date filter) ---
   const vehiclesInStock = await prisma.vehicle.findMany({
-    where: { dealerId, isPrivate: false, status: { not: "sold" } },
+    where: {
+      dealerId,
+      ...(privateVehiclesEnabled ? { isPrivate: false } : {}),
+      status: { not: "sold" },
+    },
     select: { purchasePrice: true },
   });
 

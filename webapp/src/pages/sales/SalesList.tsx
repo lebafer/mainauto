@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
 
 // Types
 interface Vehicle {
@@ -155,6 +156,8 @@ function SalesTableSkeleton() {
 }
 
 function CreateSaleDialog() {
+  const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const [open, setOpen] = useState(false);
   const [vehicleId, setVehicleId] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -179,7 +182,7 @@ function CreateSaleDialog() {
   });
 
   const availableVehicles =
-    vehicles?.filter((v) => v.status === "available" && !v.isPrivate) ?? [];
+    vehicles?.filter((v) => v.status === "available" && (!privateVehiclesEnabled || !v.isPrivate)) ?? [];
 
   const createMutation = useMutation({
     mutationFn: (payload: SaleCreatePayload) =>

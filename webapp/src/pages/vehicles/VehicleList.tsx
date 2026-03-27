@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { Search, Plus, Car, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
 import {
   type Vehicle,
   PRIVATE_VEHICLE_BADGE_CLASSNAME,
@@ -33,6 +34,8 @@ function getPrimaryImage(vehicle: Vehicle) {
 }
 
 export default function VehicleList() {
+  const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -43,8 +46,8 @@ export default function VehicleList() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (statusFilter !== "all") params.set("status", statusFilter);
-      if (visibilityFilter === "private") params.set("isPrivate", "true");
-      if (visibilityFilter === "business") params.set("isPrivate", "false");
+      if (privateVehiclesEnabled && visibilityFilter === "private") params.set("isPrivate", "true");
+      if (privateVehiclesEnabled && visibilityFilter === "business") params.set("isPrivate", "false");
       if (search.trim()) params.set("search", search.trim());
       const qs = params.toString();
       return api.get<Vehicle[]>(`/api/vehicles${qs ? `?${qs}` : ""}`);
@@ -91,16 +94,18 @@ export default function VehicleList() {
             <TabsTrigger value="sold">Verkauft</TabsTrigger>
           </TabsList>
         </Tabs>
-        <Tabs
-          value={visibilityFilter}
-          onValueChange={(v) => setVisibilityFilter(v as VisibilityFilter)}
-        >
-          <TabsList>
-            <TabsTrigger value="all">Alle Fahrzeuge</TabsTrigger>
-            <TabsTrigger value="business">Bestand</TabsTrigger>
-            <TabsTrigger value="private">Privat</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {privateVehiclesEnabled ? (
+          <Tabs
+            value={visibilityFilter}
+            onValueChange={(v) => setVisibilityFilter(v as VisibilityFilter)}
+          >
+            <TabsList>
+              <TabsTrigger value="all">Alle Fahrzeuge</TabsTrigger>
+              <TabsTrigger value="business">Bestand</TabsTrigger>
+              <TabsTrigger value="private">Privat</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        ) : null}
       </div>
 
       {/* Table */}
@@ -156,7 +161,7 @@ export default function VehicleList() {
                             <p className="font-medium">
                               {vehicle.brand} {vehicle.model}
                             </p>
-                            {vehicle.isPrivate ? (
+                            {privateVehiclesEnabled && vehicle.isPrivate ? (
                               <Badge
                                 variant="outline"
                                 className={`h-5 px-2 text-[11px] ${PRIVATE_VEHICLE_BADGE_CLASSNAME}`}

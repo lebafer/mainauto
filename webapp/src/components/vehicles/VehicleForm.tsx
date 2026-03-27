@@ -323,6 +323,7 @@ export function VehicleForm({
   onExtractedBriefFiles,
 }: VehicleFormProps) {
   const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const [purchaseGrossDisplay, setPurchaseGrossDisplay] = useState("");
   const [sellingGrossDisplay, setSellingGrossDisplay] = useState("");
   const [isEditingPurchaseGross, setIsEditingPurchaseGross] = useState(false);
@@ -360,7 +361,9 @@ export function VehicleForm({
     }
   }
 
-  const initialIsPrivate = vehicle?.isPrivate ?? defaultValues?.isPrivate ?? false;
+  const initialIsPrivate = privateVehiclesEnabled
+    ? vehicle?.isPrivate ?? defaultValues?.isPrivate ?? false
+    : false;
 
   const initialValues: Partial<VehicleFormValues> = {
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
@@ -646,6 +649,7 @@ export function VehicleForm({
   const watchedTaxRate = form.watch("taxRate") ?? 19;
   const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
   const watchedIsPrivate = form.watch("isPrivate") ?? false;
+  const isPrivateMode = privateVehiclesEnabled && watchedIsPrivate;
   const watchedPurchasePrice = form.watch("purchasePrice");
   const watchedFuelType = form.watch("fuelType");
   const watchedHasDamage = form.watch("hasDamage");
@@ -712,9 +716,9 @@ export function VehicleForm({
 
   useEffect(() => {
     const previousValue = previousIsPrivate.current;
-    const shouldDirty = previousValue !== undefined && previousValue !== watchedIsPrivate;
+    const shouldDirty = previousValue !== undefined && previousValue !== isPrivateMode;
 
-    if (watchedIsPrivate) {
+    if (isPrivateMode) {
       if ((form.getValues("sellingPrice") ?? 0) !== 0) {
         form.setValue("sellingPrice", 0, { shouldValidate: true, shouldDirty });
       }
@@ -750,8 +754,8 @@ export function VehicleForm({
       }
     }
 
-    previousIsPrivate.current = watchedIsPrivate;
-  }, [form, watchedIsPrivate]);
+    previousIsPrivate.current = isPrivateMode;
+  }, [form, isPrivateMode]);
 
   function handlePurchaseNetChange(nettoStr: string) {
     if (nettoStr.trim() === "") {
@@ -863,7 +867,7 @@ export function VehicleForm({
   }
 
   function handleSubmit(values: VehicleFormValues) {
-    const isPrivateVehicle = values.isPrivate;
+    const isPrivateVehicle = privateVehiclesEnabled && values.isPrivate;
     const processed: VehicleFormSubmitValues = {
       ...values,
       sellingPrice: isPrivateVehicle ? 0 : values.sellingPrice,
@@ -931,7 +935,7 @@ export function VehicleForm({
   const margin = numericSellingPrice - numericPurchasePrice - totalAdditionalCosts;
   const grossPrice = calculateGrossPrice(numericSellingPrice, watchedTaxRate, watchedMarginTaxed);
   const requiredFieldErrors = REQUIRED_VEHICLE_FIELDS
-    .filter((field) => (watchedIsPrivate ? field !== "sellingPrice" : true))
+    .filter((field) => (isPrivateMode ? field !== "sellingPrice" : true))
     .filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
   const aiBriefEnabled = session?.entitlements?.ai_brief_extraction === true;
@@ -1018,23 +1022,25 @@ export function VehicleForm({
         <Card>
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">Fahrzeugdaten</CardTitle>
-            <FormField
-              control={form.control}
-              name="isPrivate"
-              render={({ field }) => (
-                <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
-                  <div className="space-y-0.5">
-                    <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
-                    <p className="text-[11px] text-muted-foreground">
-                      Nicht im Verkauf
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+            {privateVehiclesEnabled ? (
+              <FormField
+                control={form.control}
+                name="isPrivate"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
+                    <div className="space-y-0.5">
+                      <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
+                      <p className="text-[11px] text-muted-foreground">
+                        Nicht im Verkauf
+                      </p>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            ) : null}
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Brand Section */}
@@ -2061,12 +2067,12 @@ export function VehicleForm({
         {/* Section 5: Preise & Steuern */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">
-              {watchedIsPrivate ? "Einkauf" : "Preise & Steuern"}
+              <CardTitle className="text-lg">
+              {isPrivateMode ? "Einkauf" : "Preise & Steuern"}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            {watchedIsPrivate ? (
+            {isPrivateMode ? (
               <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-muted-foreground">
                 Für Privatfahrzeuge werden Verkaufs-, Händler- und Exportdaten ausgeblendet und beim Speichern entfernt.
               </div>
@@ -2098,7 +2104,7 @@ export function VehicleForm({
               />
             )}
 
-            <div className={`grid gap-4 ${watchedIsPrivate ? "sm:grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
+            <div className={`grid gap-4 ${isPrivateMode ? "sm:grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-3"}`}>
               {/* Purchase price */}
               <FormField
                 control={form.control}
@@ -2106,7 +2112,7 @@ export function VehicleForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {watchedIsPrivate ? "Einkaufspreis" : "Einkaufspreis Netto"}
+                      {isPrivateMode ? "Einkaufspreis" : "Einkaufspreis Netto"}
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
@@ -2123,7 +2129,7 @@ export function VehicleForm({
                 )}
               />
 
-              {watchedIsPrivate ? null : (
+              {isPrivateMode ? null : (
                 <>
                   <FormItem>
                     <FormLabel>Einkaufspreis Brutto</FormLabel>
@@ -2160,7 +2166,7 @@ export function VehicleForm({
               )}
             </div>
 
-            {watchedIsPrivate ? null : (
+            {isPrivateMode ? null : (
               <>
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">
@@ -2298,7 +2304,7 @@ export function VehicleForm({
         </Card>
 
         {/* Section 6: Export / Portugal */}
-        {watchedIsPrivate ? null : (
+        {isPrivateMode ? null : (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-3">
@@ -2421,7 +2427,7 @@ export function VehicleForm({
             <CardTitle className="text-lg">Status & Besondere Informationen</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {watchedIsPrivate ? (
+            {isPrivateMode ? (
               <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
                 Privatfahrzeuge bleiben automatisch auf <span className="font-medium text-foreground">Verfügbar</span> und können nicht verkauft werden.
               </div>

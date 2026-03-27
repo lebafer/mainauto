@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
 
 // Types
 interface Vehicle {
@@ -219,6 +220,8 @@ const privateBadgeClassName =
   "bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20";
 
 export default function Dashboard() {
+  const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const { data: vehicles, isLoading: vehiclesLoading } = useQuery({
     queryKey: ["vehicles"],
     queryFn: () => api.get<Vehicle[]>("/api/vehicles"),
@@ -236,13 +239,17 @@ export default function Dashboard() {
 
   const isLoading = vehiclesLoading || customersLoading || salesLoading;
 
-  const businessVehicles = vehicles?.filter((v) => !v.isPrivate) ?? [];
+  const businessVehicles = privateVehiclesEnabled
+    ? vehicles?.filter((v) => !v.isPrivate) ?? []
+    : vehicles ?? [];
   const totalVehicles = businessVehicles.length;
   const availableVehicles = businessVehicles.filter((v) => v.status === "available").length;
   const totalCustomers = customers?.length ?? 0;
   const totalSales = sales?.length ?? 0;
   const totalRevenue = sales?.reduce((sum, s) => sum + s.salePrice, 0) ?? 0;
-  const privateVehicles = vehicles?.filter((v) => v.isPrivate).length ?? 0;
+  const privateVehicles = privateVehiclesEnabled
+    ? vehicles?.filter((v) => v.isPrivate).length ?? 0
+    : 0;
   const bestandswert = businessVehicles
     .filter((v) => v.status === "available")
     .reduce((sum, v) => sum + (v.marginTaxed ? v.sellingPrice : v.sellingPrice * (1 + v.taxRate / 100)), 0);
@@ -355,9 +362,9 @@ export default function Dashboard() {
                     </div>
                     <Badge
                       variant="outline"
-                      className={`shrink-0 text-[10px] font-medium ${vehicle.isPrivate ? privateBadgeClassName : statusVariants[vehicle.status] ?? ""}`}
+                      className={`shrink-0 text-[10px] font-medium ${privateVehiclesEnabled && vehicle.isPrivate ? privateBadgeClassName : statusVariants[vehicle.status] ?? ""}`}
                     >
-                      {vehicle.isPrivate ? "Privat" : statusLabels[vehicle.status] ?? vehicle.status}
+                      {privateVehiclesEnabled && vehicle.isPrivate ? "Privat" : statusLabels[vehicle.status] ?? vehicle.status}
                     </Badge>
                   </Link>
                 ))}

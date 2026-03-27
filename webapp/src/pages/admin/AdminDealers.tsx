@@ -84,6 +84,8 @@ type DealerEditForm = {
   ownerPassword: string;
 };
 
+const PRIVATE_VEHICLES_FEATURE_KEY = "private_vehicles";
+
 function getPrimaryOwner(dealer: Dealer) {
   return dealer.memberships.find((membership) => membership.role === "dealer_owner") ?? null;
 }
@@ -105,6 +107,18 @@ function createEditForm(dealer: Dealer): DealerEditForm {
 
 function getCurrentSubscription(dealer: Dealer) {
   return dealer.subscriptions[0] ?? null;
+}
+
+function getFeatureEnabled(subscription: SharedDealerSubscription | null, key: string) {
+  if (!subscription) {
+    return false;
+  }
+
+  if (typeof subscription.featureOverrides?.[key] === "boolean") {
+    return subscription.featureOverrides[key] === true;
+  }
+
+  return subscription.plan?.featureEntitlements?.[key] === true;
 }
 
 export default function AdminDealers() {
@@ -205,15 +219,18 @@ export default function AdminDealers() {
       dealerId,
       planId,
       complimentaryAccess,
+      featureOverrides,
     }: {
       dealerId: string;
       planId: string;
       complimentaryAccess?: boolean;
+      featureOverrides?: Record<string, boolean>;
     }) =>
       api.put(`/api/admin/subscriptions/${dealerId}`, {
         planId,
         status: "active",
         complimentaryAccess,
+        featureOverrides,
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-dealers"] });
@@ -351,6 +368,7 @@ export default function AdminDealers() {
                           dealerId: dealer.id,
                           planId: value,
                           complimentaryAccess: currentSubscription?.complimentaryAccess ?? false,
+                          featureOverrides: currentSubscription?.featureOverrides ?? {},
                         })
                       }
                     >
@@ -381,6 +399,32 @@ export default function AdminDealers() {
                             dealerId: dealer.id,
                             complimentaryAccess: checked,
                           })
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                      <div className="space-y-1 pr-4">
+                        <div className="text-sm font-medium text-foreground">Private Fahrzeuge</div>
+                        <div className="text-xs text-muted-foreground">
+                          Zeigt den Privat-Switch und die Privat-Filter nur für dieses Autohaus an.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={getFeatureEnabled(currentSubscription, PRIVATE_VEHICLES_FEATURE_KEY)}
+                        disabled={!currentSubscription || subscriptionMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          currentSubscription
+                            ? subscriptionMutation.mutate({
+                                dealerId: dealer.id,
+                                planId: currentSubscription.planId,
+                                complimentaryAccess: currentSubscription.complimentaryAccess ?? false,
+                                featureOverrides: {
+                                  ...(currentSubscription.featureOverrides ?? {}),
+                                  [PRIVATE_VEHICLES_FEATURE_KEY]: checked,
+                                },
+                              })
+                            : undefined
                         }
                       />
                     </div>

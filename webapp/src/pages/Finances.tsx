@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/vehicles";
 import type { FinancesData } from "../../../backend/src/types";
+import { useAuth } from "@/lib/auth-client";
 
 // ─── Date helpers ─────────────────────────────────────────────
 
@@ -125,6 +126,8 @@ function KpiCard({
 // ─── Main Page ────────────────────────────────────────────────
 
 export default function Finances() {
+  const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const [preset, setPreset] = useState<Preset>("all");
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
@@ -186,9 +189,11 @@ export default function Finances() {
         <p className="text-muted-foreground mt-1 text-sm">
           Umsatz- und Gewinnauswertung
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          Private Fahrzeuge werden in dieser Auswertung automatisch ausgeschlossen.
-        </p>
+        {privateVehiclesEnabled ? (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Private Fahrzeuge werden in dieser Auswertung automatisch ausgeschlossen.
+          </p>
+        ) : null}
       </div>
 
       {/* ── Filter bar */}

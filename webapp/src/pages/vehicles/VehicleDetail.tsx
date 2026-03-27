@@ -97,6 +97,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import { useAuth } from "@/lib/auth-client";
 
 // ─── Shared Customer type ────────────────────────────────────────
 
@@ -155,6 +156,8 @@ function openPrintWindow(html: string) {
 // ─── Main component ──────────────────────────────────────────────
 
 export default function VehicleDetail() {
+  const { session } = useAuth();
+  const privateVehiclesEnabled = session?.entitlements?.private_vehicles === true;
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -488,7 +491,7 @@ export default function VehicleDetail() {
               <Badge variant="outline" className={statusConfig.className}>
                 {statusConfig.label}
               </Badge>
-              {vehicle.isPrivate ? (
+              {privateVehiclesEnabled && vehicle.isPrivate ? (
                 <Badge variant="outline" className={PRIVATE_VEHICLE_BADGE_CLASSNAME}>
                   Privat
                 </Badge>

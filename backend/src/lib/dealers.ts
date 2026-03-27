@@ -19,6 +19,8 @@ export type TenantStatus =
   | "suspended"
   | "inactive";
 
+export const PRIVATE_VEHICLES_FEATURE_KEY = "private_vehicles";
+
 export const DEFAULT_PLATFORM_NAME = "CarOps";
 export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem für dein Autohaus";
 export const DEFAULT_DEALER_NAME = "Referenz Autohaus";
@@ -64,6 +66,7 @@ export const DEFAULT_PLAN_DEFINITIONS = [
       team_management: false,
       document_branding: false,
       ai_brief_extraction: false,
+      private_vehicles: false,
     },
   },
   {
@@ -76,6 +79,7 @@ export const DEFAULT_PLAN_DEFINITIONS = [
       team_management: true,
       document_branding: true,
       ai_brief_extraction: true,
+      private_vehicles: false,
     },
   },
 ] as const;

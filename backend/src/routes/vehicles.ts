@@ -24,7 +24,7 @@ import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { getCurrentDealer, getCurrentDealerId, requireEntitlement } from "../lib/request-context";
+import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements, requireEntitlement } from "../lib/request-context";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -786,6 +786,7 @@ vehiclesRouter.post("/extract-brief", async (c) => {
 // GET /api/vehicles - list all vehicles with optional filters
 vehiclesRouter.get("/", async (c) => {
   const dealerId = getCurrentDealerId(c);
+  const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
   const status = c.req.query("status");
   const search = c.req.query("search");
   const isPrivate = c.req.query("isPrivate");
@@ -796,9 +797,9 @@ vehiclesRouter.get("/", async (c) => {
     where.status = status;
   }
 
-  if (isPrivate === "true") {
+  if (privateVehiclesEnabled && isPrivate === "true") {
     where.isPrivate = true;
-  } else if (isPrivate === "false") {
+  } else if (privateVehiclesEnabled && isPrivate === "false") {
     where.isPrivate = false;
   }
 
@@ -825,6 +826,15 @@ vehiclesRouter.get("/", async (c) => {
     orderBy: { createdAt: "desc" },
   });
 
+  if (!privateVehiclesEnabled) {
+    return c.json({
+      data: vehicles.map((vehicle) => ({
+        ...vehicle,
+        isPrivate: false,
+      })),
+    });
+  }
+
   return c.json({ data: vehicles });
 });
 
@@ -832,6 +842,7 @@ vehiclesRouter.get("/", async (c) => {
 vehiclesRouter.get("/:id", async (c) => {
   const id = c.req.param("id");
   const dealerId = getCurrentDealerId(c);
+  const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
 
   const vehicle = await prisma.vehicle.findFirst({
     where: { id, dealerId },
@@ -851,6 +862,15 @@ vehiclesRouter.get("/:id", async (c) => {
 
   if (!vehicle) {
     return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
+  }
+
+  if (!privateVehiclesEnabled) {
+    return c.json({
+      data: {
+        ...vehicle,
+        isPrivate: false,
+      },
+    });
   }
 
   return c.json({ data: vehicle });
@@ -958,6 +978,7 @@ vehiclesRouter.post(
   zValidator("json", VehicleCreateSchema),
   async (c) => {
     const dealerId = getCurrentDealerId(c);
+    const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
     const data = c.req.valid("json");
 
     if (data.customerId) {
@@ -980,7 +1001,7 @@ vehiclesRouter.post(
 
     // Convert power (number) to string for Prisma, strip empty strings
     const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
-    const isPrivateVehicle = data.isPrivate === true;
+    const isPrivateVehicle = privateVehiclesEnabled && data.isPrivate === true;
     const vehicleData = {
       ...data,
       vehicleNumber: data.vehicleNumber.trim(),
@@ -1071,6 +1092,7 @@ vehiclesRouter.put(
   async (c) => {
     const id = c.req.param("id");
     const dealerId = getCurrentDealerId(c);
+    const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
     const data = c.req.valid("json");
 
     const existing = await prisma.vehicle.findFirst({ where: { id, dealerId } });
@@ -1097,7 +1119,7 @@ vehiclesRouter.put(
     }
 
     // Handle nullable customerId: convert null to disconnect
-    const isPrivateVehicle = data.isPrivate === true;
+    const isPrivateVehicle = privateVehiclesEnabled && data.isPrivate === true;
     const updateData: Record<string, unknown> = {
       ...data,
       vehicleNumber: data.vehicleNumber !== undefined ? data.vehicleNumber.trim() : undefined,

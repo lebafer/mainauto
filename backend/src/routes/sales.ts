@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "../prisma";
 import { SaleCreateSchema } from "../types";
-import { getCurrentDealerId } from "../lib/request-context";
+import { getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
 
 const salesRouter = new Hono();
 
@@ -29,6 +29,7 @@ salesRouter.post(
   zValidator("json", SaleCreateSchema),
   async (c) => {
     const dealerId = getCurrentDealerId(c);
+    const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
     const data = c.req.valid("json");
 
     // Check vehicle exists
@@ -39,7 +40,7 @@ salesRouter.post(
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
 
-    if (vehicle.isPrivate) {
+    if (privateVehiclesEnabled && vehicle.isPrivate) {
       return c.json(
         { error: { message: "Private Fahrzeuge koennen nicht verkauft werden", code: "PRIVATE_VEHICLE" } },
         400
