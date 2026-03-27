@@ -152,17 +152,19 @@ export default function VehicleList() {
                           )}
                         </div>
                         <div>
-                          <p className="font-medium">
-                            {vehicle.brand} {vehicle.model}
-                          </p>
-                          {vehicle.isPrivate ? (
-                            <Badge
-                              variant="outline"
-                              className={`mt-1 ${PRIVATE_VEHICLE_BADGE_CLASSNAME}`}
-                            >
-                              Privat
-                            </Badge>
-                          ) : null}
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">
+                              {vehicle.brand} {vehicle.model}
+                            </p>
+                            {vehicle.isPrivate ? (
+                              <Badge
+                                variant="outline"
+                                className={`h-5 px-2 text-[11px] ${PRIVATE_VEHICLE_BADGE_CLASSNAME}`}
+                              >
+                                Privat
+                              </Badge>
+                            ) : null}
+                          </div>
                           <p className="text-xs text-muted-foreground font-mono">
                             {vehicle.vehicleNumber}
                           </p>
