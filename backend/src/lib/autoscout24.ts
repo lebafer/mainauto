@@ -57,6 +57,18 @@ type AutoscoutListingResponse = {
 
 const cache = new Map<string, CacheEntry<unknown>>();
 
+export class AutoscoutApiError extends Error {
+  status: number;
+  body: string;
+
+  constructor(status: number, body: string) {
+    super(body || `AutoScout24 request failed (${status})`);
+    this.name = "AutoscoutApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 function getBasicAuthHeaders(username: string, password: string): Record<string, string> {
   const token = Buffer.from(`${username}:${password}`).toString("base64");
   return {
@@ -95,7 +107,7 @@ async function autoscoutFetch<T>(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(body || `AutoScout24 request failed (${response.status})`);
+    throw new AutoscoutApiError(response.status, body);
   }
 
   if (response.status === 204) {

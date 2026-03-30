@@ -211,7 +211,7 @@ export default function SettingsMarketplaces() {
             <div>
               <CardTitle>AutoScout24</CardTitle>
               <CardDescription>
-                AutoScout24 nutzt Data-Provider-Zugangsdaten plus customerId pro Autohaus.
+                AutoScout24 nutzt Data-Provider/API-Zugangsdaten plus customerId pro Autohaus.
               </CardDescription>
             </div>
           </div>
@@ -231,8 +231,18 @@ export default function SettingsMarketplaces() {
           <Alert>
             <AlertTitle>So richtest du AutoScout24 ein</AlertTitle>
             <AlertDescription>
-              Trage deinen AutoScout24 Data-Provider-Login ein, prüfe die Verbindung und wähle danach die passende
-              customerId für dieses Autohaus aus.
+              Trage hier die separaten AutoScout24 Listing-API-Zugangsdaten ein, prüfe die Verbindung und wähle danach
+              die passende customerId für dieses Autohaus aus.
+            </AlertDescription>
+          </Alert>
+
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Nicht den Händler-Portal-Login verwenden</AlertTitle>
+            <AlertDescription>
+              Der normale AutoScout24 Händler-Login mit E-Mail-Code funktioniert hier nicht. Du brauchst separate
+              Data-Provider/API-Zugangsdaten für die Listing Creation API. Falls du die noch nicht hast, musst du sie
+              bei AutoScout24 anfragen.
             </AlertDescription>
           </Alert>
 
@@ -245,11 +255,11 @@ export default function SettingsMarketplaces() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="as24-username">AutoScout24 Benutzername</Label>
+              <Label htmlFor="as24-username">Data-Provider Benutzername</Label>
               <Input id="as24-username" value={username} onChange={(event) => setUsername(event.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="as24-password">Passwort</Label>
+              <Label htmlFor="as24-password">API-Passwort</Label>
               <Input
                 id="as24-password"
                 type="password"

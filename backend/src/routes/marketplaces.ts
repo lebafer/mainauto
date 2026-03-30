@@ -14,7 +14,7 @@ import {
   requireDealerRole,
   requireEntitlement,
 } from "../lib/request-context";
-import { autoscoutVerifyCredentials } from "../lib/autoscout24";
+import { AutoscoutApiError, autoscoutVerifyCredentials } from "../lib/autoscout24";
 import { encryptMarketplaceSecret } from "../lib/marketplace-crypto";
 import {
   computeNextScheduleRun,
@@ -24,6 +24,49 @@ import {
 } from "../lib/marketplace-sync";
 
 const marketplacesRouter = new Hono();
+
+function formatAutoscoutSetupError(error: unknown) {
+  if (error instanceof AutoscoutApiError) {
+    if (error.status === 401) {
+      return {
+        status: 401,
+        code: "AUTOSCOUT24_INVALID_CREDENTIALS",
+        message:
+          "Der normale AutoScout24-Haendler-Login funktioniert hier nicht. Fuer die Listing-API brauchst du separate Data-Provider/API-Zugangsdaten von AutoScout24, nicht den Login mit E-Mail-Code.",
+      };
+    }
+
+    if (error.status === 403) {
+      return {
+        status: 403,
+        code: "AUTOSCOUT24_FORBIDDEN",
+        message:
+          "Diese AutoScout24 API-Zugangsdaten haben keinen Zugriff auf das angeforderte Kundenkonto. Der Haendler muss den Data Provider freischalten und die passende customerId bereitstellen.",
+      };
+    }
+
+    if (error.status >= 500) {
+      return {
+        status: 502,
+        code: "AUTOSCOUT24_UPSTREAM_ERROR",
+        message:
+          "AutoScout24 meldet aktuell einen Serverfehler. Bitte spaeter erneut versuchen. Falls du den normalen Haendler-Login verwendet hast, brauchst du stattdessen die Listing-API-Zugangsdaten.",
+      };
+    }
+
+    return {
+      status: 400,
+      code: "AUTOSCOUT24_REQUEST_FAILED",
+      message: error.body || "AutoScout24 konnte die Zugangsdaten nicht verarbeiten.",
+    };
+  }
+
+  return {
+    status: 500,
+    code: "AUTOSCOUT24_UNKNOWN_ERROR",
+    message: error instanceof Error ? error.message : "AutoScout24 konnte nicht verifiziert werden.",
+  };
+}
 
 function requireMarketplaceAccess(c: Parameters<typeof requireDealerRole>[0]) {
   const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
@@ -67,17 +110,30 @@ marketplacesRouter.post(
     const data = c.req.valid("json");
     switch (data.platform) {
       case "autoscout24": {
-        const customers = await autoscoutVerifyCredentials({
-          username: data.username,
-          password: data.password,
-        });
-        return c.json({
-          data: {
-            platform: data.platform,
+        try {
+          const customers = await autoscoutVerifyCredentials({
             username: data.username,
-            customers,
-          },
-        });
+            password: data.password,
+          });
+          return c.json({
+            data: {
+              platform: data.platform,
+              username: data.username,
+              customers,
+            },
+          });
+        } catch (error) {
+          const formatted = formatAutoscoutSetupError(error);
+          return c.json(
+            {
+              error: {
+                code: formatted.code,
+                message: formatted.message,
+              },
+            },
+            formatted.status
+          );
+        }
       }
       default:
         return c.json({ error: { code: "BAD_REQUEST", message: "Unbekannte Plattform" } }, 400);
@@ -102,26 +158,39 @@ marketplacesRouter.put(
     let lastError: string | null = null;
 
     if (data.platform === "autoscout24") {
-      const customers = await autoscoutVerifyCredentials({
-        username: data.username,
-        password: data.password,
-      });
+      try {
+        const customers = await autoscoutVerifyCredentials({
+          username: data.username,
+          password: data.password,
+        });
 
-      if (data.customerId) {
-        const matchingCustomer = customers.find((item) => item.id === data.customerId);
-        if (!matchingCustomer) {
-          return c.json(
-            {
-              error: {
-                code: "BAD_REQUEST",
-                message: "customerId gehört nicht zu diesem AutoScout24-Konto",
+        if (data.customerId) {
+          const matchingCustomer = customers.find((item) => item.id === data.customerId);
+          if (!matchingCustomer) {
+            return c.json(
+              {
+                error: {
+                  code: "BAD_REQUEST",
+                  message: "customerId gehoert nicht zu diesem AutoScout24-Konto",
+                },
               },
-            },
-            400
-          );
+              400
+            );
+          }
+          status = "connected";
+          lastVerifiedAt = new Date();
         }
-        status = "connected";
-        lastVerifiedAt = new Date();
+      } catch (error) {
+        const formatted = formatAutoscoutSetupError(error);
+        return c.json(
+          {
+            error: {
+              code: formatted.code,
+              message: formatted.message,
+            },
+          },
+          formatted.status
+        );
       }
     }
 
