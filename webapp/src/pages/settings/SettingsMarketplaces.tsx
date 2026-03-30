@@ -246,6 +246,48 @@ export default function SettingsMarketplaces() {
             </AlertDescription>
           </Alert>
 
+          <div className="rounded-xl border bg-muted/20 p-4 text-sm">
+            <div className="font-medium">Anleitung für den Kunden</div>
+            <div className="mt-2 space-y-2 text-muted-foreground">
+              <p>
+                1. AutoScout24 API-Seite öffnen:
+                {" "}
+                <a
+                  href="https://www.autoscout24.de/haendlerportal/api/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary underline underline-offset-4"
+                >
+                  autoscout24.de/haendlerportal/api
+                </a>
+              </p>
+              <p>
+                2. Dort AutoScout24 kontaktieren und mitteilen, dass für die Listing Creation API separate
+                Data-Provider/API-Zugangsdaten benötigt werden.
+              </p>
+              <p>
+                3. Falls bereits ein externer Datendienstleister genutzt wird, kann auch dieser die API-Anbindung und
+                die passende customerId bei AutoScout24 koordinieren.
+              </p>
+              <p>
+                4. Nach Erhalt von Benutzername, API-Passwort und customerId diese Daten hier eintragen und die
+                Verbindung prüfen.
+              </p>
+              <p>
+                API-Dokumentation:
+                {" "}
+                <a
+                  href="https://listing-creation.api.autoscout24.com/docs#/?id=authentication-and-authorization"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary underline underline-offset-4"
+                >
+                  Authentication and authorization
+                </a>
+              </p>
+            </div>
+          </div>
+
           {autoscoutConnection?.lastError ? (
             <Alert variant="destructive">
               <AlertTitle>Letzter Fehler</AlertTitle>
