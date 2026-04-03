@@ -76,6 +76,7 @@ model Dealer {
   customColors         CustomColor[]
   customSuppliers      CustomSupplier[]
   customConnectorTypes CustomConnectorType[]
+  websiteFeedToken     DealerWebsiteFeedToken?
 }
 
 model DealerSettings {
@@ -197,6 +198,23 @@ model User {
   sessions        Session[]
   accounts        Account[]
   memberships     DealerMembership[]
+  createdWebsiteFeedTokens DealerWebsiteFeedToken[]
+}
+
+model DealerWebsiteFeedToken {
+  id              String   @id @default(cuid())
+  dealerId        String   @unique
+  dealer          Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  tokenHash       String   @unique
+  tokenPrefix     String
+  tokenLast4      String
+  createdByUserId String?
+  createdByUser   User?    @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([createdByUserId])
 }
 
 model Session {

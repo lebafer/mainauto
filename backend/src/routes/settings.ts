@@ -7,6 +7,8 @@ import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
 import {
+  DealerWebsiteFeedTokenCreateResponseSchema,
+  DealerWebsiteFeedTokenStatusSchema,
   DealerSettingsUpdateSchema,
   DealerTeamMemberCreateSchema,
   DealerTeamRoleUpdateSchema,
@@ -14,10 +16,18 @@ import {
 import {
   getCurrentDealer,
   getCurrentDealerId,
+  getCurrentEntitlements,
+  getCurrentUser,
   requireDealerRole,
   requireEntitlement,
 } from "../lib/request-context";
 import { createCredentialUser } from "../lib/auth-users";
+import { WEBSITE_VEHICLE_FEED_FEATURE_KEY } from "../lib/dealers";
+import {
+  createWebsiteFeedToken,
+  formatWebsiteFeedTokenPreview,
+  getWebsiteFeedUrl,
+} from "../lib/website-feed";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -120,6 +130,86 @@ settingsRouter.put(
     return c.json({ data: settings });
   }
 );
+
+settingsRouter.get("/website-feed", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  const token = await prisma.dealerWebsiteFeedToken.findUnique({
+    where: { dealerId },
+  });
+
+  const response = DealerWebsiteFeedTokenStatusSchema.parse({
+    enabled: getCurrentEntitlements(c)[WEBSITE_VEHICLE_FEED_FEATURE_KEY] === true,
+    hasToken: Boolean(token),
+    tokenPreview: token ? formatWebsiteFeedTokenPreview(token.tokenPrefix, token.tokenLast4) : null,
+    feedUrl: getWebsiteFeedUrl(),
+    lastUsedAt: token?.lastUsedAt?.toISOString() ?? null,
+    updatedAt: token?.updatedAt?.toISOString() ?? null,
+  });
+
+  return c.json({ data: response });
+});
+
+settingsRouter.post("/website-feed/token", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const featureError = requireEntitlement(c, WEBSITE_VEHICLE_FEED_FEATURE_KEY);
+  if (featureError) {
+    return featureError;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  const userId = getCurrentUser(c).id;
+  const nextToken = createWebsiteFeedToken();
+
+  const token = await prisma.dealerWebsiteFeedToken.upsert({
+    where: { dealerId },
+    update: {
+      tokenHash: nextToken.tokenHash,
+      tokenPrefix: nextToken.tokenPrefix,
+      tokenLast4: nextToken.tokenLast4,
+      createdByUserId: userId,
+      lastUsedAt: null,
+    },
+    create: {
+      dealerId,
+      tokenHash: nextToken.tokenHash,
+      tokenPrefix: nextToken.tokenPrefix,
+      tokenLast4: nextToken.tokenLast4,
+      createdByUserId: userId,
+    },
+  });
+
+  const response = DealerWebsiteFeedTokenCreateResponseSchema.parse({
+    token: nextToken.rawToken,
+    tokenPreview: nextToken.tokenPreview,
+    feedUrl: getWebsiteFeedUrl(),
+    createdAt: token.updatedAt.toISOString(),
+  });
+
+  return c.json({ data: response }, 201);
+});
+
+settingsRouter.delete("/website-feed/token", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const dealerId = getCurrentDealerId(c);
+  await prisma.dealerWebsiteFeedToken.deleteMany({
+    where: { dealerId },
+  });
+
+  return c.json({ data: { success: true } });
+});
 
 settingsRouter.post("/dealer/logo", async (c) => {
   const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);

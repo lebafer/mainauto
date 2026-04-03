@@ -8,10 +8,14 @@ import {
   DEFAULT_PLATFORM_NAME,
   DEFAULT_PLATFORM_SLOGAN,
   DEFAULT_SUPPORT_EMAIL,
+  WEBSITE_VEHICLE_FEED_FEATURE_KEY,
+  getTenantStatus,
+  mergeFeatureEntitlements,
   slugifyDealerName,
 } from "../lib/dealers";
-import { addTrialDays, TRIAL_DAYS } from "../lib/billing";
-import { PublicSignupSchema } from "../types";
+import { addTrialDays, TRIAL_DAYS, getBillingState, getCurrentSubscription } from "../lib/billing";
+import { hashWebsiteFeedToken, parseVehicleFeatures, toAbsoluteAssetUrl } from "../lib/website-feed";
+import { PublicSignupSchema, WebsiteVehicleFeedResponseSchema } from "../types";
 
 const publicRouter = new Hono();
 
@@ -71,6 +75,182 @@ publicRouter.get("/tenant-context", async (c) => {
       activeDomain: null,
     },
   });
+});
+
+publicRouter.get("/website-feed/vehicles", async (c) => {
+  const authHeader = c.req.header("authorization") ?? "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length).trim() : "";
+
+  if (!bearerToken) {
+    return c.json(
+      {
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Bearer-Token fehlt",
+        },
+      },
+      401
+    );
+  }
+
+  const token = await prisma.dealerWebsiteFeedToken.findUnique({
+    where: { tokenHash: hashWebsiteFeedToken(bearerToken) },
+    include: {
+      dealer: {
+        include: {
+          settings: true,
+          subscriptions: {
+            include: { plan: true },
+            orderBy: { createdAt: "desc" },
+          },
+          vehicles: {
+            where: {
+              exportEnabled: true,
+              isPrivate: false,
+              status: { in: ["available", "reserved"] },
+            },
+            include: {
+              images: {
+                orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+              },
+            },
+            orderBy: { createdAt: "desc" },
+          },
+        },
+      },
+    },
+  });
+
+  if (!token) {
+    return c.json(
+      {
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Ungültiger Feed-Token",
+        },
+      },
+      401
+    );
+  }
+
+  const dealer = token.dealer;
+  const tenantStatus = getTenantStatus({
+    dealerStatus: dealer.status,
+    setupStatus: dealer.setupStatus,
+  });
+
+  if (tenantStatus === "suspended" || tenantStatus === "inactive") {
+    return c.json(
+      {
+        error: {
+          code: "TENANT_UNAVAILABLE",
+          message: "Dieses Autohaus ist derzeit nicht verfügbar",
+        },
+      },
+      403
+    );
+  }
+
+  const subscription = getCurrentSubscription(dealer.subscriptions);
+  const billing = getBillingState(subscription);
+  if (!billing.canAccessApp) {
+    return c.json(
+      {
+        error: {
+          code: "PAYMENT_REQUIRED",
+          message: "Das Autohaus hat derzeit keinen aktiven Zugriff",
+        },
+      },
+      403
+    );
+  }
+
+  const entitlements = mergeFeatureEntitlements(
+    subscription?.plan.featureEntitlements,
+    subscription?.featureOverrides
+  );
+
+  if (entitlements[WEBSITE_VEHICLE_FEED_FEATURE_KEY] !== true) {
+    return c.json(
+      {
+        error: {
+          code: "FEATURE_NOT_ENABLED",
+          message: "Der Website-Fahrzeugfeed ist für dieses Autohaus nicht aktiviert",
+        },
+      },
+      403
+    );
+  }
+
+  await prisma.dealerWebsiteFeedToken.update({
+    where: { id: token.id },
+    data: { lastUsedAt: new Date() },
+  });
+
+  const response = WebsiteVehicleFeedResponseSchema.parse({
+    dealer: {
+      id: dealer.id,
+      name: dealer.name,
+      slug: dealer.slug,
+      displayName: dealer.settings?.displayName ?? null,
+      website: dealer.settings?.website ?? null,
+      logoUrl: toAbsoluteAssetUrl(dealer.settings?.logoUrl),
+      primaryColor: dealer.settings?.primaryColor ?? null,
+      accentColor: dealer.settings?.accentColor ?? null,
+      updatedAt: dealer.updatedAt.toISOString(),
+    },
+    vehicles: dealer.vehicles.map((vehicle) => {
+      const images = vehicle.images.map((image) => ({
+        id: image.id,
+        url: toAbsoluteAssetUrl(image.url),
+        isPrimary: image.isPrimary,
+      }));
+      const primaryImage = images.find((image) => image.isPrimary) ?? images[0] ?? null;
+
+      return {
+        id: vehicle.id,
+        vehicleNumber: vehicle.vehicleNumber,
+        brand: vehicle.brand,
+        model: vehicle.model,
+        title: [vehicle.brand, vehicle.model].filter(Boolean).join(" "),
+        status: vehicle.status,
+        sellingPrice: vehicle.sellingPrice,
+        dealerPrice: vehicle.dealerPrice ?? null,
+        taxRate: vehicle.taxRate,
+        marginTaxed: vehicle.marginTaxed,
+        primaryImageUrl: primaryImage?.url ?? null,
+        images: images.filter((image): image is { id: string; url: string; isPrimary: boolean } => Boolean(image.url)),
+        year: vehicle.year ?? null,
+        firstRegistration: vehicle.firstRegistration?.toISOString() ?? null,
+        mileage: vehicle.mileage,
+        fuelType: vehicle.fuelType ?? null,
+        transmission: vehicle.transmission ?? null,
+        power: vehicle.power ?? null,
+        powerKw: vehicle.powerKw ?? null,
+        color: vehicle.color ?? null,
+        bodyType: vehicle.bodyType ?? null,
+        doors: vehicle.doors ?? null,
+        seats: vehicle.seats ?? null,
+        driveType: vehicle.driveType ?? null,
+        emissionClass: vehicle.emissionClass ?? null,
+        co2Emission: vehicle.co2Emission ?? null,
+        batteryCapacity: vehicle.batteryCapacity ?? null,
+        electricRange: vehicle.electricRange ?? null,
+        batterySoh: vehicle.batterySoh ?? null,
+        batteryType: vehicle.batteryType ?? null,
+        chargingTime: vehicle.chargingTime ?? null,
+        connectorType: vehicle.connectorType ?? null,
+        huDue: vehicle.huDue?.toISOString() ?? null,
+        previousOwners: vehicle.previousOwners ?? null,
+        features: parseVehicleFeatures(vehicle.features),
+        notes: vehicle.notes ?? null,
+        createdAt: vehicle.createdAt.toISOString(),
+        updatedAt: vehicle.updatedAt.toISOString(),
+      };
+    }),
+  });
+
+  return c.json({ data: response });
 });
 
 publicRouter.post(

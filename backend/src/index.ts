@@ -331,6 +331,22 @@ app.use("/api/*", async (c, next) => {
 
 app.use(
   "/api/uploads/*",
+  async (c, next) => {
+    c.header("Access-Control-Allow-Origin", "*");
+    c.header("Access-Control-Allow-Methods", "GET,HEAD,OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type");
+    c.header("Cross-Origin-Resource-Policy", "cross-origin");
+
+    if (c.req.method === "OPTIONS") {
+      return c.text("", 204);
+    }
+
+    return next();
+  }
+);
+
+app.use(
+  "/api/uploads/*",
   serveStatic({
     root: "./uploads",
     rewriteRequestPath: (path) => path.replace(/^\/api\/uploads/, ""),

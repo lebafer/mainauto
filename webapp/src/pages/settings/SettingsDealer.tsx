@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
 import { DealerLogo } from "@/components/branding/DealerLogo";
+import { DealerWebsiteFeedCard } from "@/components/settings/DealerWebsiteFeedCard";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,12 +54,13 @@ export default function SettingsDealer() {
   const { session, refetch } = useAuth();
   const [form, setForm] = useState(EMPTY_FORM);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const canManageDealerSettings = session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin";
   const documentBrandingEnabled = session?.entitlements?.document_branding === true;
 
   const settingsQuery = useQuery({
     queryKey: ["dealer-settings"],
     queryFn: () => api.get<DealerSettingsResponse>("/api/settings/dealer"),
-    enabled: session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin",
+    enabled: canManageDealerSettings,
   });
 
   useEffect(() => {
@@ -156,7 +158,7 @@ export default function SettingsDealer() {
     },
   });
 
-  if (!(session?.dealerRole === "dealer_owner" || session?.dealerRole === "dealer_admin")) {
+  if (!canManageDealerSettings) {
     return <div className="text-sm text-muted-foreground">Kein Zugriff auf diese Seite.</div>;
   }
 
@@ -199,6 +201,8 @@ export default function SettingsDealer() {
           ))}
         </CardContent>
       </Card>
+
+      <DealerWebsiteFeedCard canManage={canManageDealerSettings} />
 
       <Card>
         <CardHeader>

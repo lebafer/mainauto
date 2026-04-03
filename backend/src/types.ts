@@ -24,6 +24,7 @@ export const DealerSubscriptionStatusSchema = z.enum([
 ]);
 
 export const FeatureEntitlementsSchema = z.record(z.string(), z.boolean()).default({});
+export const WebsiteVehicleFeedFeatureKeySchema = z.literal("website_vehicle_feed");
 
 export const DealerSchema = z.object({
   id: z.string(),
@@ -289,6 +290,93 @@ export type DealerSubscription = z.infer<typeof DealerSubscriptionSchema>;
 export type PublicTenantContext = z.infer<typeof PublicTenantContextSchema>;
 export type PublicPlan = z.infer<typeof PublicPlanSchema>;
 export type SessionContext = z.infer<typeof SessionContextSchema>;
+
+export const DealerWebsiteFeedTokenStatusSchema = z.object({
+  enabled: z.boolean(),
+  hasToken: z.boolean(),
+  tokenPreview: z.string().nullable(),
+  feedUrl: z.string().url(),
+  lastUsedAt: z.string().nullable(),
+  updatedAt: z.string().nullable(),
+});
+
+export const DealerWebsiteFeedTokenCreateResponseSchema = z.object({
+  token: z.string(),
+  tokenPreview: z.string(),
+  feedUrl: z.string().url(),
+  createdAt: z.string(),
+});
+
+export const WebsiteVehicleFeedImageSchema = z.object({
+  id: z.string(),
+  url: z.string().url(),
+  isPrimary: z.boolean(),
+});
+
+export const WebsiteVehicleFeedDealerSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  displayName: z.string().nullable(),
+  website: z.string().nullable(),
+  logoUrl: z.string().url().nullable(),
+  primaryColor: z.string().nullable(),
+  accentColor: z.string().nullable(),
+  updatedAt: z.string(),
+});
+
+export const WebsiteVehicleFeedVehicleSchema = z.object({
+  id: z.string(),
+  vehicleNumber: z.string(),
+  brand: z.string(),
+  model: z.string(),
+  title: z.string(),
+  status: z.enum(["available", "reserved"]),
+  sellingPrice: z.number(),
+  dealerPrice: z.number().nullable(),
+  taxRate: z.number(),
+  marginTaxed: z.boolean(),
+  primaryImageUrl: z.string().url().nullable(),
+  images: z.array(WebsiteVehicleFeedImageSchema),
+  year: z.number().int().nullable(),
+  firstRegistration: z.string().nullable(),
+  mileage: z.number().int(),
+  fuelType: z.string().nullable(),
+  transmission: z.string().nullable(),
+  power: z.string().nullable(),
+  powerKw: z.number().nullable(),
+  color: z.string().nullable(),
+  bodyType: z.string().nullable(),
+  doors: z.number().int().nullable(),
+  seats: z.number().int().nullable(),
+  driveType: z.string().nullable(),
+  emissionClass: z.string().nullable(),
+  co2Emission: z.number().nullable(),
+  batteryCapacity: z.number().nullable(),
+  electricRange: z.number().int().nullable(),
+  batterySoh: z.number().nullable(),
+  batteryType: z.string().nullable(),
+  chargingTime: z.number().int().nullable(),
+  connectorType: z.string().nullable(),
+  huDue: z.string().nullable(),
+  previousOwners: z.number().int().nullable(),
+  features: z.array(z.string()),
+  notes: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const WebsiteVehicleFeedResponseSchema = z.object({
+  dealer: WebsiteVehicleFeedDealerSchema,
+  vehicles: z.array(WebsiteVehicleFeedVehicleSchema),
+});
+
+export type DealerWebsiteFeedTokenStatus = z.infer<typeof DealerWebsiteFeedTokenStatusSchema>;
+export type DealerWebsiteFeedTokenCreateResponse = z.infer<typeof DealerWebsiteFeedTokenCreateResponseSchema>;
+export type WebsiteVehicleFeedImage = z.infer<typeof WebsiteVehicleFeedImageSchema>;
+export type WebsiteVehicleFeedDealer = z.infer<typeof WebsiteVehicleFeedDealerSchema>;
+export type WebsiteVehicleFeedVehicle = z.infer<typeof WebsiteVehicleFeedVehicleSchema>;
+export type WebsiteVehicleFeedResponse = z.infer<typeof WebsiteVehicleFeedResponseSchema>;
 
 // ─── Vehicle Schemas ─────────────────────────────────────────
 

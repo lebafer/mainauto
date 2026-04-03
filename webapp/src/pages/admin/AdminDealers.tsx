@@ -85,6 +85,7 @@ type DealerEditForm = {
 };
 
 const PRIVATE_VEHICLES_FEATURE_KEY = "private_vehicles";
+const WEBSITE_VEHICLE_FEED_FEATURE_KEY = "website_vehicle_feed";
 
 function getPrimaryOwner(dealer: Dealer) {
   return dealer.memberships.find((membership) => membership.role === "dealer_owner") ?? null;
@@ -422,6 +423,32 @@ export default function AdminDealers() {
                                 featureOverrides: {
                                   ...(currentSubscription.featureOverrides ?? {}),
                                   [PRIVATE_VEHICLES_FEATURE_KEY]: checked,
+                                },
+                              })
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                      <div className="space-y-1 pr-4">
+                        <div className="text-sm font-medium text-foreground">Website API</div>
+                        <div className="text-xs text-muted-foreground">
+                          Erlaubt Token-basierten Fahrzeug-Feed für externe Händler-Webseiten.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={getFeatureEnabled(currentSubscription, WEBSITE_VEHICLE_FEED_FEATURE_KEY)}
+                        disabled={!currentSubscription || subscriptionMutation.isPending}
+                        onCheckedChange={(checked) =>
+                          currentSubscription
+                            ? subscriptionMutation.mutate({
+                                dealerId: dealer.id,
+                                planId: currentSubscription.planId,
+                                complimentaryAccess: currentSubscription.complimentaryAccess ?? false,
+                                featureOverrides: {
+                                  ...(currentSubscription.featureOverrides ?? {}),
+                                  [WEBSITE_VEHICLE_FEED_FEATURE_KEY]: checked,
                                 },
                               })
                             : undefined
