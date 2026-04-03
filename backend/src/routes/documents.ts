@@ -1059,9 +1059,10 @@ function generateContract(
   /* Signature */
   .sig-row { display: flex; gap: 20px; margin-top: 22px; margin-bottom: 10px; }
   .sig-block { flex: 1; }
-  .sig-label { font-size: 8pt; color: #555; margin-bottom: 18px; }
+  .sig-label { font-size: 8pt; color: #555; min-height: 18px; margin-bottom: 0; }
   .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8pt; color: #333; }
-  .sig-city { font-size: 8.5pt; margin-top: 4px; }
+  .sig-meta-row { display: flex; gap: 20px; margin-top: 4px; }
+  .sig-meta { flex: 1; font-size: 8.5pt; min-height: 18px; }
 
   /* Footer */
   .doc-footer { border-top: 1.5px solid #000; margin-top: 18px; padding-top: 8px; font-size: 7.2pt; color: #333; text-align: center; line-height: 1.5; }
@@ -1141,7 +1142,7 @@ function generateContract(
 
   <div class="sig-row">
     <div class="sig-block">
-      <div class="sig-label">Ort, Datum</div>
+      <div class="sig-label">&nbsp;</div>
       <div class="sig-line">Unterschrift K&auml;ufer</div>
     </div>
     <div class="sig-block">
@@ -1149,7 +1150,10 @@ function generateContract(
       <div class="sig-line">Unterschrift Verk&auml;ufer</div>
     </div>
   </div>
-  <div class="sig-city">${escapeHtml(contractPlace)}, ${contractDateFormatted}</div>
+  <div class="sig-meta-row">
+    <div class="sig-meta">Ort, Datum<br>${escapeHtml(contractPlace)}, ${contractDateFormatted}</div>
+    <div class="sig-meta">&nbsp;</div>
+  </div>
 
   <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
 </div>
