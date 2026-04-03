@@ -213,8 +213,8 @@ function getDealerFooterHtml(profile: DealerDocumentProfile): string {
   const bankLine = [
     profile.bankName,
     profile.iban ? `IBAN: ${profile.iban}` : "",
-    profile.bic ? `BIC: ${profile.bic}` : "",
   ].filter(Boolean).join(" &bull; ");
+  const bicLine = profile.bic ? `BIC: ${profile.bic}` : "";
   const legalLine = [
     profile.taxId ? `USt-IdNr. ${profile.taxId}` : "",
     profile.legalRepresentative ? `Vertretungsberechtigt: ${profile.legalRepresentative}` : "",
@@ -223,7 +223,7 @@ function getDealerFooterHtml(profile: DealerDocumentProfile): string {
   const headerLine = [profile.name, locationLine].filter(Boolean).join(" &bull; ");
   const financeLine = [contactLine, bankLine].filter(Boolean).join(" &bull; ");
 
-  return [headerLine, financeLine, legalLine].filter(Boolean).join("<br>");
+  return [headerLine, financeLine, bicLine, legalLine].filter(Boolean).join("<br>");
 }
 
 function getLogoImgHtml(
@@ -522,11 +522,11 @@ function getSalesContractTaxationInfo(vehicle: {
   };
 }
 
-function getPrivateSalesContractLegalHtml(): string {
+function getPrivateSalesContractLegalHtml(dealerName: string): string {
   return `
     <p class="legal-text"><strong>Verkürzung der Verjährungsfrist beim Verkauf von Gebrauchtfahrzeugen</strong></p>
     <p class="legal-text">Die gesetzlich geregelte Verjährungsfrist für die Geltendmachung von Ansprüchen wegen Sachmängeln und/oder Rechtsmängeln einer Sache beträgt 2 Jahre. Hiervon abweichend wurde ich über Folgendes informiert:</p>
-    <p class="legal-text">Die Mercedes-Benz AG als Verkäufer wird den Kaufgegenstand nur im Falle der Vereinbarung einer Verjährungsfrist von 1 Jahr für Ansprüche wegen Sachmängeln und Rechtsmängeln verkaufen.</p>
+    <p class="legal-text">Die ${escapeHtml(dealerName)} als Verkäufer wird den Kaufgegenstand nur im Falle der Vereinbarung einer Verjährungsfrist von 1 Jahr für Ansprüche wegen Sachmängeln und Rechtsmängeln verkaufen.</p>
     <p class="legal-text">Die Verkürzung der Verjährungsfrist auf 1 Jahr wird jedoch nicht für Schäden gelten, die auf einer grob fahrlässigen oder vorsätzlichen Verletzung von Pflichten des Verkäufers, seines gesetzlichen Vertreters oder seines Erfüllungsgehilfen beruhen sowie bei Verletzung von Leben, Körper oder Gesundheit.</p>
     <p class="legal-text">Hat der Verkäufer aufgrund der gesetzlichen Bestimmungen für einen Schaden aufzukommen, der leicht fahrlässig verursacht wurde, so haftet der Verkäufer nur beschränkt: Die Haftung besteht nur bei Verletzung vertragswesentlicher Pflichten, etwa solcher, die der Kaufvertrag dem Verkäufer nach seinem Inhalt und Zweck gerade auferlegen will oder deren Erfüllung die ordnungsgemäße Durchführung des Kaufvertrages überhaupt erst ermöglicht und auf deren Einhaltung der Käufer regelmäßig vertraut und vertrauen darf. Diese Haftung ist auf den bei Vertragsabschluss vorhersehbaren typischen Schaden begrenzt.</p>
     <p class="legal-text">Ausgeschlossen ist die persönliche Haftung der gesetzlichen Vertreter, Erfüllungsgehilfen und Betriebsangehörigen des Verkäufers für von ihnen durch leichte Fahrlässigkeit verursachte Schäden.</p>
@@ -970,13 +970,14 @@ function generateContract(
             ? damageDetails.map((detail) => `<p>${detail}</p>`).join("")
             : "<p>Ja, bekannte Vorschäden vorhanden.</p>")
         : "<p>Keine bekannten Vorschäden.</p>"}
+      <p>Kleinere Reparaturen und Lackierarbeiten sind im Rahmen der Aufbereitung bis 3000€ möglich und bedarf keiner gesonderten Ausweisung.</p>
     </div>
   </div>`;
 
   const taxationInfo = getSalesContractTaxationInfo(vehicle);
   const legalNoticeHtml = isBusinessCustomer
     ? `<p class="legal-text">Der K&auml;ufer erkl&auml;rt ausdr&uuml;cklich, dass er Unternehmer im Sinne des &sect;2 UStG ist und das erworbene Fahrzeug in seiner Firma als Gesch&auml;ftsfahrzeug &uuml;berwiegend unternehmerisch nutzt oder aber gewerblich weiter ver&auml;u&szlig;ert. Der K&auml;ufer verzichtet ausdr&uuml;cklich auf eine Gew&auml;hrleistung durch den Verk&auml;ufer. Das Fahrzeug wird verkauft unter Ausschluss jeglicher Gew&auml;hrleistung. Ausgenommen hiervon sind Sch&auml;den wegen Verletzung von K&ouml;rper, Leben, Gesundheit sowie F&auml;lle vors&auml;tzlicher oder grob fahrl&auml;ssiger Sch&auml;digung des Vertragspartners.</p>`
-    : getPrivateSalesContractLegalHtml();
+    : getPrivateSalesContractLegalHtml(dealerProfile.name);
 
   return `<!DOCTYPE html>
 <html lang="de">
