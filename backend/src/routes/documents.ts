@@ -1055,7 +1055,7 @@ function generateContract(
   .notes-text { font-size: 8.5pt; color: #333; margin-bottom: 4px; font-style: italic; }
 
   /* Signature */
-  .sig-row { display: flex; gap: 20px; margin-top: 34px; margin-bottom: 10px; }
+  .sig-row { display: flex; gap: 20px; margin-top: 68px; margin-bottom: 10px; }
   .sig-block { flex: 1; }
   .sig-label { font-size: 8pt; color: #555; min-height: 18px; margin-bottom: 0; }
   .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8pt; color: #333; }
