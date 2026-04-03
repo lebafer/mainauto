@@ -1036,6 +1036,18 @@ function generateContract(
   .co2-line { font-size: 8.5pt; margin-top: 4px; color: #333; }
 
   /* Legal text */
+  .page-followup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1.5px solid #000;
+    margin-bottom: 12px;
+    font-size: 8.5pt;
+    font-weight: 700;
+  }
+  .page-followup-label { color: #333; font-weight: 600; }
   .legal-divider { border-top: 1px solid #bbb; margin: 10px 0 6px; }
   .legal-section-title { font-weight: bold; font-size: 8.5pt; margin-bottom: 5px; }
   .legal-text { font-size: 8pt; line-height: 1.55; color: #222; margin-bottom: 6px; }
@@ -1054,6 +1066,7 @@ function generateContract(
   @media print {
     body { margin: 0; }
     .page { padding: 12mm 14mm; }
+    .page-break-before { break-before: page; page-break-before: always; }
   }
 </style>
 </head>
@@ -1110,8 +1123,12 @@ function generateContract(
   </div>
 
   ${co2Html}
-
-  <div class="legal-divider"></div>
+</div>
+<div class="page page-break-before">
+  <div class="page-followup-header">
+    <div><span class="page-followup-label">Fahrzeugnummer:</span> ${vehicle.vehicleNumber}</div>
+    <div><span class="page-followup-label">Seite:</span> 2</div>
+  </div>
 
   <div class="legal-section-title">Zahlungsweise + sonstige Vereinbarungen mit Vorrang auf die ausgeh&auml;ndigten Gesch&auml;ftsbedingungen:</div>
 
@@ -1132,7 +1149,6 @@ function generateContract(
   <div class="sig-city">${escapeHtml(contractPlace)}, ${contractDateFormatted}</div>
 
   <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
-
 </div>
 </body>
 </html>`;
