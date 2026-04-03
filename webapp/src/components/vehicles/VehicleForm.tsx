@@ -235,6 +235,7 @@ const vehicleFormSchema = z.object({
   taxRate: z.coerce.number().min(0).max(100).default(19),
   marginTaxed: z.boolean().default(false),
   isPrivate: z.boolean().default(false),
+  showOnWebsite: z.boolean().default(false),
   status: z.string().default("available"),
   notes: z.string().optional().default(""),
   internalNotes: z.string().optional().default(""),
@@ -392,6 +393,11 @@ export function VehicleForm({
     taxRate: vehicle?.taxRate ?? defaultValues?.taxRate ?? 19,
     marginTaxed: vehicle?.marginTaxed ?? defaultValues?.marginTaxed ?? false,
     isPrivate: initialIsPrivate,
+    showOnWebsite:
+      (initialIsPrivate ? false : undefined) ??
+      vehicle?.showOnWebsite ??
+      defaultValues?.showOnWebsite ??
+      false,
     status: vehicle?.status ?? defaultValues?.status ?? "available",
     notes: vehicle?.notes ?? defaultValues?.notes ?? "",
     internalNotes: vehicle?.internalNotes ?? defaultValues?.internalNotes ?? "",
@@ -731,6 +737,9 @@ export function VehicleForm({
       if (form.getValues("exportEnabled")) {
         form.setValue("exportEnabled", false, { shouldValidate: true, shouldDirty });
       }
+      if (form.getValues("showOnWebsite")) {
+        form.setValue("showOnWebsite", false, { shouldValidate: true, shouldDirty });
+      }
       if ((form.getValues("transportCostAbroad") ?? undefined) !== undefined) {
         form.setValue("transportCostAbroad", undefined, { shouldValidate: true, shouldDirty });
       }
@@ -874,6 +883,7 @@ export function VehicleForm({
       taxRate: isPrivateVehicle ? 19 : values.taxRate,
       marginTaxed: isPrivateVehicle ? false : values.marginTaxed,
       status: isPrivateVehicle ? "available" : values.status,
+      showOnWebsite: isPrivateVehicle ? false : values.showOnWebsite,
       features: featuresToJson(values.features ?? ""),
       customerId: undefined,
       power: values.power ?? undefined,
@@ -1022,25 +1032,49 @@ export function VehicleForm({
         <Card>
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-lg">Fahrzeugdaten</CardTitle>
-            {privateVehiclesEnabled ? (
-              <FormField
-                control={form.control}
-                name="isPrivate"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
-                    <div className="space-y-0.5">
-                      <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
-                      <p className="text-[11px] text-muted-foreground">
-                        Nicht im Verkauf
-                      </p>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            ) : null}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {privateVehiclesEnabled ? (
+                <FormField
+                  control={form.control}
+                  name="isPrivate"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
+                      <div className="space-y-0.5">
+                        <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
+                        <p className="text-[11px] text-muted-foreground">
+                          Nicht im Verkauf
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              ) : null}
+              
+                <FormField
+                  control={form.control}
+                  name="showOnWebsite"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
+                      <div className="space-y-0.5">
+                        <FormLabel className="cursor-pointer text-sm">Website</FormLabel>
+                        <p className="text-[11px] text-muted-foreground">
+                          Im Website-Feed anzeigen
+                        </p>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={isPrivateMode}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+            </div>
           </CardHeader>
           <CardContent className="space-y-5">
             {/* Brand Section */}

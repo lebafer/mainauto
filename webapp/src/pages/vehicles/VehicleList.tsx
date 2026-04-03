@@ -161,6 +161,11 @@ export default function VehicleList() {
                             <p className="font-medium">
                               {vehicle.brand} {vehicle.model}
                             </p>
+                            {vehicle.showOnWebsite ? (
+                              <Badge variant="outline" className="h-5 px-2 text-[11px]">
+                                Website
+                              </Badge>
+                            ) : null}
                             {privateVehiclesEnabled && vehicle.isPrivate ? (
                               <Badge
                                 variant="outline"

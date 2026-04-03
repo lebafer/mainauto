@@ -532,6 +532,11 @@ export default function VehicleDetail() {
               <Badge variant="outline" className={statusConfig.className}>
                 {statusConfig.label}
               </Badge>
+              {vehicle.showOnWebsite ? (
+                <Badge variant="outline">
+                  Website
+                </Badge>
+              ) : null}
               {privateVehiclesEnabled && vehicle.isPrivate ? (
                 <Badge variant="outline" className={PRIVATE_VEHICLE_BADGE_CLASSNAME}>
                   Privat

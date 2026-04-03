@@ -77,6 +77,7 @@ export interface Vehicle {
   taxRate: number;
   marginTaxed: boolean;
   isPrivate: boolean;
+  showOnWebsite?: boolean;
   status: "available" | "reserved" | "sold";
   notes: string;
   internalNotes?: string | null;
