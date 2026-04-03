@@ -331,7 +331,7 @@ export const WebsiteVehicleFeedVehicleSchema = z.object({
   brand: z.string(),
   model: z.string(),
   title: z.string(),
-  status: z.enum(["available", "reserved"]),
+  status: z.enum(["available", "reserved", "sold"]),
   sellingPrice: z.number(),
   dealerPrice: z.number().nullable(),
   taxRate: z.number(),

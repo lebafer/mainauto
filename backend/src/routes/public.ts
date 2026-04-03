@@ -107,7 +107,6 @@ publicRouter.get("/website-feed/vehicles", async (c) => {
             where: {
               showOnWebsite: true,
               isPrivate: false,
-              status: { in: ["available", "reserved"] },
             },
             include: {
               images: {
