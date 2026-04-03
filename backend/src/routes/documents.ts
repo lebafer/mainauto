@@ -210,11 +210,11 @@ function getDealerFooterHtml(profile: DealerDocumentProfile): string {
     profile.phone ? `Tel. ${profile.phone}` : "",
     profile.website ? `Web: ${profile.website}` : "",
   ].filter(Boolean).join(" &bull; ");
-  const bankLine = [
-    profile.bankName,
+  const bankLine = [profile.bankName].filter(Boolean).join(" &bull; ");
+  const bicLine = [
     profile.iban ? `IBAN: ${profile.iban}` : "",
+    profile.bic ? `BIC: ${profile.bic}` : "",
   ].filter(Boolean).join(" &bull; ");
-  const bicLine = profile.bic ? `BIC: ${profile.bic}` : "";
   const legalLine = [
     profile.taxId ? `USt-IdNr. ${profile.taxId}` : "",
     profile.legalRepresentative ? `Vertretungsberechtigt: ${profile.legalRepresentative}` : "",
@@ -896,8 +896,9 @@ function generateContract(
   if (vehicle.bodyType) vehicleRows.push(["Aufbau", vehicle.bodyType]);
   if (powerStr) vehicleRows.push(["Leistung", powerStr]);
   if (vehicle.vin) vehicleRows.push(["Fahrgestell-Nr.", vehicle.vin]);
-  if (vehicle.hsn) vehicleRows.push(["HSN", vehicle.hsn]);
-  if (vehicle.tsn) vehicleRows.push(["TSN", vehicle.tsn]);
+  if (vehicle.hsn || vehicle.tsn) {
+    vehicleRows.push(["HSN / TSN", [vehicle.hsn, vehicle.tsn].filter(Boolean).join(" / ")]);
+  }
   vehicleRows.push(["Fahrzeugbrief-Nr.", vehicle.registrationDocNumber ?? ""]);
   if (vehicle.color) vehicleRows.push(["Farbe", vehicle.color]);
   if (vehicle.transmission) vehicleRows.push(["Getriebe", vehicle.transmission]);
@@ -920,10 +921,8 @@ function generateContract(
     vehicleRows.push(["Anzahl Halter", String(vehicle.previousOwners)]);
   }
   vehicleRows.push(["Taxi-/Miet-/Fahrschule", "nein"]);
-  vehicleRows.push(["Unfallfrei (lt. Vorbesitzer)", vehicle.hasDamage ? "nein" : "ja"]);
-  vehicleRows.push(["Bekannte Vorschäden", vehicle.hasDamage ? "ja" : "nein"]);
   vehicleRows.push(["Fahrzeug fahrbereit", "ja"]);
-  vehicleRows.push(["Lieferdatum / verbindlich", contractDateFormatted + " / ja"]);
+  vehicleRows.push(["Unverbindliches Bereitstellungsdatum", contractDateFormatted]);
 
   const priceFormatted = formatGermanPrice(vehicle.sellingPrice);
   const priceInWords = numberToGermanWords(Math.round(vehicle.sellingPrice));
@@ -945,7 +944,6 @@ function generateContract(
 
   const besondereInfoHtml = vehicle.notes
     ? `<div class="features-block">
-        <p class="features-title">Besondere Informationen</p>
         <div class="features-text">${vehicle.notes}</div>
       </div>`
     : "";
@@ -1058,7 +1056,7 @@ function generateContract(
   .notes-text { font-size: 8.5pt; color: #333; margin-bottom: 4px; font-style: italic; }
 
   /* Signature */
-  .sig-row { display: flex; gap: 20px; margin-top: 22px; margin-bottom: 10px; }
+  .sig-row { display: flex; gap: 20px; margin-top: 34px; margin-bottom: 10px; }
   .sig-block { flex: 1; }
   .sig-label { font-size: 8pt; color: #555; min-height: 18px; margin-bottom: 0; }
   .sig-line { border-top: 1px solid #000; padding-top: 3px; font-size: 8pt; color: #333; }
