@@ -27,7 +27,9 @@ export function getCurrentSubscription(
   }
 
   const ordered = [...subscriptions].sort(
-    (left, right) => right.createdAt.getTime() - left.createdAt.getTime()
+    (left, right) =>
+      right.updatedAt.getTime() - left.updatedAt.getTime() ||
+      right.createdAt.getTime() - left.createdAt.getTime()
   );
 
   return (

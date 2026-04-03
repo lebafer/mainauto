@@ -106,7 +106,19 @@ function createEditForm(dealer: Dealer): DealerEditForm {
 }
 
 function getCurrentSubscription(dealer: Dealer) {
-  return dealer.subscriptions[0] ?? null;
+  const ordered = [...dealer.subscriptions].sort(
+    (left, right) =>
+      new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime() ||
+      new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+  );
+
+  return (
+    ordered.find((subscription) => subscription.status === "active") ??
+    ordered.find((subscription) => subscription.status === "trialing") ??
+    ordered.find((subscription) => subscription.status === "past_due") ??
+    ordered[0] ??
+    null
+  );
 }
 
 function getFeatureEnabled(subscription: SharedDealerSubscription | null, key: string) {

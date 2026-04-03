@@ -411,26 +411,45 @@ adminRouter.put(
     const dealerId = c.req.param("dealerId");
     const data = c.req.valid("json");
 
-    const existing = await prisma.dealerSubscription.findFirst({
-      where: {
-        dealerId,
-        planId: data.planId,
-      },
+    const existingSubscriptions = await prisma.dealerSubscription.findMany({
+      where: { dealerId },
+      orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     });
 
-    const subscription = existing
-      ? await prisma.dealerSubscription.update({
-          where: { id: existing.id },
-        data: {
-          status: data.status,
-          complimentaryAccess: data.complimentaryAccess,
-          featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
-          billingNotes: data.billingNotes ?? null,
-          endsAt: data.endsAt ? new Date(data.endsAt) : null,
+    const targetSubscription = existingSubscriptions.find((subscription) => subscription.planId === data.planId) ?? null;
+
+    const subscription = await prisma.$transaction(async (tx) => {
+      const targetId = targetSubscription?.id ?? null;
+      const otherActiveIds = existingSubscriptions
+        .filter((subscription) => subscription.id !== targetId)
+        .map((subscription) => subscription.id);
+
+      if (otherActiveIds.length > 0) {
+        await tx.dealerSubscription.updateMany({
+          where: { id: { in: otherActiveIds } },
+          data: {
+            status: "canceled",
+            complimentaryAccess: false,
+            endsAt: new Date(),
+          },
+        });
+      }
+
+      if (targetSubscription) {
+        return tx.dealerSubscription.update({
+          where: { id: targetSubscription.id },
+          data: {
+            status: data.status,
+            complimentaryAccess: data.complimentaryAccess ?? targetSubscription.complimentaryAccess,
+            featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
+            billingNotes: data.billingNotes ?? null,
+            endsAt: data.endsAt ? new Date(data.endsAt) : null,
           },
           include: { plan: true },
-        })
-      : await prisma.dealerSubscription.create({
+        });
+      }
+
+      return tx.dealerSubscription.create({
         data: {
           dealerId,
           planId: data.planId,
@@ -439,9 +458,10 @@ adminRouter.put(
           featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
           billingNotes: data.billingNotes ?? null,
           endsAt: data.endsAt ? new Date(data.endsAt) : null,
-          },
-          include: { plan: true },
-        });
+        },
+        include: { plan: true },
+      });
+    });
 
     return c.json({ data: subscription });
   }
