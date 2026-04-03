@@ -106,6 +106,15 @@ interface Customer {
   firstName: string;
   lastName: string;
   company: string | null;
+  customerType?: "privat" | "gewerblich" | null;
+  address?: string | null;
+  city?: string | null;
+  zip?: string | null;
+  country?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  phone2?: string | null;
+  taxId?: string | null;
   idDocumentType?: string | null;
   idDocumentNumber?: string | null;
   idDocumentValidUntil?: string | null;
@@ -168,6 +177,8 @@ export default function VehicleDetail() {
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
+  const [contractPlace, setContractPlace] = useState("");
+  const [contractDate, setContractDate] = useState(() => new Date().toISOString().split("T")[0] ?? "");
   const [showNewContractCustomer, setShowNewContractCustomer] = useState(false);
   const [contractNewFirstName, setContractNewFirstName] = useState("");
   const [contractNewLastName, setContractNewLastName] = useState("");
@@ -230,7 +241,17 @@ export default function VehicleDetail() {
   });
 
   const generateDocMutation = useMutation({
-    mutationFn: async ({ type, customerId }: { type: string; customerId?: string }) => {
+    mutationFn: async ({
+      type,
+      customerId,
+      contractPlace,
+      contractDate,
+    }: {
+      type: string;
+      customerId?: string;
+      contractPlace?: string;
+      contractDate?: string;
+    }) => {
       if (type === "contract") {
         // Generate PDF directly from backend
         const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
@@ -238,7 +259,13 @@ export default function VehicleDetail() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ type, vehicleId: id, ...(customerId ? { customerId } : {}) }),
+          body: JSON.stringify({
+            type,
+            vehicleId: id,
+            ...(customerId ? { customerId } : {}),
+            ...(contractPlace ? { contractPlace } : {}),
+            ...(contractDate ? { contractDate } : {}),
+          }),
         });
         if (!res.ok) throw new Error("PDF-Erstellung fehlgeschlagen");
         const blob = await res.blob();
@@ -276,7 +303,13 @@ export default function VehicleDetail() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({ type: "contract", vehicleId: id, customerId: variables.customerId }),
+            body: JSON.stringify({
+              type: "contract",
+              vehicleId: id,
+              customerId: variables.customerId,
+              ...(variables.contractPlace ? { contractPlace: variables.contractPlace } : {}),
+              ...(variables.contractDate ? { contractDate: variables.contractDate } : {}),
+            }),
           });
           if (htmlRes.ok) {
             const htmlData = await htmlRes.json();
@@ -960,6 +993,27 @@ export default function VehicleDetail() {
                 </Button>
               </div>
             ) : null}
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Ort im Vertrag</Label>
+                <Input
+                  className="h-8 text-sm"
+                  placeholder="z.B. Berlin"
+                  value={contractPlace}
+                  onChange={(e) => setContractPlace(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Vertragsdatum</Label>
+                <Input
+                  className="h-8 text-sm"
+                  type="date"
+                  value={contractDate}
+                  onChange={(e) => setContractDate(e.target.value)}
+                />
+              </div>
+            </div>
           </div>
 
           <DialogFooter>
@@ -973,6 +1027,8 @@ export default function VehicleDetail() {
                 generateDocMutation.mutate({
                   type: "contract",
                   customerId: contractCustomerId,
+                  contractPlace,
+                  contractDate,
                 });
               }}
             >

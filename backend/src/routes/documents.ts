@@ -204,12 +204,23 @@ function getDealerDocumentProfile(c: { get: (name: string) => unknown }): Dealer
 }
 
 function getDealerFooterHtml(profile: DealerDocumentProfile): string {
-  return `
-    ${profile.documentFooterText}<br>
-    E-Mail: ${profile.email} &bull; Tel. ${profile.phone} &bull; Web: ${profile.website}<br>
-    ${profile.bankName} &bull; IBAN: ${profile.iban} &bull; BIC: ${profile.bic}<br>
-    ${profile.documentLegalText || `USt-IdNr. ${profile.taxId} &bull; Vertretungsberechtigt: ${profile.legalRepresentative}`}
-  `;
+  const locationLine = [profile.addressLine1, profile.cityLine, profile.country].filter(Boolean).join(" &bull; ");
+  const contactLine = [
+    profile.email ? `E-Mail: ${profile.email}` : "",
+    profile.phone ? `Tel. ${profile.phone}` : "",
+    profile.website ? `Web: ${profile.website}` : "",
+  ].filter(Boolean).join(" &bull; ");
+  const bankLine = [
+    profile.bankName,
+    profile.iban ? `IBAN: ${profile.iban}` : "",
+    profile.bic ? `BIC: ${profile.bic}` : "",
+  ].filter(Boolean).join(" &bull; ");
+  const legalLine = [
+    profile.taxId ? `USt-IdNr. ${profile.taxId}` : "",
+    profile.legalRepresentative ? `Vertretungsberechtigt: ${profile.legalRepresentative}` : "",
+  ].filter(Boolean).join(" &bull; ");
+
+  return [profile.name, locationLine, contactLine, bankLine, legalLine].filter(Boolean).join("<br>");
 }
 
 function getLogoImgHtml(
@@ -506,6 +517,17 @@ function getSalesContractTaxationInfo(vehicle: {
     label: `Regelbesteuerung (${vehicle.taxRate}% MwSt.)`,
     legalNotice: `Umsatzsteuer wird mit ${vehicle.taxRate}% ausgewiesen.`,
   };
+}
+
+function getPrivateSalesContractLegalHtml(): string {
+  return `
+    <p class="legal-text"><strong>Verkürzung der Verjährungsfrist beim Verkauf von Gebrauchtfahrzeugen</strong></p>
+    <p class="legal-text">Die gesetzlich geregelte Verjährungsfrist für die Geltendmachung von Ansprüchen wegen Sachmängeln und/oder Rechtsmängeln einer Sache beträgt 2 Jahre. Hiervon abweichend wurde ich über Folgendes informiert:</p>
+    <p class="legal-text">Die Mercedes-Benz AG als Verkäufer wird den Kaufgegenstand nur im Falle der Vereinbarung einer Verjährungsfrist von 1 Jahr für Ansprüche wegen Sachmängeln und Rechtsmängeln verkaufen.</p>
+    <p class="legal-text">Die Verkürzung der Verjährungsfrist auf 1 Jahr wird jedoch nicht für Schäden gelten, die auf einer grob fahrlässigen oder vorsätzlichen Verletzung von Pflichten des Verkäufers, seines gesetzlichen Vertreters oder seines Erfüllungsgehilfen beruhen sowie bei Verletzung von Leben, Körper oder Gesundheit.</p>
+    <p class="legal-text">Hat der Verkäufer aufgrund der gesetzlichen Bestimmungen für einen Schaden aufzukommen, der leicht fahrlässig verursacht wurde, so haftet der Verkäufer nur beschränkt: Die Haftung besteht nur bei Verletzung vertragswesentlicher Pflichten, etwa solcher, die der Kaufvertrag dem Verkäufer nach seinem Inhalt und Zweck gerade auferlegen will oder deren Erfüllung die ordnungsgemäße Durchführung des Kaufvertrages überhaupt erst ermöglicht und auf deren Einhaltung der Käufer regelmäßig vertraut und vertrauen darf. Diese Haftung ist auf den bei Vertragsabschluss vorhersehbaren typischen Schaden begrenzt.</p>
+    <p class="legal-text">Ausgeschlossen ist die persönliche Haftung der gesetzlichen Vertreter, Erfüllungsgehilfen und Betriebsangehörigen des Verkäufers für von ihnen durch leichte Fahrlässigkeit verursachte Schäden.</p>
+  `;
 }
 
 function baseStyles(): string {
@@ -820,6 +842,7 @@ function generateContract(
     firstName: string;
     lastName: string;
     company: string | null;
+    customerType?: string | null;
     address: string | null;
     city: string | null;
     zip: string | null;
@@ -828,13 +851,18 @@ function generateContract(
     phone: string | null;
     phone2: string | null;
     taxId: string | null;
-  }
-  ,
+  },
   dealerProfile: DealerDocumentProfile,
+  contractMeta?: {
+    place?: string;
+    date?: string;
+  },
   logoSrc: string | null = null
 ): string {
-  const today = new Date();
-  const todayFormatted = formatDateDE(today);
+  const contractDate = contractMeta?.date ? new Date(contractMeta.date) : new Date();
+  const contractDateFormatted = formatDateDE(contractDate);
+  const contractPlace = contractMeta?.place?.trim() || getDealerSignatureCity(dealerProfile);
+  const isBusinessCustomer = customer.customerType === "gewerblich" || Boolean(customer.company?.trim());
 
   // Parse features
   let featuresList: string[] = [];
@@ -892,7 +920,7 @@ function generateContract(
   vehicleRows.push(["Unfallfrei (lt. Vorbesitzer)", vehicle.hasDamage ? "nein" : "ja"]);
   vehicleRows.push(["Bekannte Vorschäden", vehicle.hasDamage ? "ja" : "nein"]);
   vehicleRows.push(["Fahrzeug fahrbereit", "ja"]);
-  vehicleRows.push(["Lieferdatum / verbindlich", todayFormatted + " / ja"]);
+  vehicleRows.push(["Lieferdatum / verbindlich", contractDateFormatted + " / ja"]);
 
   const priceFormatted = formatGermanPrice(vehicle.sellingPrice);
   const priceInWords = numberToGermanWords(Math.round(vehicle.sellingPrice));
@@ -943,6 +971,9 @@ function generateContract(
   </div>`;
 
   const taxationInfo = getSalesContractTaxationInfo(vehicle);
+  const legalNoticeHtml = isBusinessCustomer
+    ? `<p class="legal-text">Der K&auml;ufer erkl&auml;rt ausdr&uuml;cklich, dass er Unternehmer im Sinne des &sect;2 UStG ist und das erworbene Fahrzeug in seiner Firma als Gesch&auml;ftsfahrzeug &uuml;berwiegend unternehmerisch nutzt oder aber gewerblich weiter ver&auml;u&szlig;ert. Der K&auml;ufer verzichtet ausdr&uuml;cklich auf eine Gew&auml;hrleistung durch den Verk&auml;ufer. Das Fahrzeug wird verkauft unter Ausschluss jeglicher Gew&auml;hrleistung. Ausgenommen hiervon sind Sch&auml;den wegen Verletzung von K&ouml;rper, Leben, Gesundheit sowie F&auml;lle vors&auml;tzlicher oder grob fahrl&auml;ssiger Sch&auml;digung des Vertragspartners.</p>`
+    : getPrivateSalesContractLegalHtml();
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -1084,7 +1115,7 @@ function generateContract(
 
   <div class="legal-section-title">Zahlungsweise + sonstige Vereinbarungen mit Vorrang auf die ausgeh&auml;ndigten Gesch&auml;ftsbedingungen:</div>
 
-  <p class="legal-text">Der K&auml;ufer erkl&auml;rt ausdr&uuml;cklich, dass er Unternehmer im Sinne des &sect;2 UStG ist und das erworbene Fahrzeug in seiner Firma als Gesch&auml;ftsfahrzeug &uuml;berwiegend unternehmerisch nutzt oder aber gewerblich weiter ver&auml;u&szlig;ert. Der K&auml;ufer verzichtet ausdr&uuml;cklich auf eine Gew&auml;hrleistung durch den Verk&auml;ufer. Das Fahrzeug wird verkauft unter Ausschluss jeglicher Gew&auml;hrleistung. Ausgenommen hiervon sind Sch&auml;den wegen Verletzung von K&ouml;rper, Leben, Gesundheit sowie F&auml;lle vors&auml;tzlicher oder grob fahrl&auml;ssiger Sch&auml;digung des Vertragspartners.</p>
+  ${legalNoticeHtml}
 
   <p class="legal-text">Der Verk&auml;ufer versichert die Richtigkeit der in diesem Vertrag niedergelegten Angaben &uuml;ber das Fahrzeug. Der Lieferzeitpunkt ist, wenn keine anderen Vereinbarungen getroffen wurden, das Datum des Ankaufs. Bei Minderj&auml;hrigen muss der Kaufvertrag durch den gesetzlichen Vertreter unterschrieben werden. Mit seiner Unterschrift best&auml;tigt der Verk&auml;ufer die Annahme der Bestellung.</p>
 
@@ -1098,7 +1129,7 @@ function generateContract(
       <div class="sig-line">Unterschrift Verk&auml;ufer</div>
     </div>
   </div>
-  <div class="sig-city">${getDealerSignatureCity(dealerProfile)}, ${todayFormatted}</div>
+  <div class="sig-city">${escapeHtml(contractPlace)}, ${contractDateFormatted}</div>
 
   <div class="doc-footer">${getDealerFooterHtml(dealerProfile)}</div>
 
@@ -1350,7 +1381,7 @@ documentsRouter.post(
   async (c) => {
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
-    const { type, vehicleId, customerId } = c.req.valid("json");
+    const { type, vehicleId, customerId, contractPlace, contractDate } = c.req.valid("json");
     const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     const vehicle = await prisma.vehicle.findFirst({
@@ -1387,7 +1418,7 @@ documentsRouter.post(
             400
           );
         }
-        html = generateContract(vehicle, customer, dealerProfile, logoSrc);
+        html = generateContract(vehicle, customer, dealerProfile, { place: contractPlace, date: contractDate }, logoSrc);
         break;
       default:
         return c.json({ error: { message: "Invalid document type", code: "BAD_REQUEST" } }, 400);
@@ -1404,7 +1435,7 @@ documentsRouter.post(
   async (c) => {
     const dealerId = getCurrentDealerId(c);
     const dealerProfile = getDealerDocumentProfile(c);
-    const { type, vehicleId, customerId } = c.req.valid("json");
+    const { type, vehicleId, customerId, contractPlace, contractDate } = c.req.valid("json");
     const logoSrc = await resolveDocumentLogoSrc(c, dealerProfile);
 
     if (type !== "contract") {
@@ -1425,7 +1456,7 @@ documentsRouter.post(
       return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
     }
 
-    const html = generateContract(vehicle, customer, dealerProfile, logoSrc);
+    const html = generateContract(vehicle, customer, dealerProfile, { place: contractPlace, date: contractDate }, logoSrc);
 
     try {
       const pdfBuffer = await htmlToPdf(html);

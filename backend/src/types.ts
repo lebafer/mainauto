@@ -539,6 +539,8 @@ export const DocumentGenerateSchema = z.object({
   type: DocumentTypeSchema,
   vehicleId: z.string().min(1, "Vehicle ID is required"),
   customerId: z.string().optional(),
+  contractPlace: z.string().trim().optional(),
+  contractDate: z.string().trim().optional(),
 });
 
 export type DocumentGenerate = z.infer<typeof DocumentGenerateSchema>;
