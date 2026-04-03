@@ -914,8 +914,7 @@ function generateContract(
   if (vehicle.firstRegistration) vehicleRows.push(["Erstzulassung", formatDateDE(vehicle.firstRegistration)]);
   vehicleRows.push(["Km-Stand", vehicle.mileage.toLocaleString("de-DE") + " km"]);
   if (vehicle.huDue) {
-    vehicleRows.push(["n\u00e4chste HU", formatMonthYearDE(vehicle.huDue)]);
-    vehicleRows.push(["n\u00e4chste AU", formatMonthYearDE(vehicle.huDue)]);
+    vehicleRows.push(["N\u00e4chste HU / AU", formatMonthYearDE(vehicle.huDue)]);
   }
   if (vehicle.previousOwners !== null && vehicle.previousOwners !== undefined) {
     vehicleRows.push(["Anzahl Halter", String(vehicle.previousOwners)]);
