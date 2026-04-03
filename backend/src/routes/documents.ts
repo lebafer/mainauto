@@ -446,6 +446,23 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function plainTextFromHtml(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+}
+
 /**
  * Tax calculation:
  * - Regular taxation (marginTaxed=false): gross = net * (1 + taxRate/100)
@@ -464,6 +481,31 @@ function calculateTaxAmount(net: number, taxRate: number, marginTaxed: boolean):
     return 0; // No separate tax shown for Differenzbesteuerung
   }
   return net * (taxRate / 100);
+}
+
+function getSalesContractTaxationInfo(vehicle: {
+  marginTaxed: boolean;
+  taxRate: number;
+  exportEnabled?: boolean | null;
+}): { label: string; legalNotice: string } {
+  if (vehicle.marginTaxed) {
+    return {
+      label: "Differenzbesteuerung",
+      legalNotice: "Differenzbesteuerung gem. § 25a UStG. Mehrwertsteuer wird nicht ausgewiesen.",
+    };
+  }
+
+  if (vehicle.exportEnabled) {
+    return {
+      label: "Nettoverkauf / steuerfreie Lieferung",
+      legalNotice: "Steuerfreie Ausfuhrlieferung gem. § 4 Nr. 1a UStG i.V.m. § 6 UStG bzw. innergemeinschaftliche Lieferung gem. § 4 Nr. 1b UStG i.V.m. § 6a UStG, sofern die gesetzlichen Voraussetzungen und Nachweise vorliegen.",
+    };
+  }
+
+  return {
+    label: `Regelbesteuerung (${vehicle.taxRate}% MwSt.)`,
+    legalNotice: `Umsatzsteuer wird mit ${vehicle.taxRate}% ausgewiesen.`,
+  };
 }
 
 function baseStyles(): string {
@@ -768,6 +810,9 @@ function generateContract(
     huDue: Date | string | null;
     previousOwners: number | null;
     hasDamage: boolean;
+    damageDescription: string | null;
+    damageAmount: number | null;
+    exportEnabled: boolean;
     vehicleNumber: string;
     notes: string | null;
   },
@@ -845,6 +890,7 @@ function generateContract(
   }
   vehicleRows.push(["Taxi-/Miet-/Fahrschule", "nein"]);
   vehicleRows.push(["Unfallfrei (lt. Vorbesitzer)", vehicle.hasDamage ? "nein" : "ja"]);
+  vehicleRows.push(["Bekannte Vorschäden", vehicle.hasDamage ? "ja" : "nein"]);
   vehicleRows.push(["Fahrzeug fahrbereit", "ja"]);
   vehicleRows.push(["Lieferdatum / verbindlich", todayFormatted + " / ja"]);
 
@@ -877,9 +923,26 @@ function generateContract(
     ? `<p class="co2-line">Komb. CO2-Emission (gewichtet): ${vehicle.co2Emission} g/km</p>`
     : "";
 
-  const marginNoteHtml = vehicle.marginTaxed
-    ? `<p class="margin-note">netto Export</p>`
-    : "";
+  const damageDetails: string[] = [];
+  if (vehicle.hasDamage && vehicle.damageDescription?.trim()) {
+    damageDetails.push(escapeHtml(vehicle.damageDescription.trim()));
+  }
+  if (vehicle.hasDamage && vehicle.damageAmount != null) {
+    damageDetails.push(`Bekannte Schadenshöhe/Reparaturkosten: ${escapeHtml(formatGermanPrice(vehicle.damageAmount))}`);
+  }
+
+  const damageDisclosureHtml = `<div class="features-block">
+    <p class="features-title">Vorschäden</p>
+    <div class="features-text">
+      ${vehicle.hasDamage
+        ? (damageDetails.length > 0
+            ? damageDetails.map((detail) => `<p>${detail}</p>`).join("")
+            : "<p>Ja, bekannte Vorschäden vorhanden.</p>")
+        : "<p>Keine bekannten Vorschäden.</p>"}
+    </div>
+  </div>`;
+
+  const taxationInfo = getSalesContractTaxationInfo(vehicle);
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -936,7 +999,9 @@ function generateContract(
   .price-block { margin: 8px 0 4px; }
   .price-line { font-size: 13pt; font-weight: bold; margin-bottom: 2px; }
   .price-words { font-size: 9pt; margin-bottom: 2px; }
-  .margin-note { font-size: 9pt; font-style: italic; color: #444; }
+  .price-taxation { font-size: 8.5pt; color: #222; margin-top: 6px; }
+  .price-taxation strong { color: #000; }
+  .price-taxation-note { font-size: 8pt; color: #444; margin-top: 2px; }
   .co2-line { font-size: 8.5pt; margin-top: 4px; color: #333; }
 
   /* Legal text */
@@ -1002,12 +1067,15 @@ function generateContract(
 
   ${ausstattungHtml}
 
+  ${damageDisclosureHtml}
+
   ${besondereInfoHtml}
 
   <div class="price-block">
     <div class="price-line">Kaufpreis: ${priceFormatted}</div>
     <div class="price-words">In Worten: ${priceInWords}</div>
-    ${marginNoteHtml}
+    <div class="price-taxation"><strong>Besteuerungsart:</strong> ${taxationInfo.label}</div>
+    <div class="price-taxation-note">${taxationInfo.legalNotice}</div>
   </div>
 
   ${co2Html}
@@ -1127,7 +1195,7 @@ function generatePurchaseContract(
       </div>
     `).join("");
 
-  const vehicleNoteParts = [vehicle.damageDescription, vehicle.notes?.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()]
+  const vehicleNoteParts = [vehicle.damageDescription, plainTextFromHtml(vehicle.notes)]
     .filter(Boolean);
   if (vehicle.damageAmount) {
     vehicleNoteParts.push(`Bekannte Aufbereitung/Reparatur ca. ${formatGermanPrice(vehicle.damageAmount)}`);
