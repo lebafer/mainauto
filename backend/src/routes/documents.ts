@@ -220,7 +220,10 @@ function getDealerFooterHtml(profile: DealerDocumentProfile): string {
     profile.legalRepresentative ? `Vertretungsberechtigt: ${profile.legalRepresentative}` : "",
   ].filter(Boolean).join(" &bull; ");
 
-  return [profile.name, locationLine, contactLine, bankLine, legalLine].filter(Boolean).join("<br>");
+  const headerLine = [profile.name, locationLine].filter(Boolean).join(" &bull; ");
+  const financeLine = [contactLine, bankLine].filter(Boolean).join(" &bull; ");
+
+  return [headerLine, financeLine, legalLine].filter(Boolean).join("<br>");
 }
 
 function getLogoImgHtml(
@@ -1061,7 +1064,7 @@ function generateContract(
   .sig-city { font-size: 8.5pt; margin-top: 4px; }
 
   /* Footer */
-  .doc-footer { border-top: 1.5px solid #000; margin-top: 18px; padding-top: 6px; font-size: 7.5pt; color: #333; text-align: center; line-height: 1.7; }
+  .doc-footer { border-top: 1.5px solid #000; margin-top: 18px; padding-top: 8px; font-size: 7.2pt; color: #333; text-align: center; line-height: 1.5; }
 
   @media print {
     body { margin: 0; }
