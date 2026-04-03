@@ -221,6 +221,7 @@ export default function VehicleDetail() {
   const [vermManualPhone, setVermManualPhone] = useState("");
   const [vermManualEmail, setVermManualEmail] = useState("");
   const [vermLoading, setVermLoading] = useState(false);
+  const dealerDefaultContractPlace = session?.dealerSettings?.city?.trim() ?? "";
 
   const { data: vehicle, isLoading } = useQuery({
     queryKey: ["vehicle", id],
@@ -392,6 +393,13 @@ export default function VehicleDetail() {
         : ""
     );
   }, [selectedGbCustomer]);
+
+  useEffect(() => {
+    if (!contractDialogOpen) return;
+    if (contractPlace.trim()) return;
+    if (!dealerDefaultContractPlace) return;
+    setContractPlace(dealerDefaultContractPlace);
+  }, [contractDialogOpen, contractPlace, dealerDefaultContractPlace]);
 
   async function handlePurchaseContractDownload() {
     if (!id || !vehicle) return;
