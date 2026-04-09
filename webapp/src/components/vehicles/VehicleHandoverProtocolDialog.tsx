@@ -327,11 +327,11 @@ function DamageMarkerDescriptions({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-3 md:grid-cols-2">
       {markers.map((marker, index) => (
-        <div key={marker.id} className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-rose-700 bg-rose-50 text-sm font-bold text-rose-800">
+        <div key={marker.id} className="rounded-2xl border border-border/70 bg-background p-3 shadow-sm">
+          <div className="mb-2 flex items-center gap-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 bg-rose-50 text-xs font-bold text-rose-800">
               {index + 1}
             </div>
             <div>
@@ -349,7 +349,7 @@ function DamageMarkerDescriptions({
               );
               form.setValue("damage.markers", nextMarkers, { shouldDirty: true });
             }}
-            className="min-h-[96px]"
+            className="min-h-[72px] resize-none"
             placeholder="z.B. Steinschlag Motorhaube"
           />
         </div>
