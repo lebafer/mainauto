@@ -6,7 +6,6 @@ import { CarFront, FileDown, Loader2, Printer, Save } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { type Vehicle } from "@/lib/vehicles";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -445,7 +444,6 @@ export function VehicleHandoverProtocolDialog({
   open,
   onOpenChange,
 }: VehicleHandoverProtocolDialogProps) {
-  const isMobile = useIsMobile();
   const [discardDialogOpen, setDiscardDialogOpen] = useState(false);
   const [loadedSnapshot, setLoadedSnapshot] = useState<HandoverProtocol>(EMPTY_PROTOCOL);
   const lastAppliedCustomerIdRef = useRef<string | null>(null);
@@ -907,32 +905,22 @@ export function VehicleHandoverProtocolDialog({
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent
-          className={
-            isMobile
-              ? "flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 p-0"
-              : "flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0"
-          }
+          className="flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 p-0 sm:h-auto sm:max-h-[92vh] sm:w-[calc(100%-1rem)] sm:max-w-6xl sm:rounded-lg sm:border"
         >
-          <DialogHeader className={isMobile ? "border-b px-4 py-4 text-left" : "border-b px-6 py-5"}>
+          <DialogHeader className="border-b px-4 py-4 text-left sm:px-6 sm:py-5">
             <DialogTitle>{headerTitle}</DialogTitle>
             <DialogDescription>{headerDescription}</DialogDescription>
           </DialogHeader>
-          <div className={isMobile ? "min-h-0 flex-1 overflow-y-auto px-4 py-4" : "min-h-0 flex-1 overflow-y-auto px-6 py-5"}>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             {handoverQuery.isLoading ? (
-              <div className={isMobile ? "flex items-center justify-center py-16" : "flex items-center justify-center py-20"}>
+              <div className="flex items-center justify-center py-16 sm:py-20">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : (
               content
             )}
           </div>
-          <DialogFooter
-            className={
-              isMobile
-                ? "border-t px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
-                : "border-t px-6 py-4"
-            }
-          >
+          <DialogFooter className="border-t px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:px-6 sm:py-4 sm:pb-4">
             {footer}
           </DialogFooter>
         </DialogContent>
