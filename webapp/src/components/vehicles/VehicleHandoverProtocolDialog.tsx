@@ -915,7 +915,7 @@ export function VehicleHandoverProtocolDialog({
     <>
       {isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>
-          <DrawerContent className="flex h-[92vh] flex-col">
+          <DrawerContent className="top-0 mt-0 flex h-[100dvh] rounded-none border-0">
             <DrawerHeader className="border-b px-4 pb-4">
               <DrawerTitle>{headerTitle}</DrawerTitle>
               <DrawerDescription>{headerDescription}</DrawerDescription>
@@ -929,7 +929,7 @@ export function VehicleHandoverProtocolDialog({
                 content
               )}
             </div>
-            <DrawerFooter className="border-t bg-background/95 backdrop-blur">
+            <DrawerFooter className="border-t bg-background/95 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur">
               {footer}
             </DrawerFooter>
           </DrawerContent>
