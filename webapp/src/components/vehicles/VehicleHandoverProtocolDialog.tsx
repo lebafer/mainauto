@@ -915,7 +915,7 @@ export function VehicleHandoverProtocolDialog({
     <>
       {isMobile ? (
         <Drawer open={open} onOpenChange={handleOpenChange}>
-          <DrawerContent className="flex max-h-[92vh] flex-col">
+          <DrawerContent className="flex h-[92vh] flex-col">
             <DrawerHeader className="border-b px-4 pb-4">
               <DrawerTitle>{headerTitle}</DrawerTitle>
               <DrawerDescription>{headerDescription}</DrawerDescription>
