@@ -69,9 +69,9 @@ export default function Login() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(37,78,129,0.18),transparent_35%)]" />
 
       <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
-        <CardHeader className="space-y-6 text-center">
+        <CardHeader className="space-y-5 text-center sm:space-y-6">
           <div className="flex justify-center">
-            <CarOpsLogo className="max-h-40 max-w-[26rem]" />
+            <CarOpsLogo className="max-h-24 max-w-[14rem] sm:max-h-40 sm:max-w-[26rem]" />
           </div>
           <div className="space-y-2">
             <CardTitle className="text-2xl">Willkommen zurueck</CardTitle>

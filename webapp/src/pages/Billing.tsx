@@ -137,7 +137,7 @@ export default function Billing() {
               ) : null}
             </div>
             <div className="space-y-3">
-              <CardTitle className="text-3xl">
+              <CardTitle className="text-2xl sm:text-3xl">
                 {session.billing.isComplimentary
                   ? `${session.subscription?.plan?.name ?? "CarOps"} ist kostenlos für dieses Autohaus freigeschaltet.`
                   : session.billing.requiresPayment

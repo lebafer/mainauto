@@ -208,6 +208,7 @@ function DocumentUpload({
             onClick={handleUpload}
             disabled={uploading || !selectedFile || !docName.trim()}
             size="sm"
+            className="w-full sm:w-auto"
           >
             {uploading ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -315,7 +316,7 @@ export default function CustomerDetail() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               {customer.firstName} {customer.lastName}
             </h1>
             {customer.company ? (
@@ -326,8 +327,8 @@ export default function CustomerDetail() {
             ) : null}
           </div>
         </div>
-        <div className="flex items-center gap-2 ml-14 sm:ml-0">
-          <Button variant="outline" asChild>
+        <div className="ml-14 flex flex-col gap-2 sm:ml-0 sm:flex-row sm:items-center">
+          <Button variant="outline" asChild className="w-full sm:w-auto">
             <Link to={`/customers/${id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Bearbeiten
@@ -335,7 +336,7 @@ export default function CustomerDetail() {
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" className="text-destructive hover:text-destructive">
+              <Button variant="outline" className="w-full text-destructive hover:text-destructive sm:w-auto">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Loschen
               </Button>
@@ -446,7 +447,32 @@ export default function CustomerDetail() {
                   </p>
                 </div>
               ) : (
-                <Table>
+                <>
+                  <div className="space-y-3 md:hidden">
+                    {customer.vehicles.map((vehicle) => (
+                      <div
+                        key={vehicle.id}
+                        className="cursor-pointer rounded-xl border bg-background/70 p-4"
+                        onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium">
+                              {vehicle.brand} {vehicle.model}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">{vehicle.year}</p>
+                          </div>
+                          <Badge variant="outline">{vehicle.status}</Badge>
+                        </div>
+                        <div className="mt-3 text-sm">
+                          <p className="text-xs text-muted-foreground">Preis</p>
+                          <p className="font-medium">{formatCurrency(vehicle.sellingPrice)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block">
+                    <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fahrzeug</TableHead>
@@ -479,7 +505,9 @@ export default function CustomerDetail() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -578,7 +606,27 @@ export default function CustomerDetail() {
                   </p>
                 </div>
               ) : (
-                <Table>
+                <>
+                  <div className="space-y-3 md:hidden">
+                    {customer.sales.map((sale) => (
+                      <div
+                        key={sale.id}
+                        className="cursor-pointer rounded-xl border bg-background/70 p-4"
+                        onClick={() => navigate(`/vehicles/${sale.vehicle.id}`)}
+                      >
+                        <div className="font-medium">
+                          {sale.vehicle.brand} {sale.vehicle.model}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{formatDate(sale.saleDate)}</div>
+                        <div className="mt-3 text-sm">
+                          <p className="text-xs text-muted-foreground">Preis</p>
+                          <p className="font-medium">{formatCurrency(sale.salePrice)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block">
+                    <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fahrzeug</TableHead>
@@ -616,7 +664,9 @@ export default function CustomerDetail() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

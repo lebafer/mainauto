@@ -25,6 +25,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 
 type StatusFilter = "all" | "available" | "reserved" | "sold";
 type VisibilityFilter = "all" | "business" | "private";
@@ -59,12 +60,12 @@ export default function VehicleList() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Fahrzeuge</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Fahrzeuge</h1>
           <p className="text-muted-foreground">
             Verwalten Sie Ihren Fahrzeugbestand
           </p>
         </div>
-        <Button asChild className="bg-amber-600 hover:bg-amber-700">
+        <Button asChild className="w-full bg-amber-600 hover:bg-amber-700 sm:w-auto">
           <Link to="/vehicles/new">
             <Plus className="mr-2 h-4 w-4" />
             Neues Fahrzeug
@@ -73,7 +74,7 @@ export default function VehicleList() {
       </div>
 
       {/* Search + Filter */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -120,8 +121,84 @@ export default function VehicleList() {
           visibilityFilter={visibilityFilter}
         />
       ) : (
-        <div className="rounded-lg border bg-card">
-          <Table>
+        <>
+          <div className="space-y-3 md:hidden">
+            {vehicles.map((vehicle) => {
+              const primaryImage = getPrimaryImage(vehicle);
+
+              return (
+                <Card
+                  key={vehicle.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/60">
+                        {primaryImage ? (
+                          <img
+                            src={getFileUrl(primaryImage.url)}
+                            alt={`${vehicle.brand} ${vehicle.model}`}
+                            className="h-full w-full object-contain p-1"
+                          />
+                        ) : (
+                          <Car className="h-5 w-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">
+                            {vehicle.brand} {vehicle.model}
+                          </p>
+                          {privateVehiclesEnabled && vehicle.isPrivate ? (
+                            <Badge
+                              variant="outline"
+                              className={`h-5 px-2 text-[11px] ${PRIVATE_VEHICLE_BADGE_CLASSNAME}`}
+                            >
+                              Privat
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="font-mono text-xs text-muted-foreground">{vehicle.vehicleNumber}</p>
+                        <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Baujahr</p>
+                            <p className="font-medium">
+                              {vehicle.firstRegistration
+                                ? new Date(vehicle.firstRegistration).getFullYear()
+                                : vehicle.year ?? "--"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Kilometer</p>
+                            <p className="font-medium">{formatMileage(vehicle.mileage)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Preis</p>
+                            <p className="font-medium">
+                              {formatPrice(
+                                calculateGrossPrice(
+                                  vehicle.sellingPrice,
+                                  vehicle.taxRate,
+                                  vehicle.marginTaxed
+                                )
+                              )}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Status</p>
+                            <StatusBadge status={vehicle.status} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          <div className="hidden rounded-lg border bg-card md:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Fahrzeug</TableHead>
@@ -206,8 +283,9 @@ export default function VehicleList() {
                 );
               })}
             </TableBody>
-          </Table>
-        </div>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

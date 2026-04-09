@@ -987,6 +987,7 @@ export function VehicleForm({
 
               <Button
                 type="button"
+                className="w-full md:w-auto"
                 onClick={handleBriefExtraction}
                 disabled={!aiBriefEnabled || briefFiles.length === 0 || extractBriefMutation.isPending}
               >
@@ -1027,7 +1028,7 @@ export function VehicleForm({
                 control={form.control}
                 name="isPrivate"
                 render={({ field }) => (
-                  <FormItem className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:min-w-[220px]">
+                  <FormItem className="flex w-full items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:w-auto sm:min-w-[220px]">
                     <div className="space-y-0.5">
                       <FormLabel className="cursor-pointer text-sm">Privat</FormLabel>
                       <p className="text-[11px] text-muted-foreground">
@@ -2307,7 +2308,7 @@ export function VehicleForm({
         {isPrivateMode ? null : (
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-3">
+            <CardTitle className="flex flex-col items-start gap-3 text-lg sm:flex-row sm:items-center">
               Export / Portugal
               <FormField
                 control={form.control}

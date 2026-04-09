@@ -115,14 +115,14 @@ export default function CustomerNew() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/customers">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Neuer Kunde</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Neuer Kunde</h1>
           <p className="text-muted-foreground">Neuen Kunden anlegen</p>
         </div>
       </div>
@@ -141,7 +141,7 @@ export default function CustomerNew() {
               control={control}
               name="customerType"
               render={({ field }) => (
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => field.onChange("privat")}

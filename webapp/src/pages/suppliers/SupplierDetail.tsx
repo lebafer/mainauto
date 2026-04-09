@@ -152,7 +152,7 @@ export default function SupplierDetail() {
           </Button>
           <div>
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-3xl font-bold tracking-tight">{supplier.name}</h1>
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{supplier.name}</h1>
               {supplier.supplierType === "gewerblich" ? (
                 <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
                   <Building2 className="h-3 w-3" />
@@ -170,7 +170,7 @@ export default function SupplierDetail() {
             ) : null}
           </div>
         </div>
-        <Button variant="outline" size="sm" asChild className="sm:shrink-0">
+        <Button variant="outline" size="sm" asChild className="w-full sm:w-auto sm:shrink-0">
           <Link to={`/suppliers/${id}/edit`}>
             <Pencil className="mr-2 h-4 w-4" />
             Bearbeiten
@@ -260,8 +260,47 @@ export default function SupplierDetail() {
             </div>
           ) : (
             <>
-              <div className="rounded-lg border overflow-hidden">
-                <Table>
+              <>
+                <div className="space-y-3 md:hidden">
+                  {vehicles.map((v) => (
+                    <div key={v.id} className="rounded-xl border bg-background/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link
+                            to={`/vehicles/${v.id}`}
+                            className="font-mono text-xs text-amber-600 hover:underline"
+                          >
+                            {v.vehicleNumber}
+                          </Link>
+                          <div className="mt-1 font-medium">
+                            <Link to={`/vehicles/${v.id}`} className="hover:underline">
+                              {v.brand} {v.model}
+                            </Link>
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            {v.firstRegistration
+                              ? new Date(v.firstRegistration).toLocaleDateString("de-DE", {
+                                  month: "2-digit",
+                                  year: "numeric",
+                                })
+                              : v.year
+                              ? v.year
+                              : "--"}
+                          </div>
+                        </div>
+                        <Badge variant="outline" className={STATUS_CLASSES[v.status] ?? ""}>
+                          {STATUS_LABELS[v.status] ?? v.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 text-sm">
+                        <p className="text-xs text-muted-foreground">Einkaufspreis</p>
+                        <p className="font-medium">{formatPrice(v.purchasePrice)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden rounded-lg border overflow-hidden md:block">
+                  <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>FZ-Nr.</TableHead>
@@ -309,11 +348,12 @@ export default function SupplierDetail() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
-              </div>
+                  </Table>
+                </div>
+              </>
 
               {/* Total volume */}
-              <div className="mt-4 rounded-lg border bg-muted/30 px-4 py-3 flex items-center justify-between">
+              <div className="mt-4 flex flex-col gap-1 rounded-lg border bg-muted/30 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-muted-foreground font-medium">
                   Gesamtes Einkaufsvolumen
                 </p>

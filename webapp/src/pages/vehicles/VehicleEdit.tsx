@@ -62,14 +62,14 @@ export default function VehicleEdit() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to={`/vehicles/${id}`}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {vehicle.brand} {vehicle.model} bearbeiten
           </h1>
           <p className="text-muted-foreground">

@@ -236,7 +236,7 @@ export default function SettingsTeam() {
                       value={member.role}
                       onValueChange={(value: TeamRole) => quickUpdate(member.id, { role: value })}
                     >
-                      <SelectTrigger className="w-[180px]">
+                      <SelectTrigger className="w-full md:w-[180px]">
                         <SelectValue>{ROLE_LABELS[member.role]}</SelectValue>
                       </SelectTrigger>
                       <SelectContent>
@@ -254,14 +254,14 @@ export default function SettingsTeam() {
                       <span className="text-sm">Aktiv</span>
                     </div>
 
-                    <Button type="button" variant="outline" onClick={() => openEditDialog(member)}>
+                    <Button type="button" variant="outline" onClick={() => openEditDialog(member)} className="w-full md:w-auto">
                       <Pencil className="mr-2 h-4 w-4" />
                       Bearbeiten
                     </Button>
 
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button type="button" variant="destructive" disabled={isDeleting}>
+                        <Button type="button" variant="destructive" disabled={isDeleting} className="w-full md:w-auto">
                           {isDeleting ? (
                             <>
                               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

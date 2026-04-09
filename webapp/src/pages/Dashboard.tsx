@@ -289,8 +289,8 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Welcome header */}
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-1 flex items-center gap-1.5">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Dashboard</h1>
+        <p className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Calendar className="h-3.5 w-3.5" />
           {formatDateLong(new Date().toISOString())}
         </p>
@@ -317,7 +317,7 @@ export default function Dashboard() {
           className="border-border/50 animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
           style={{ animationDelay: "350ms", animationDuration: "400ms" }}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base font-semibold">
               Neueste Fahrzeuge
             </CardTitle>
@@ -378,7 +378,7 @@ export default function Dashboard() {
           className="border-border/50 animate-in fade-in slide-in-from-bottom-4 fill-mode-both"
           style={{ animationDelay: "400ms", animationDuration: "400ms" }}
         >
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardHeader className="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-base font-semibold">
               Neueste Verkaufe
             </CardTitle>

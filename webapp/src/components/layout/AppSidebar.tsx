@@ -22,6 +22,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { signOut } from "@/lib/auth-client";
@@ -32,6 +33,7 @@ import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 export function AppSidebar() {
   const location = useLocation();
   const { session } = useAuth();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const navItems = [
     { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -53,6 +55,12 @@ export function AppSidebar() {
     await signOut();
   };
 
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   return (
     <Sidebar
       collapsible="icon"
@@ -63,7 +71,7 @@ export function AppSidebar() {
         boxShadow: "inset 2px 0 0 rgba(96,145,209,0.55)",
       }}
     >
-      <SidebarHeader className="h-24 overflow-hidden p-0">
+      <SidebarHeader className="h-20 overflow-hidden p-0 md:h-24">
         <div className="flex h-full w-full items-center justify-center bg-sidebar px-4">
           <CarOpsLogo
             compact={false}
@@ -92,7 +100,7 @@ export function AppSidebar() {
                       isActive={isActive}
                       tooltip={item.label}
                     >
-                      <NavLink to={item.to}>
+                      <NavLink to={item.to} onClick={handleNavClick}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.label}</span>
                       </NavLink>

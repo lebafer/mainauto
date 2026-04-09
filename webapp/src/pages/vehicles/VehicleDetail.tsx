@@ -525,8 +525,8 @@ export default function VehicleDetail() {
             </Link>
           </Button>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
                 {vehicle.brand} {vehicle.model}
               </h1>
               <Badge variant="outline" className={statusConfig.className}>
@@ -556,18 +556,18 @@ export default function VehicleDetail() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 sm:shrink-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end sm:gap-2 sm:shrink-0">
           {vehicle.status !== "sold" && (
             <Button
               size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="w-full bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto"
               onClick={() => setSellOpen(true)}
             >
               <ShoppingCart className="mr-2 h-4 w-4" />
               Verkaufen
             </Button>
           )}
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
             <Link to={`/vehicles/${id}/edit`}>
               <Pencil className="mr-2 h-4 w-4" />
               Bearbeiten
@@ -576,6 +576,7 @@ export default function VehicleDetail() {
           <Button
             variant="outline"
             size="sm"
+            className="w-full sm:w-auto"
             onClick={() => setHandoverDialogOpen(true)}
           >
             <Receipt className="mr-2 h-4 w-4" />
@@ -587,6 +588,7 @@ export default function VehicleDetail() {
               <Button
                 variant="outline"
                 size="sm"
+                className="w-full sm:w-auto"
                 disabled={generateDocMutation.isPending}
               >
                 {generateDocMutation.isPending ? (
@@ -670,7 +672,7 @@ export default function VehicleDetail() {
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+              <Button variant="outline" size="sm" className="w-full text-destructive hover:text-destructive sm:w-auto">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Löschen
               </Button>
@@ -731,7 +733,7 @@ export default function VehicleDetail() {
           <div className="space-y-4 py-2">
             <div className="space-y-3">
               <Label>Verkäufer</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   size="sm"
@@ -797,7 +799,7 @@ export default function VehicleDetail() {
                 </Select>
               ) : (
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Vorname *</Label>
                       <Input
@@ -942,7 +944,7 @@ export default function VehicleDetail() {
 
             {showNewContractCustomer ? (
               <div className="mt-2 space-y-3 rounded-lg border bg-muted/40 p-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label className="text-xs">Vorname</Label>
                     <Input
@@ -1002,7 +1004,7 @@ export default function VehicleDetail() {
               </div>
             ) : null}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label className="text-xs">Ort im Vertrag</Label>
                 <Input
@@ -1203,7 +1205,7 @@ export default function VehicleDetail() {
             {/* Käufer */}
             <div className="space-y-3">
               <p className="text-sm font-semibold">Käufer</p>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   size="sm"
@@ -1255,7 +1257,7 @@ export default function VehicleDetail() {
             {/* Verkäufer */}
             <div className="space-y-3">
               <p className="text-sm font-semibold">Verkäufer</p>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <Button
                   type="button"
                   size="sm"
@@ -1312,7 +1314,7 @@ export default function VehicleDetail() {
                 </Select>
               ) : (
                 <div className="rounded-lg border bg-muted/40 p-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label className="text-xs">Vorname *</Label>
                       <Input
@@ -1496,7 +1498,7 @@ export default function VehicleDetail() {
             <CardTitle className="text-lg">Fahrzeugdaten</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <InfoItem icon={Gauge} label="Kilometerstand" value={formatMileage(vehicle.mileage)} />
               {vehicle.firstRegistration ? (
                 <InfoItem icon={Car} label="Erstzulassung" value={new Date(vehicle.firstRegistration).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })} />
@@ -2277,7 +2279,7 @@ function SellDialog({
             {/* Inline new customer form */}
             {showNewCustomer ? (
               <div className="rounded-lg border bg-muted/40 p-3 space-y-3 mt-2">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label className="text-xs">Vorname</Label>
                     <Input
@@ -2375,7 +2377,7 @@ function SellDialog({
             </div>
 
             {exportEnabled && (
-              <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label className="text-xs">Transportkosten Inland (€)</Label>
                   <Input

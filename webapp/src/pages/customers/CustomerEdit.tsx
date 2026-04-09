@@ -72,7 +72,7 @@ interface Customer extends CustomerFormData {
 function EditSkeleton() {
   return (
     <div className="space-y-6 max-w-2xl">
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Skeleton className="h-10 w-10 rounded" />
         <div className="space-y-2">
           <Skeleton className="h-8 w-48" />
@@ -197,7 +197,7 @@ export default function CustomerEdit() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             Kunde bearbeiten
           </h1>
           <p className="text-muted-foreground">
@@ -220,7 +220,7 @@ export default function CustomerEdit() {
               control={control}
               name="customerType"
               render={({ field }) => (
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => field.onChange("privat")}

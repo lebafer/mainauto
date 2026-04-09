@@ -185,7 +185,7 @@ export default function Finances() {
     <div className="space-y-6 pb-10 animate-in fade-in duration-300">
       {/* ── Page header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Finanzen</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Finanzen</h1>
         <p className="text-muted-foreground mt-1 text-sm">
           Umsatz- und Gewinnauswertung
         </p>
@@ -197,7 +197,7 @@ export default function Finances() {
       </div>
 
       {/* ── Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+      <div className="flex flex-col gap-3 items-start sm:flex-row sm:items-center">
         {/* Preset pills */}
         <div className="flex gap-1.5 flex-wrap">
           {PRESETS.map(({ key, label }) => (
@@ -224,14 +224,14 @@ export default function Finances() {
         <div className="hidden sm:block h-5 w-px bg-border/60" />
 
         {/* Custom date range */}
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex w-full flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground text-xs font-medium">Von</span>
           <input
             type="date"
             value={customFrom}
             onChange={(e) => setCustomFrom(e.target.value)}
             className={cn(
-              "h-8 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
+              "h-10 min-w-0 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
               customRangeActive
                 ? "border-foreground ring-1 ring-foreground/20"
                 : "border-border focus:border-foreground/60"
@@ -243,7 +243,7 @@ export default function Finances() {
             value={customTo}
             onChange={(e) => setCustomTo(e.target.value)}
             className={cn(
-              "h-8 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
+              "h-10 min-w-0 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
               customRangeActive
                 ? "border-foreground ring-1 ring-foreground/20"
                 : "border-border focus:border-foreground/60"
@@ -440,7 +440,7 @@ export default function Finances() {
         style={{ animationDelay: "380ms", animationDuration: "350ms" }}
       >
         <Card className="border-border/50">
-          <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-4">
             <CardTitle className="text-base font-semibold">
               Verkäufe im Zeitraum
             </CardTitle>
@@ -460,7 +460,54 @@ export default function Finances() {
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="space-y-3 p-4 md:hidden">
+                  {finances.sales.map((sale) => (
+                    <div key={sale.id} className="rounded-xl border bg-background/70 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">
+                            {sale.brand} {sale.model}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            #{sale.vehicleNumber} · {sale.customerName}
+                          </div>
+                          <div className="mt-1 text-xs text-muted-foreground">{formatDate(sale.saleDate)}</div>
+                        </div>
+                        <div className={cn("shrink-0 text-right text-sm font-bold", sale.profit >= 0 ? "text-emerald-500" : "text-red-500")}>
+                          {sale.profit >= 0 ? "+" : ""}
+                          {formatPrice(sale.profit)}
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Einkauf</p>
+                          <p className="font-medium">{formatPrice(sale.purchasePrice)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Verkauf</p>
+                          <p className="font-medium">{formatPrice(sale.salePrice)}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-xs text-muted-foreground">Zusatzkosten</p>
+                          <p className="font-medium text-amber-500">
+                            {sale.additionalCosts > 0 ? formatPrice(sale.additionalCosts) : "—"}
+                          </p>
+                          {sale.costBreakdown.length > 0 ? (
+                            <div className="mt-1 space-y-0.5 text-[11px] leading-tight text-muted-foreground">
+                              {sale.costBreakdown.map((item) => (
+                                <div key={`${sale.id}-${item.category}-${item.label}`}>
+                                  {item.label}: {formatPrice(item.amount)}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border/50">
@@ -550,7 +597,8 @@ export default function Finances() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

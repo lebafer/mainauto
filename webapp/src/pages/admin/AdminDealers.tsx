@@ -288,7 +288,7 @@ export default function AdminDealers() {
     <div className="space-y-6">
       <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6 text-slate-50">
         <div className="text-sm uppercase tracking-[0.2em] text-cyan-200/80">Plattform</div>
-        <h1 className="mt-2 text-3xl font-semibold">CarOps Kunden verwalten</h1>
+        <h1 className="mt-2 text-2xl font-semibold sm:text-3xl">CarOps Kunden verwalten</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-300">
           Hier verwaltest du SaaS-Kunden, Owner-Zugangsdaten, Tarif, Gratis-Freigaben und den Autohaus-Status.
         </p>
@@ -396,7 +396,7 @@ export default function AdminDealers() {
                       </SelectContent>
                     </Select>
 
-                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1">
                         <div className="text-sm font-medium text-foreground">Kostenloser Zugang</div>
                         <div className="text-xs text-muted-foreground">
@@ -415,7 +415,7 @@ export default function AdminDealers() {
                       />
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-3">
+                    <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="space-y-1 pr-4">
                         <div className="text-sm font-medium text-foreground">Private Fahrzeuge</div>
                         <div className="text-xs text-muted-foreground">

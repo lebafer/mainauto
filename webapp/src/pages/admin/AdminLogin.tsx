@@ -87,7 +87,7 @@ export default function AdminLogin() {
           </div>
           <div>
             <CardTitle className="text-2xl">Superadmin Login</CardTitle>
-            <CardDescription className="mt-2 text-slate-300">
+            <CardDescription className="mt-2 text-sm text-slate-300 sm:text-base">
               Autohaeuser anlegen, Tarife setzen und Branding verwalten.
             </CardDescription>
           </div>
@@ -127,7 +127,7 @@ export default function AdminLogin() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-[#7fb0f4] text-slate-950 hover:bg-[#9bc1f6]" disabled={isLoading}>
+            <Button type="submit" className="min-h-[44px] w-full bg-[#7fb0f4] text-slate-950 hover:bg-[#9bc1f6]" disabled={isLoading}>
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -109,14 +109,14 @@ export default function SupplierNew() {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/suppliers">
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Neuer Lieferant</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Neuer Lieferant</h1>
           <p className="text-muted-foreground">Neuen Lieferanten anlegen</p>
         </div>
       </div>
@@ -133,7 +133,7 @@ export default function SupplierNew() {
               control={control}
               name="supplierType"
               render={({ field }) => (
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => field.onChange("privat")}

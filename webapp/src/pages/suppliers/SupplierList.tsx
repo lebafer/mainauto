@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface SupplierVehicle {
   id: string;
@@ -76,13 +77,13 @@ export default function SupplierList() {
             <Truck className="h-5 w-5 text-amber-600" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Lieferanten</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Lieferanten</h1>
             <p className="text-muted-foreground">
               {suppliers.length} Lieferant{suppliers.length !== 1 ? "en" : ""} gesamt
             </p>
           </div>
         </div>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link to="/suppliers/new">
             <PlusCircle className="mr-2 h-4 w-4" />
             Neuer Lieferant
@@ -120,8 +121,43 @@ export default function SupplierList() {
           ) : null}
         </div>
       ) : (
-        <div className="rounded-lg border overflow-hidden">
-          <Table>
+        <>
+          <div className="space-y-3 md:hidden">
+            {filtered.map((supplier) => (
+              <Card key={supplier.id} className="cursor-pointer" onClick={() => navigate(`/suppliers/${supplier.id}`)}>
+                <CardContent className="space-y-4 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-medium">{supplier.name}</div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {supplier.contactPerson ?? supplier.email ?? supplier.phone ?? "Keine Zusatzdaten"}
+                      </div>
+                    </div>
+                    <Badge variant="secondary" className="shrink-0">
+                      {supplier.vehicles?.length ?? 0}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {supplier.supplierType === "gewerblich" ? (
+                      <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1">
+                        <Building2 className="h-3 w-3" />
+                        Gewerblich
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 gap-1">
+                        <User className="h-3 w-3" />
+                        Privat
+                      </Badge>
+                    )}
+                    {supplier.country ? <span className="text-xs text-muted-foreground">{supplier.country}</span> : null}
+                    {supplier.phone ? <span className="text-xs text-muted-foreground">{supplier.phone}</span> : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="hidden rounded-lg border overflow-hidden md:block">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
@@ -170,8 +206,9 @@ export default function SupplierList() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

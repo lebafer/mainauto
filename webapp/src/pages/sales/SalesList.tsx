@@ -241,7 +241,7 @@ function CreateSaleDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button className="w-full sm:w-auto">
           <Plus className="mr-2 h-4 w-4" />
           Neuer Verkauf
         </Button>
@@ -302,7 +302,7 @@ function CreateSaleDialog() {
           </div>
 
           {/* Price and tax */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="salePrice">Verkaufspreis</Label>
               <Input
@@ -465,7 +465,7 @@ export default function SalesList() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Verkaufe</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Verkaufe</h1>
           <p className="text-muted-foreground">
             Verwalten Sie Ihre Fahrzeugverkaufe
           </p>

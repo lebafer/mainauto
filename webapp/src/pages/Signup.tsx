@@ -115,11 +115,11 @@ export default function Signup() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ef_0%,#fff_35%,#fff_100%)] dark:bg-[linear-gradient(180deg,#09090b_0%,#0f172a_35%,#020617_100%)]">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-10 px-6 py-8 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-8 px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-start lg:justify-between lg:gap-16">
         <div className="max-w-xl space-y-8">
-          <div className="flex items-center justify-between">
-            <CarOpsLogo />
-            <Button asChild variant="ghost">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <CarOpsLogo className="max-w-[15rem] sm:max-w-none" />
+            <Button asChild variant="ghost" className="w-full sm:w-auto">
               <Link to="/login">Login</Link>
             </Button>
           </div>
@@ -129,10 +129,10 @@ export default function Signup() {
               14 Tage kostenlos testen
             </Badge>
             <div className="space-y-3">
-              <h1 className="text-4xl font-semibold tracking-tight text-slate-950 dark:text-white md:text-5xl">
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl md:text-5xl">
                 Starte CarOps für dein Autohaus.
               </h1>
-              <p className="text-lg leading-8 text-slate-600 dark:text-slate-300">
+              <p className="text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg sm:leading-8">
                 Lege dein Autohaus an, teste 14 Tage ohne Zahlungszwang und aktiviere dein Abo erst, wenn du bereit
                 bist.
               </p>

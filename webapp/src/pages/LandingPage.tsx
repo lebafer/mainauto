@@ -1,4 +1,5 @@
 import { Navigate, Link } from "react-router-dom";
+import type { ComponentType } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Bot, Building2, CheckCircle2, Users2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-client";
@@ -27,6 +28,8 @@ const formatCurrency = (cents: number) =>
     maximumFractionDigits: 0,
   }).format(cents / 100);
 
+const MotionSection = motion.section as unknown as ComponentType<any>;
+
 export default function LandingPage() {
   const { session } = useAuth();
   const plansQuery = useQuery({
@@ -40,34 +43,36 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#eef4fb_0%,#f8fbff_30%,#ffffff_100%)] text-slate-950 dark:bg-[linear-gradient(180deg,#020617_0%,#0b1730_40%,#020617_100%)] dark:text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-6 py-8">
-        <header className="flex items-center justify-between gap-4">
-          <CarOpsLogo />
-          <div className="flex items-center gap-3">
-            <Button asChild variant="ghost">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 sm:py-8">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex justify-center sm:justify-start">
+            <CarOpsLogo className="max-w-[15rem] sm:max-w-none" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:flex sm:items-center">
+            <Button asChild variant="ghost" className="w-full sm:w-auto">
               <Link to="/login">Login</Link>
             </Button>
-            <Button asChild className="bg-[#19477e] text-white hover:bg-[#123965]">
+            <Button asChild className="w-full bg-[#19477e] text-white hover:bg-[#123965] sm:w-auto">
               <Link to="/signup">Kostenlos starten</Link>
             </Button>
           </div>
         </header>
 
-        <main className="grid flex-1 gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <motion.section
+        <main className="grid flex-1 gap-8 py-8 sm:gap-10 sm:py-10 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-12">
+          <MotionSection
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45 }}
-            className="space-y-8"
+            className="space-y-6 sm:space-y-8"
           >
             <Badge className="w-fit rounded-full bg-[#19477e]/10 px-4 py-1 text-[#19477e] hover:bg-[#19477e]/10 dark:text-[#c8dbf7]">
               SaaS für moderne Autohäuser
             </Badge>
             <div className="space-y-4">
-              <h1 className="max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">
+              <h1 className="max-w-3xl text-3xl font-semibold tracking-tight sm:text-4xl md:text-6xl">
                 CarOps ist das Betriebssystem für dein Autohaus.
               </h1>
-              <p className="max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
+              <p className="max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300 sm:text-lg sm:leading-8">
                 Verwalte Bestand, Verkauf, Dokumente und dein Team in einer gemeinsamen Cloud-Plattform. Schnell
                 startklar, klar bepreist und ohne versteckte Kosten.
               </p>
@@ -101,20 +106,20 @@ export default function LandingPage() {
               ))}
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Button asChild size="lg" className="bg-[#19477e] text-white hover:bg-[#123965]">
+            <div className="grid gap-3 sm:flex sm:flex-wrap">
+              <Button asChild size="lg" className="w-full bg-[#19477e] text-white hover:bg-[#123965] sm:w-auto">
                 <Link to="/signup">
                   Jetzt kostenlos starten
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline">
+              <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
                 <Link to="/login">Zum Login</Link>
               </Button>
             </div>
-          </motion.section>
+          </MotionSection>
 
-          <motion.section
+          <MotionSection
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, delay: 0.1 }}
@@ -153,7 +158,7 @@ export default function LandingPage() {
                 </div>
               </CardContent>
             </Card>
-          </motion.section>
+          </MotionSection>
         </main>
       </div>
     </div>

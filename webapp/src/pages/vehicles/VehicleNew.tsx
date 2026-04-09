@@ -97,7 +97,7 @@ export default function VehicleNew() {
     return (
       <div className="space-y-6 animate-in fade-in duration-300">
         {/* Success header */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-start gap-4">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-500/15">
             <CheckCircle className="h-6 w-6 text-emerald-500" />
           </div>
@@ -131,13 +131,14 @@ export default function VehicleNew() {
         </Card>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button onClick={() => navigate(`/vehicles/${createdVehicle.id}`)}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Button className="w-full sm:w-auto" onClick={() => navigate(`/vehicles/${createdVehicle.id}`)}>
             <ArrowRight className="mr-2 h-4 w-4" />
             Zum Fahrzeug
           </Button>
           <Button
             variant="outline"
+            className="w-full sm:w-auto"
             onClick={() => setCreatedVehicle(null)}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -151,14 +152,14 @@ export default function VehicleNew() {
   // ── Step 1: Vehicle form ────────────────────────────────────
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <Button variant="ghost" size="icon" asChild>
           <Link to="/vehicles">
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Neues Fahrzeug</h1>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Neues Fahrzeug</h1>
           <p className="text-muted-foreground">
             Neues Fahrzeug zum Bestand hinzufügen
           </p>

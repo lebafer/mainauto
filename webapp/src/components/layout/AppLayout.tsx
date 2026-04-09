@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const pageTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
@@ -66,21 +67,22 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const location = useLocation();
   const { parent, current } = getPageTitle(location.pathname);
+  const isMobile = useIsMobile();
 
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="relative flex h-14 shrink-0 items-center gap-2 border-b px-4">
+        <header className="relative flex min-h-14 shrink-0 items-center gap-2 border-b px-3 py-2 sm:h-14 sm:px-4">
           <div
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{ background: "linear-gradient(90deg, transparent, rgb(var(--tenant-primary-rgb) / 0.85), transparent)" }}
           />
           <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
+          <Separator orientation="vertical" className="mr-1 hidden h-4 sm:block" />
+          <Breadcrumb className="min-w-0">
             <BreadcrumbList>
-              {parent ? (
+              {!isMobile && parent ? (
                 <>
                   <BreadcrumbItem>
                     <span className="text-muted-foreground">{parent}</span>
@@ -92,13 +94,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                 </>
               ) : (
                 <BreadcrumbItem>
-                  <BreadcrumbPage>{current}</BreadcrumbPage>
+                  <BreadcrumbPage className="truncate">{current}</BreadcrumbPage>
                 </BreadcrumbItem>
               )}
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <div className="flex-1 overflow-auto p-4 md:p-6">{children}</div>
+        <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
