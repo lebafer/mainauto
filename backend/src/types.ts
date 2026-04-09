@@ -656,6 +656,7 @@ export const HandoverProtocolDamageMarkerSchema = z.object({
   view: HandoverProtocolDamageViewSchema,
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
+  description: z.string().default(""),
 });
 
 export const HandoverProtocolSchema = z.object({

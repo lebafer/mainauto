@@ -286,11 +286,11 @@ function DamageSketch({
           className="pointer-events-none absolute inset-0 h-full w-full select-none object-contain opacity-100"
           draggable={false}
         />
-        {markers.map((marker) => (
+        {markers.map((marker, index) => (
           <button
             key={marker.id}
             type="button"
-            className="absolute h-4 w-4 rounded-full border-2 border-rose-700 bg-rose-500/20 shadow-sm"
+            className="absolute flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 bg-rose-50 text-[11px] font-bold text-rose-800 shadow-sm transition-transform hover:scale-105"
             style={{
               left: `${marker.x}%`,
               top: `${marker.y}%`,
@@ -300,11 +300,60 @@ function DamageSketch({
               event.stopPropagation();
               onRemoveMarker(marker.id);
             }}
-            aria-label="Schadensmarker entfernen"
-          />
+            aria-label={`Schadensmarker ${index + 1} entfernen`}
+          >
+            {index + 1}
+          </button>
         ))}
       </div>
-      <p className="text-xs text-muted-foreground">Klick setzt einen Marker. Klick auf einen Marker entfernt ihn.</p>
+      <p className="text-xs text-muted-foreground">Klick setzt einen Marker. Die Nummern folgen der aktuellen Reihenfolge. Klick auf einen Marker entfernt ihn.</p>
+    </div>
+  );
+}
+
+function DamageMarkerDescriptions({
+  form,
+  markers,
+}: {
+  form: ReturnType<typeof useForm<HandoverProtocol>>;
+  markers: HandoverProtocol["damage"]["markers"];
+}) {
+  if (markers.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 px-4 py-5 text-sm text-muted-foreground">
+        Sobald Sie einen Punkt auf der Fahrzeugskizze setzen, erscheint hier automatisch der passende Eintrag.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      {markers.map((marker, index) => (
+        <div key={marker.id} className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-rose-700 bg-rose-50 text-sm font-bold text-rose-800">
+              {index + 1}
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">Punkt {index + 1}</div>
+              <div className="text-xs text-muted-foreground">Beschreibung für den markierten Schaden</div>
+            </div>
+          </div>
+          <Textarea
+            value={marker.description}
+            onChange={(event) => {
+              const nextMarkers = markers.map((currentMarker) =>
+                currentMarker.id === marker.id
+                  ? { ...currentMarker, description: event.target.value }
+                  : currentMarker
+              );
+              form.setValue("damage.markers", nextMarkers, { shouldDirty: true });
+            }}
+            className="min-h-[96px]"
+            placeholder="z.B. Steinschlag Motorhaube"
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -555,7 +604,7 @@ export function VehicleHandoverProtocolDialog({
   function addDamageMarker(x: number, y: number) {
     form.setValue(
       "damage.markers",
-      [...protocol.damage.markers, { id: createMarkerId(), view: "left-front" as DamageView, x, y }],
+      [...protocol.damage.markers, { id: createMarkerId(), view: "left-front" as DamageView, x, y, description: "" }],
       { shouldDirty: true }
     );
   }
@@ -814,17 +863,22 @@ export function VehicleHandoverProtocolDialog({
             />
           </div>
           <Separator className="my-4" />
+          <div className="space-y-2">
+            <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Punktliste mit Beschreibungen</Label>
+            <DamageMarkerDescriptions form={form} markers={protocol.damage.markers} />
+          </div>
+          <Separator className="my-4" />
           <Controller
             control={form.control}
             name="damage.remark"
             render={({ field }) => (
               <div className="space-y-2">
-                <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Bemerkung zu Beschädigungen</Label>
+                <Label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Zusätzliche Bemerkung</Label>
                 <Textarea
                   value={field.value}
                   onChange={field.onChange}
                   className="min-h-[120px]"
-                  placeholder="Beschreiben Sie hier die markierten Beschädigungen"
+                  placeholder="Optionale zusätzliche Hinweise zu den markierten Beschädigungen"
                 />
               </div>
             )}

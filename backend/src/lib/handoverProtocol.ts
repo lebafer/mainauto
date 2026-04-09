@@ -185,8 +185,8 @@ function getDealerFooterHtml(profile: HandoverDealerProfile): string {
 
 function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"], sketchSrc: string): string {
   const markerHtml = markers
-    .map((marker) => {
-      return `<span class="damage-marker-dot" style="left:${marker.x}%; top:${marker.y}%"></span>`;
+    .map((marker, index) => {
+      return `<span class="damage-marker-dot" style="left:${marker.x}%; top:${marker.y}%">${index + 1}</span>`;
     })
     .join("");
 
@@ -196,6 +196,29 @@ function renderSketchHtml(markers: HandoverProtocol["damage"]["markers"], sketch
       ${markerHtml}
     </div>
   `;
+}
+
+function renderDamageListHtml(markers: HandoverProtocol["damage"]["markers"]): string {
+  if (markers.length === 0) {
+    return `<div class="damage-list-empty">Keine markierten Punkte vorhanden.</div>`;
+  }
+
+  const itemsHtml = markers
+    .map((marker, index) => {
+      const description = marker.description.trim();
+      return `
+        <div class="damage-list-item">
+          <div class="damage-list-index">${index + 1}</div>
+          <div class="damage-list-copy">
+            <div class="damage-list-title">Punkt ${index + 1}</div>
+            <div class="damage-list-description">${description ? escapeHtml(description) : "Keine Beschreibung hinterlegt."}</div>
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  return `<div class="damage-list">${itemsHtml}</div>`;
 }
 
 export function resolveDocumentLogoSrc(profile?: HandoverDealerProfile): string | null {
@@ -345,7 +368,14 @@ export function generateHandoverProtocolHtml(
   .sketch-label { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.14em; color: #667085; margin-bottom: 6px; text-align: center; }
   .damage-sketch-canvas { position: relative; width: 100%; aspect-ratio: 1151 / 750; overflow: hidden; border-radius: 10px; background: linear-gradient(180deg, #f8fafc 0%, #f2f4f7 100%); }
   .damage-sketch-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; opacity: 1; }
-  .damage-marker-dot { position: absolute; width: 16px; height: 16px; border-radius: 999px; border: 2px solid #be123c; background: rgba(244, 63, 94, 0.12); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18); transform: translate(-50%, -50%); }
+  .damage-marker-dot { position: absolute; width: 22px; height: 22px; border-radius: 999px; border: 2px solid #be123c; background: #fff1f2; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18); transform: translate(-50%, -50%); display: inline-flex; align-items: center; justify-content: center; font-size: 8.5pt; font-weight: 700; color: #9f1239; }
+  .damage-list { display: grid; gap: 8px; margin-top: 12px; }
+  .damage-list-item { display: flex; gap: 10px; align-items: flex-start; border: 1px solid #e4e7ec; border-radius: 10px; background: #fcfcfd; padding: 8px 10px; }
+  .damage-list-index { width: 22px; height: 22px; border-radius: 999px; border: 2px solid #be123c; background: #fff1f2; display: inline-flex; align-items: center; justify-content: center; font-size: 8.5pt; font-weight: 700; color: #9f1239; flex: 0 0 22px; }
+  .damage-list-copy { min-width: 0; }
+  .damage-list-title { font-size: 8.5pt; font-weight: 700; color: #344054; margin-bottom: 2px; }
+  .damage-list-description { font-size: 9pt; line-height: 1.45; color: #101828; white-space: pre-wrap; }
+  .damage-list-empty { margin-top: 12px; font-size: 8.5pt; color: #667085; }
   .damage-remark { margin-top: 10px; break-inside: avoid; page-break-inside: avoid; }
   .note-value { min-height: 48px; border-bottom: 1.4px solid #efb0aa; padding-bottom: 2px; font-size: 9pt; line-height: 1.45; white-space: pre-wrap; }
   .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; margin-top: 48px; break-inside: avoid; page-break-inside: avoid; }
@@ -505,8 +535,9 @@ export function generateHandoverProtocolHtml(
         ${renderSketchHtml(data.damage.markers, sketchSrc)}
       </div>
     </div>
+    ${renderDamageListHtml(data.damage.markers)}
     <div class="damage-remark">
-      <div class="section-title">Bemerkung zu Beschädigungen</div>
+      <div class="section-title">Zusätzliche Bemerkung</div>
       <div class="note-value">${valueOrBlank(data.damage.remark)}</div>
     </div>
   </div>
