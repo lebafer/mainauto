@@ -22,14 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -913,47 +905,38 @@ export function VehicleHandoverProtocolDialog({
 
   return (
     <>
-      {isMobile ? (
-        <Drawer open={open} onOpenChange={handleOpenChange}>
-          <DrawerContent className="top-0 mt-0 flex h-[100dvh] rounded-none border-0">
-            <DrawerHeader className="border-b px-4 pb-4">
-              <DrawerTitle>{headerTitle}</DrawerTitle>
-              <DrawerDescription>{headerDescription}</DrawerDescription>
-            </DrawerHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-              {handoverQuery.isLoading ? (
-                <div className="flex items-center justify-center py-16">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                content
-              )}
-            </div>
-            <DrawerFooter className="border-t bg-background/95 pb-[calc(env(safe-area-inset-bottom)+1rem)] backdrop-blur">
-              {footer}
-            </DrawerFooter>
-          </DrawerContent>
-        </Drawer>
-      ) : (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-          <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
-            <DialogHeader className="border-b px-6 py-5">
-              <DialogTitle>{headerTitle}</DialogTitle>
-              <DialogDescription>{headerDescription}</DialogDescription>
-            </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-              {handoverQuery.isLoading ? (
-                <div className="flex items-center justify-center py-20">
-                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : (
-                content
-              )}
-            </div>
-            <DialogFooter className="border-t px-6 py-4">{footer}</DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent
+          className={
+            isMobile
+              ? "flex h-[100dvh] max-h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 p-0"
+              : "flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0"
+          }
+        >
+          <DialogHeader className={isMobile ? "border-b px-4 py-4 text-left" : "border-b px-6 py-5"}>
+            <DialogTitle>{headerTitle}</DialogTitle>
+            <DialogDescription>{headerDescription}</DialogDescription>
+          </DialogHeader>
+          <div className={isMobile ? "min-h-0 flex-1 overflow-y-auto px-4 py-4" : "min-h-0 flex-1 overflow-y-auto px-6 py-5"}>
+            {handoverQuery.isLoading ? (
+              <div className={isMobile ? "flex items-center justify-center py-16" : "flex items-center justify-center py-20"}>
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              content
+            )}
+          </div>
+          <DialogFooter
+            className={
+              isMobile
+                ? "border-t px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]"
+                : "border-t px-6 py-4"
+            }
+          >
+            {footer}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={discardDialogOpen} onOpenChange={setDiscardDialogOpen}>
         <AlertDialogContent>
