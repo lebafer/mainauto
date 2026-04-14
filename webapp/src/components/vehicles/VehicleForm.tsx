@@ -134,6 +134,12 @@ const REQUIRED_VEHICLE_FIELD_LABELS: Record<(typeof REQUIRED_VEHICLE_FIELDS)[num
   purchasePrice: "Einkaufspreis",
   sellingPrice: "Verkaufspreis",
 };
+const VEHICLE_FORM_STEP_FIELDS: Record<(typeof VEHICLE_FORM_STEPS)[number]["id"], Array<Path<VehicleFormValues>>> = {
+  basis: ["vehicleNumber", "brand", "model"],
+  technik: ["mileage"],
+  preis: ["purchasePrice", "sellingPrice"],
+  notizen: [],
+};
 
 const BRIEF_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
 const BRIEF_MAX_FILES = 4;
@@ -951,6 +957,12 @@ export function VehicleForm({
   function handleInvalidSubmit(errors: FieldErrors<VehicleFormValues>) {
     const firstErrorField = Object.keys(errors)[0] as Path<VehicleFormValues> | undefined;
     if (firstErrorField) {
+      const targetStepIndex = VEHICLE_FORM_STEPS.findIndex((step) =>
+        VEHICLE_FORM_STEP_FIELDS[step.id].includes(firstErrorField)
+      );
+      if (targetStepIndex >= 0) {
+        setCurrentStep(targetStepIndex);
+      }
       form.setFocus(firstErrorField);
     }
   }
@@ -970,6 +982,8 @@ export function VehicleForm({
   const canGoBack = currentStep > 0;
   const canGoForward = currentStep < VEHICLE_FORM_STEPS.length - 1;
   const currentStepMeta = VEHICLE_FORM_STEPS[currentStep];
+  const currentStepFields = VEHICLE_FORM_STEP_FIELDS[currentStepMeta.id];
+  const currentStepErrorFields = currentStepFields.filter((field) => Boolean(form.formState.errors[field]));
 
   function goToStep(index: number) {
     setCurrentStep(clampStepIndex(index));
@@ -998,26 +1012,43 @@ export function VehicleForm({
 
         <div className="rounded-xl border bg-card/60 p-4">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
+            <div className="space-y-2">
               <p className="text-sm font-medium">Schritt {currentStep + 1} von {VEHICLE_FORM_STEPS.length}</p>
               <h2 className="text-lg font-semibold">{currentStepMeta.title}</h2>
               <p className="text-sm text-muted-foreground">{currentStepMeta.description}</p>
+              <div className="h-2 w-full max-w-md overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-amber-600 transition-all"
+                  style={{ width: `${((currentStep + 1) / VEHICLE_FORM_STEPS.length) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {currentStepErrorFields.length > 0
+                  ? `In diesem Schritt fehlen noch: ${currentStepErrorFields.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field as keyof typeof REQUIRED_VEHICLE_FIELD_LABELS]).join(", ")}`
+                  : currentStepFields.length > 0
+                    ? "Dieser Schritt ist vollständig oder hat aktuell keine Pflichtfeldfehler."
+                    : "Hier kannst du Status, Hinweise und Vertragstext in Ruhe ergänzen."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {VEHICLE_FORM_STEPS.map((step, index) => (
-                <Button
-                  key={step.id}
-                  type="button"
-                  variant={index === currentStep ? "default" : "outline"}
-                  className="justify-start"
-                  onClick={() => goToStep(index)}
-                >
-                  <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px]">
-                    {index + 1}
-                  </span>
-                  {step.title}
-                </Button>
-              ))}
+              {VEHICLE_FORM_STEPS.map((step, index) => {
+                const stepHasErrors = VEHICLE_FORM_STEP_FIELDS[step.id].some((field) => Boolean(form.formState.errors[field]));
+                return (
+                  <Button
+                    key={step.id}
+                    type="button"
+                    variant={index === currentStep ? "default" : "outline"}
+                    className="justify-start"
+                    onClick={() => goToStep(index)}
+                  >
+                    <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px]">
+                      {index + 1}
+                    </span>
+                    {step.title}
+                    {stepHasErrors ? <span className="ml-2 text-xs text-destructive">•</span> : null}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -2593,9 +2624,11 @@ export function VehicleForm({
         <div className="sticky bottom-4 z-10 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm text-muted-foreground">
-              {requiredFieldErrors.length > 0
-                ? `Offene Pflichtfelder: ${requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}`
-                : "Pflichtfelder sind ausgefüllt oder im aktuellen Schritt nicht betroffen."}
+              {currentStepErrorFields.length > 0
+                ? `Offene Pflichtfelder in diesem Schritt: ${currentStepErrorFields.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field as keyof typeof REQUIRED_VEHICLE_FIELD_LABELS]).join(", ")}`
+                : requiredFieldErrors.length > 0
+                  ? `Andere Schritte haben noch offene Pflichtfelder: ${requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}`
+                  : "Pflichtfelder sind ausgefüllt oder im aktuellen Schritt nicht betroffen."}
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button type="button" variant="outline" onClick={goToPreviousStep} disabled={!canGoBack}>
