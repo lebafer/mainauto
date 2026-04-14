@@ -3,7 +3,7 @@ import { useForm, type FieldErrors, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link } from "react-router-dom";
-import { Loader2, PlusCircle, X, Check, ChevronsUpDown, FileSearch } from "lucide-react";
+import { Loader2, PlusCircle, X, Check, ChevronsUpDown, FileSearch, ChevronLeft, ChevronRight } from "lucide-react";
 import { QuickAddSupplierDialog } from "@/components/suppliers/QuickAddSupplierDialog";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -137,6 +137,29 @@ const REQUIRED_VEHICLE_FIELD_LABELS: Record<(typeof REQUIRED_VEHICLE_FIELDS)[num
 
 const BRIEF_ACCEPT = "application/pdf,image/jpeg,image/png,image/webp";
 const BRIEF_MAX_FILES = 4;
+const VEHICLE_FORM_STEPS = [
+  {
+    id: "basis",
+    title: "Basisdaten",
+    description: "Fahrzeug, Dokumente und Stammdaten",
+  },
+  {
+    id: "technik",
+    title: "Technik",
+    description: "Technische Daten und Historie",
+  },
+  {
+    id: "preis",
+    title: "Preise",
+    description: "Preise, Steuern und Export",
+  },
+  {
+    id: "notizen",
+    title: "Status & Notizen",
+    description: "Status, Vertragstext und interne Hinweise",
+  },
+] as const;
+
 const BRIEF_PREFILL_FIELDS: Array<keyof VehicleBriefExtractFields> = [
   "vin",
   "firstRegistration",
@@ -159,6 +182,10 @@ const BRIEF_PREFILL_FIELDS: Array<keyof VehicleBriefExtractFields> = [
 
 function RequiredMark() {
   return <span className="ml-1 text-destructive">*</span>;
+}
+
+function clampStepIndex(index: number) {
+  return Math.min(Math.max(index, 0), VEHICLE_FORM_STEPS.length - 1);
 }
 
 function requiredNonNegativeNumber(label: string) {
@@ -340,6 +367,7 @@ export function VehicleForm({
   const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
+  const [currentStep, setCurrentStep] = useState(0);
   const previousIsPrivate = useRef<boolean | undefined>(undefined);
   const [briefResult, setBriefResult] = useState<{
     documentType: VehicleBriefDocumentType;
@@ -939,6 +967,25 @@ export function VehicleForm({
     .filter((field) => Boolean(form.formState.errors[field]));
   const sellingPriceHasError = Boolean(form.formState.errors.sellingPrice);
   const aiBriefEnabled = session?.entitlements?.ai_brief_extraction === true;
+  const canGoBack = currentStep > 0;
+  const canGoForward = currentStep < VEHICLE_FORM_STEPS.length - 1;
+  const currentStepMeta = VEHICLE_FORM_STEPS[currentStep];
+
+  function goToStep(index: number) {
+    setCurrentStep(clampStepIndex(index));
+  }
+
+  function goToPreviousStep() {
+    if (canGoBack) {
+      setCurrentStep((value) => clampStepIndex(value - 1));
+    }
+  }
+
+  function goToNextStep() {
+    if (canGoForward) {
+      setCurrentStep((value) => clampStepIndex(value + 1));
+    }
+  }
 
   return (
     <Form {...form}>
@@ -948,6 +995,33 @@ export function VehicleForm({
         className="space-y-6"
       >
         <p className="text-xs text-muted-foreground">* Pflichtfeld</p>
+
+        <div className="rounded-xl border bg-card/60 p-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-medium">Schritt {currentStep + 1} von {VEHICLE_FORM_STEPS.length}</p>
+              <h2 className="text-lg font-semibold">{currentStepMeta.title}</h2>
+              <p className="text-sm text-muted-foreground">{currentStepMeta.description}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {VEHICLE_FORM_STEPS.map((step, index) => (
+                <Button
+                  key={step.id}
+                  type="button"
+                  variant={index === currentStep ? "default" : "outline"}
+                  className="justify-start"
+                  onClick={() => goToStep(index)}
+                >
+                  <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full border text-[11px]">
+                    {index + 1}
+                  </span>
+                  {step.title}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {form.formState.submitCount > 0 && requiredFieldErrors.length > 0 ? (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             Bitte Pflichtfelder ausfüllen:{" "}
@@ -1018,6 +1092,8 @@ export function VehicleForm({
           </CardContent>
         </Card>
 
+        {currentStep === 0 ? (
+          <>
         {/* Section 1: Fahrzeugdaten */}
         <Card>
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1441,6 +1517,11 @@ export function VehicleForm({
           </CardContent>
         </Card>
 
+          </>
+        ) : null}
+
+        {currentStep === 1 ? (
+          <>
         {/* Section 2: Technische Daten */}
         <Card>
           <CardHeader>
@@ -2064,6 +2145,11 @@ export function VehicleForm({
           </CardContent>
         </Card>
 
+          </>
+        ) : null}
+
+        {currentStep === 2 ? (
+          <>
         {/* Section 5: Preise & Steuern */}
         <Card>
           <CardHeader>
@@ -2421,6 +2507,11 @@ export function VehicleForm({
         </Card>
         )}
 
+          </>
+        ) : null}
+
+        {currentStep === 3 ? (
+          <>
         {/* Section 7: Status */}
         <Card>
           <CardHeader>
@@ -2495,21 +2586,44 @@ export function VehicleForm({
           </CardContent>
         </Card>
 
+          </>
+        ) : null}
+
         {/* Actions */}
-        <div className="flex items-center gap-3">
-          <Button
-            type="submit"
-            disabled={isSubmitting}
-            className="bg-amber-600 hover:bg-amber-700"
-          >
-            {isSubmitting ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : null}
-            {submitLabel}
-          </Button>
-          <Button type="button" variant="outline" asChild>
-            <Link to="/vehicles">Abbrechen</Link>
-          </Button>
+        <div className="sticky bottom-4 z-10 rounded-xl border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              {requiredFieldErrors.length > 0
+                ? `Offene Pflichtfelder: ${requiredFieldErrors.map((field) => REQUIRED_VEHICLE_FIELD_LABELS[field]).join(", ")}`
+                : "Pflichtfelder sind ausgefüllt oder im aktuellen Schritt nicht betroffen."}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" variant="outline" onClick={goToPreviousStep} disabled={!canGoBack}>
+                <ChevronLeft className="mr-2 h-4 w-4" />
+                Zurück
+              </Button>
+              {canGoForward ? (
+                <Button type="button" onClick={goToNextStep} className="bg-amber-600 hover:bg-amber-700">
+                  Weiter
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  {submitLabel}
+                </Button>
+              )}
+              <Button type="button" variant="outline" asChild>
+                <Link to="/vehicles">Abbrechen</Link>
+              </Button>
+            </div>
+          </div>
         </div>
       </form>
 

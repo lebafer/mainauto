@@ -1,0 +1,61 @@
+name: staging-deploy
+
+on:
+  push:
+    branches:
+      - feature/**
+      - develop
+      - staging
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install root deps
+        run: bun install --frozen-lockfile
+
+      - name: Install webapp deps
+        run: bun install --frozen-lockfile
+        working-directory: webapp
+
+      - name: Install backend deps
+        run: bun install --frozen-lockfile
+        working-directory: backend
+
+      - name: Typecheck backend
+        run: bun run typecheck
+        working-directory: backend
+
+      - name: Build webapp
+        run: bun run build
+        working-directory: webapp
+
+  deploy-staging:
+    needs: validate
+    if: github.ref_name == 'staging' || startsWith(github.ref_name, 'feature/') || github.ref_name == 'develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/mainauto
+            git fetch origin
+            git checkout ${GITHUB_REF_NAME}
+            git pull --ff-only origin ${GITHUB_REF_NAME}
+            docker compose up -d --build
+            docker compose ps
+            docker inspect --format='{{.State.Health.Status}}' mainauto-postgres-1 mainauto-backend-1 mainauto-web-1
