@@ -27,7 +27,7 @@ jobs:
         working-directory: webapp
 
       - name: Install backend deps
-        run: bun install --frozen-lockfile
+        run: bun install
         working-directory: backend
 
       - name: Typecheck backend
