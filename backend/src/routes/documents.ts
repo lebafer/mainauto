@@ -14,6 +14,7 @@ import chromium from "@sparticuz/chromium";
 import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
 import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
+import { getDocumentPriceSummary } from "../lib/documentPrices";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -923,8 +924,18 @@ function generateContract(
   vehicleRows.push(["Fahrzeug fahrbereit", "ja"]);
   vehicleRows.push(["Unverbindliches Bereitstellungsdatum", contractDateFormatted]);
 
-  const priceFormatted = formatGermanPrice(vehicle.sellingPrice);
-  const priceInWords = numberToGermanWords(Math.round(vehicle.sellingPrice));
+  const priceSummary = getDocumentPriceSummary({
+    netPrice: vehicle.sellingPrice,
+    taxRate: vehicle.taxRate,
+    marginTaxed: vehicle.marginTaxed,
+  });
+  const priceFormatted = formatGermanPrice(priceSummary.primaryPrice);
+  const priceInWords = numberToGermanWords(Math.round(priceSummary.primaryPrice));
+  const priceBreakdownHtml = vehicle.marginTaxed
+    ? ""
+    : `<div class="price-breakdown">
+        ${priceSummary.lines.map(({ label, amount }) => `<div><span>${label}</span><strong>${formatGermanPrice(amount)}</strong></div>`).join("")}
+      </div>`;
 
   const vehicleRowsHtml = vehicleRows
     .map(([label, value]) => `
@@ -1033,6 +1044,9 @@ function generateContract(
   .price-words { font-size: 9pt; margin-bottom: 2px; }
   .price-taxation { font-size: 8.5pt; color: #222; margin-top: 6px; }
   .price-taxation strong { color: #000; }
+  .price-breakdown { max-width: 260px; margin: 4px 0 2px; font-size: 8.8pt; }
+  .price-breakdown div { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e5e5e5; padding: 1px 0; }
+  .price-breakdown div:last-child { border-bottom: 0; font-weight: 700; }
   .price-taxation-note { font-size: 8pt; color: #444; margin-top: 2px; }
   .co2-line { font-size: 8.5pt; margin-top: 4px; color: #333; }
 
@@ -1119,6 +1133,7 @@ function generateContract(
 
   <div class="price-block">
     <div class="price-line">Kaufpreis: ${priceFormatted}</div>
+    ${priceBreakdownHtml}
     <div class="price-words">In Worten: ${priceInWords}</div>
     <div class="price-taxation"><strong>Besteuerungsart:</strong> ${taxationInfo.label}</div>
     <div class="price-taxation-note">${taxationInfo.legalNotice}</div>
@@ -1947,8 +1962,18 @@ function generateVermittlungsvertrag(
   vehicleRows.push(["Fahrzeug fahrbereit", "ja"]);
   vehicleRows.push(["Lieferdatum / verbindlich", todayFormatted + " / nein"]);
 
-  const priceFormatted = formatGermanPrice(vehicle.sellingPrice);
-  const priceInWords = numberToGermanWords(Math.round(vehicle.sellingPrice));
+  const priceSummary = getDocumentPriceSummary({
+    netPrice: vehicle.sellingPrice,
+    taxRate: vehicle.taxRate,
+    marginTaxed: vehicle.marginTaxed,
+  });
+  const priceFormatted = formatGermanPrice(priceSummary.primaryPrice);
+  const priceInWords = numberToGermanWords(Math.round(priceSummary.primaryPrice));
+  const priceBreakdownHtml = vehicle.marginTaxed
+    ? ""
+    : `<div class="price-breakdown">
+        ${priceSummary.lines.map(({ label, amount }) => `<div><span>${label}</span><strong>${formatGermanPrice(amount)}</strong></div>`).join("")}
+      </div>`;
 
   const vehicleRowsHtml = vehicleRows
     .map(([label, value]) => `
@@ -1978,7 +2003,7 @@ function generateVermittlungsvertrag(
 
   const taxNote = vehicle.marginTaxed
     ? `<span class="tax-note">differenzbesteuert</span>`
-    : `<span class="tax-note">regelbesteuert* &nbsp;&nbsp; *MwSt. ${vehicle.taxRate}% (=${formatGermanPrice(vehicle.sellingPrice * vehicle.taxRate / 100)})</span>`;
+    : `<span class="tax-note">regelbesteuert* &nbsp;&nbsp; *MwSt. ${vehicle.taxRate}% (=${formatGermanPrice(priceSummary.tax)})</span>`;
 
   return `<!DOCTYPE html>
 <html lang="de">
@@ -2017,8 +2042,11 @@ function generateVermittlungsvertrag(
   .features-title { font-size: 8.5pt; font-weight: bold; margin-bottom: 3px; }
   .features-text { font-size: 8pt; color: #222; line-height: 1.5; }
 
-  .price-row { display: flex; justify-content: space-between; align-items: baseline; margin: 8px 0 4px; }
-  .price-line { font-size: 13pt; font-weight: bold; }
+  .price-row { margin: 8px 0 4px; }
+  .price-line { font-size: 13pt; font-weight: bold; margin-bottom: 3px; }
+  .price-breakdown { max-width: 260px; margin: 3px 0 2px; font-size: 8.8pt; }
+  .price-breakdown div { display: flex; justify-content: space-between; gap: 18px; border-bottom: 1px solid #ddd; padding: 1px 0; }
+  .price-breakdown div:last-child { border-bottom: 0; font-weight: 700; }
   .tax-note { font-size: 8.5pt; color: #333; }
   .price-words { font-size: 9pt; margin-bottom: 2px; }
   .co2-line { font-size: 8.5pt; margin-top: 4px; color: #333; }
@@ -2096,6 +2124,7 @@ function generateVermittlungsvertrag(
 
   <div class="price-row">
     <div class="price-line">Kaufpreis: ${priceFormatted}</div>
+    ${priceBreakdownHtml}
     <div>${taxNote}</div>
   </div>
   <div class="price-words">In Worten: ${priceInWords}</div>
