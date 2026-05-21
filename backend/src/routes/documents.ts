@@ -15,6 +15,7 @@ import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
 import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
 import { getDocumentPriceSummary } from "../lib/documentPrices";
+import { getPurchaseContractPriceSummary } from "../lib/purchaseContractPrices";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -1209,9 +1210,19 @@ function generatePurchaseContract(
   const today = new Date();
   const todayFormatted = formatDateDE(today);
   const sellerCityLine = getPartyCityLine(seller);
-  const contractPrice = vehicle.purchasePrice > 0 ? vehicle.purchasePrice : (vehicle.dealerPrice ?? 0);
-  const priceFormatted = formatGermanPrice(contractPrice);
-  const priceInWords = numberToGermanWords(Math.round(contractPrice));
+  const netPurchasePrice = vehicle.purchasePrice > 0 ? vehicle.purchasePrice : (vehicle.dealerPrice ?? 0);
+  const priceSummary = getPurchaseContractPriceSummary({
+    netPurchasePrice,
+    taxRate: vehicle.taxRate,
+    marginTaxed: vehicle.marginTaxed,
+  });
+  const priceFormatted = formatGermanPrice(priceSummary.primaryPrice);
+  const priceInWords = numberToGermanWords(Math.round(priceSummary.primaryPrice));
+  const priceBreakdownHtml = vehicle.marginTaxed
+    ? ""
+    : `<div class="price-breakdown">
+        ${priceSummary.lines.map(({ label, amount }) => `<div><span>${label}</span><strong>${formatGermanPrice(amount)}</strong></div>`).join("")}
+      </div>`;
 
   let featuresList: string[] = [];
   if (vehicle.features) {
@@ -1309,6 +1320,9 @@ function generatePurchaseContract(
   .price-amount { font-size: 15pt; font-weight: 700; }
   .price-words { font-size: 7pt; color: #333; margin-top: 2px; text-transform: lowercase; }
   .price-tax { font-size: 9pt; font-weight: 700; text-align: right; }
+  .price-breakdown { margin-top: 4px; min-width: 150px; font-size: 7.5pt; color: #222; }
+  .price-breakdown div { display: flex; justify-content: space-between; gap: 14px; }
+  .price-breakdown strong { font-weight: 700; }
   .legal-title { font-size: 9pt; font-weight: 700; margin: 14px 0 4px; }
   .legal-text { font-size: 7.6pt; line-height: 1.55; color: #222; margin-bottom: 6px; }
   .signature-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; align-items: end; }
@@ -1384,6 +1398,7 @@ function generatePurchaseContract(
     <div class="price-main">
       <div class="price-amount">Ankaufspreis: ${priceFormatted}</div>
       <div class="price-words">In Worten: ${priceInWords.toLowerCase()}</div>
+      ${priceBreakdownHtml}
     </div>
     <div class="price-tax">${priceTaxLabel}</div>
   </div>
