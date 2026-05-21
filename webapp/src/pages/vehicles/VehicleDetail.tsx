@@ -48,12 +48,6 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -98,6 +92,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { useAuth } from "@/lib/auth-client";
+import { DOCUMENT_CREATE_ACTIONS, type DocumentCreateActionId } from "@/lib/documentActions";
 
 // ─── Shared Customer type ────────────────────────────────────────
 
@@ -175,6 +170,7 @@ export default function VehicleDetail() {
   const [sellOpen, setSellOpen] = useState(false);
   const [addCostOpen, setAddCostOpen] = useState(false);
   const [handoverDialogOpen, setHandoverDialogOpen] = useState(false);
+  const [documentActionsOpen, setDocumentActionsOpen] = useState(false);
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
   const [contractPlace, setContractPlace] = useState("");
@@ -401,6 +397,60 @@ export default function VehicleDetail() {
     setContractPlace(dealerDefaultContractPlace);
   }, [contractDialogOpen, contractPlace, dealerDefaultContractPlace]);
 
+  function handleDocumentAction(actionId: DocumentCreateActionId) {
+    setDocumentActionsOpen(false);
+
+    switch (actionId) {
+      case "offer":
+        generateDocMutation.mutate({ type: "offer" });
+        return;
+      case "price-tag":
+        generateDocMutation.mutate({ type: "price-tag" });
+        return;
+      case "purchase-contract":
+        setPurchaseSellerSource("customer");
+        setPurchaseSellerId("");
+        setPurchaseManualFirstName("");
+        setPurchaseManualLastName("");
+        setPurchaseManualCompany("");
+        setPurchaseManualAddress("");
+        setPurchaseManualZip("");
+        setPurchaseManualCity("");
+        setPurchaseManualCountry("");
+        setPurchaseManualPhone("");
+        setPurchaseManualEmail("");
+        setPurchaseDialogOpen(true);
+        return;
+      case "contract":
+        setContractCustomerId("");
+        setContractDialogOpen(true);
+        return;
+      case "gelangensbestaetigung":
+        setGbCustomerId(vehicle.customerId ?? "");
+        setGbDateOfReceipt("");
+        setGbPassportType("");
+        setGbPassportNumber("");
+        setGbDialogOpen(true);
+        return;
+      case "vermittlung":
+        setVermBuyerSource("customer");
+        setVermBuyerId("");
+        setVermSellerSource("customer");
+        setVermSellerId("");
+        setVermManualFirstName("");
+        setVermManualLastName("");
+        setVermManualCompany("");
+        setVermManualAddress("");
+        setVermManualZip("");
+        setVermManualCity("");
+        setVermManualCountry("");
+        setVermManualPhone("");
+        setVermManualEmail("");
+        setVermDialogOpen(true);
+        return;
+    }
+  }
+
   async function handlePurchaseContractDownload() {
     if (!id || !vehicle) return;
 
@@ -556,7 +606,7 @@ export default function VehicleDetail() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 sm:shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           {vehicle.status !== "sold" && (
             <Button
               size="sm"
@@ -582,91 +632,19 @@ export default function VehicleDetail() {
             Übergabeprotokoll erstellen
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={generateDocMutation.isPending}
-              >
-                {generateDocMutation.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <FileText className="mr-2 h-4 w-4" />
-                )}
-                Dokument erstellen
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => generateDocMutation.mutate({ type: "offer" })}
-              >
-                Angebot
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => generateDocMutation.mutate({ type: "price-tag" })}
-              >
-                Preisschild
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setPurchaseSellerSource("customer");
-                  setPurchaseSellerId("");
-                  setPurchaseManualFirstName("");
-                  setPurchaseManualLastName("");
-                  setPurchaseManualCompany("");
-                  setPurchaseManualAddress("");
-                  setPurchaseManualZip("");
-                  setPurchaseManualCity("");
-                  setPurchaseManualCountry("");
-                  setPurchaseManualPhone("");
-                  setPurchaseManualEmail("");
-                  setPurchaseDialogOpen(true);
-                }}
-              >
-                Ankaufvertrag
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setContractCustomerId("");
-                  setContractDialogOpen(true);
-                }}
-              >
-                Kaufvertrag
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setGbCustomerId(vehicle.customerId ?? "");
-                  setGbDateOfReceipt("");
-                  setGbPassportType("");
-                  setGbPassportNumber("");
-                  setGbDialogOpen(true);
-                }}
-              >
-                Gelangensbestätigung
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setVermBuyerSource("customer");
-                  setVermBuyerId("");
-                  setVermSellerSource("customer");
-                  setVermSellerId("");
-                  setVermManualFirstName("");
-                  setVermManualLastName("");
-                  setVermManualCompany("");
-                  setVermManualAddress("");
-                  setVermManualZip("");
-                  setVermManualCity("");
-                  setVermManualCountry("");
-                  setVermManualPhone("");
-                  setVermManualEmail("");
-                  setVermDialogOpen(true);
-                }}
-              >
-                Vermittlungsvertrag
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generateDocMutation.isPending}
+            onClick={() => setDocumentActionsOpen(true)}
+          >
+            {generateDocMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="mr-2 h-4 w-4" />
+            )}
+            Dokument erstellen
+          </Button>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -696,6 +674,36 @@ export default function VehicleDetail() {
           </AlertDialog>
         </div>
       </div>
+
+      <Dialog open={documentActionsOpen} onOpenChange={setDocumentActionsOpen}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dokument erstellen</DialogTitle>
+            <DialogDescription>
+              Wählen Sie aus, welches Dokument erstellt werden soll.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 py-2">
+            {DOCUMENT_CREATE_ACTIONS.map((action) => (
+              <Button
+                key={action.id}
+                type="button"
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => handleDocumentAction(action.id)}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                {action.label}
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDocumentActionsOpen(false)}>
+              Abbrechen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Sell dialog */}
       <SellDialog
