@@ -1,46 +1,69 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.9-alpine
     restart: unless-stopped
+    init: true
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-mainauto}
-      POSTGRES_USER: ${POSTGRES_USER:-mainauto}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the compose env file}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the compose env file}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the compose env file}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     volumes:
       - ${PG_DATA_PATH:-./data/postgres}:/var/lib/postgresql/data
+    networks:
+      - database
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
+    shm_size: 256m
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-1g}
+    cpus: ${POSTGRES_CPU_LIMIT:-1.0}
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging: *default-logging
 
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    init: true
+    user: "${APP_UID:-1001}:${APP_GID:-1001}"
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 3000
-      DATABASE_URL: ${DATABASE_URL:-postgresql://mainauto:change-me@postgres:5432/mainauto?schema=public}
-      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-replace-with-long-random-secret}
-      BACKEND_URL: ${BACKEND_URL:-https://mainauto.rabauke.uk}
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in the compose env file}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in the compose env file}
+      BACKEND_URL: ${BACKEND_URL:-https://carops.de}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://carops.de}
+      PLATFORM_DOMAIN: ${PLATFORM_DOMAIN:-carops.de}
+      PLATFORM_SUPPORT_EMAIL: ${PLATFORM_SUPPORT_EMAIL:-support@carops.de}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       AUTH_DISABLE_CSRF_CHECK: ${AUTH_DISABLE_CSRF_CHECK:-false}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://mainauto.rabauke.uk}
-      PUPPETEER_EXECUTABLE_PATH: ${PUPPETEER_EXECUTABLE_PATH:-/usr/bin/chromium}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://carops.de}
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      PUPPETEER_SKIP_DOWNLOAD: "true"
       BOOTSTRAP_ADMIN: ${BOOTSTRAP_ADMIN:-false}
       INITIAL_ADMIN_NAME: ${INITIAL_ADMIN_NAME:-Superadmin}
       INITIAL_ADMIN_USERNAME: ${INITIAL_ADMIN_USERNAME:-}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-}
-      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-mainauto@admin.local}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-}
       SUPERADMIN_NAME: ${SUPERADMIN_NAME:-Superadmin}
       SUPERADMIN_USERNAME: ${SUPERADMIN_USERNAME:-}
       SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
-      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-superadmin@platform.local}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_EXTRACTION_MODEL: ${OPENAI_EXTRACTION_MODEL:-gpt-4o}
@@ -48,8 +71,21 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_STANDARD_PRICE_ID: ${STRIPE_STANDARD_PRICE_ID:-}
       STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
+      BUN_INSTALL_CACHE_DIR: /tmp/bun-cache
+      XDG_CACHE_HOME: /tmp/.cache
     volumes:
       - ${UPLOADS_PATH:-./data/uploads}:/app/uploads
+    networks:
+      - frontend
+      - database
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    shm_size: 256m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
       test:
         [
@@ -61,6 +97,12 @@ services:
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-2g}
+    cpus: ${BACKEND_CPU_LIMIT:-2.0}
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging: *default-logging
 
   web:
     build:
@@ -68,15 +110,38 @@ services:
       dockerfile: webapp/Dockerfile
       args:
         VITE_BACKEND_URL: ${VITE_BACKEND_URL:-}
-        VITE_PUBLIC_APP_URL: ${BACKEND_URL:-}
+        VITE_PUBLIC_APP_URL: ${BACKEND_URL:-https://carops.de}
     restart: unless-stopped
+    init: true
     depends_on:
       backend:
         condition: service_healthy
     ports:
-      - "${WEB_PORT:-8080}:80"
+      - "${WEB_BIND_ADDRESS:-0.0.0.0}:${WEB_PORT:-8080}:8080"
+    networks:
+      - frontend
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:size=32m,mode=0755,uid=101,gid=101
+      - /var/run:size=1m,mode=0755,uid=101,gid=101
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/health"]
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 10s
+    mem_limit: ${WEB_MEMORY_LIMIT:-256m}
+    cpus: ${WEB_CPU_LIMIT:-0.5}
+    pids_limit: 64
+    stop_grace_period: 10s
+    logging: *default-logging
+
+networks:
+  frontend:
+  database:
+    internal: true

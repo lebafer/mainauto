@@ -23,8 +23,11 @@ import {
 import { api } from "@/lib/api";
 import {
   type Vehicle,
+  type StoredDocumentType,
   type VehicleCostBreakdownItem,
   formatPrice,
+  formatDateOnly,
+  richTextToPlainText,
   formatMileage,
   calculateGrossPrice,
   calculateTaxAmount,
@@ -37,7 +40,9 @@ import {
   getVehicleExportCostsTotal,
   getVehicleManualCostsTotal,
   getVehicleMargin,
+  toDateInputValue,
 } from "@/lib/vehicles";
+import { toLocalDateInputValue } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -130,7 +135,8 @@ async function saveHtmlDocument(
   vehicleId: string,
   html: string,
   filename: string,
-  docName: string
+  docName: string,
+  documentType: StoredDocumentType = "general"
 ) {
   const blob = new Blob([html], { type: "text/html" });
   const htmlFile = new File([blob], filename, { type: "text/html" });
@@ -138,10 +144,28 @@ async function saveHtmlDocument(
   const formData = new FormData();
   formData.append("file", htmlFile);
   formData.append("name", docName);
+  formData.append("documentType", documentType);
   await fetch(`${baseUrl}/api/vehicles/${vehicleId}/documents`, {
     method: "POST",
     body: formData,
     credentials: "include",
+  });
+}
+
+async function saveBinaryDocument(
+  vehicleId: string,
+  blob: Blob,
+  filename: string,
+  docName: string,
+  documentType: StoredDocumentType
+) {
+  const formData = new FormData();
+  formData.append("file", new File([blob], filename, { type: blob.type || "application/pdf" }));
+  formData.append("name", docName);
+  formData.append("documentType", documentType);
+  await api.raw(`/api/vehicles/${vehicleId}/documents`, {
+    method: "POST",
+    body: formData,
   });
 }
 
@@ -150,10 +174,17 @@ async function saveHtmlDocument(
 function openPrintWindow(html: string) {
   const win = window.open("", "_blank");
   if (win) {
-    win.document.write(
-      html + '<script>window.onload = function() { window.print(); }</s' + 'cript>'
-    );
+    win.opener = null;
+    const printCsp =
+      "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">";
+    const protectedHtml = /<head(?:\s[^>]*)?>/i.test(html)
+      ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${printCsp}`)
+      : `<!doctype html><html><head>${printCsp}</head><body>${html}</body></html>`;
+    win.document.write(protectedHtml);
     win.document.close();
+    window.setTimeout(() => {
+      if (!win.closed) win.print();
+    }, 250);
   }
 }
 
@@ -174,7 +205,7 @@ export default function VehicleDetail() {
   const [contractDialogOpen, setContractDialogOpen] = useState(false);
   const [contractCustomerId, setContractCustomerId] = useState("");
   const [contractPlace, setContractPlace] = useState("");
-  const [contractDate, setContractDate] = useState(() => new Date().toISOString().split("T")[0] ?? "");
+  const [contractDate, setContractDate] = useState(toLocalDateInputValue);
   const [showNewContractCustomer, setShowNewContractCustomer] = useState(false);
   const [contractNewFirstName, setContractNewFirstName] = useState("");
   const [contractNewLastName, setContractNewLastName] = useState("");
@@ -218,6 +249,9 @@ export default function VehicleDetail() {
   const [vermManualEmail, setVermManualEmail] = useState("");
   const [vermLoading, setVermLoading] = useState(false);
   const dealerDefaultContractPlace = session?.dealerSettings?.city?.trim() ?? "";
+  const canDeleteRecords = ["dealer_owner", "dealer_admin"].includes(
+    session?.dealerRole ?? ""
+  );
 
   const { data: vehicle, isLoading } = useQuery({
     queryKey: ["vehicle", id],
@@ -277,12 +311,18 @@ export default function VehicleDetail() {
       }
     },
     onSuccess: async (data, variables) => {
-      const date = new Date().toISOString().split("T")[0];
+      const date = toLocalDateInputValue();
 
       if (variables.type === "contract" && "blob" in data && data.blob) {
-        const vn = vehicle?.vehicleNumber ?? new Date().toISOString().split("T")[0];
+        const vn = vehicle?.vehicleNumber ?? toLocalDateInputValue();
         const filename = `Kaufvertrag_${vn}.pdf`;
         const docName = `Kaufvertrag ${vn}`;
+        try {
+          await saveBinaryDocument(id!, data.blob, filename, docName, "contract");
+        } catch {
+          toast.error("Kaufvertrag wurde erstellt, konnte aber nicht sicher archiviert werden. Bitte erneut versuchen.");
+          return;
+        }
         // Trigger PDF download
         const url = URL.createObjectURL(data.blob);
         const a = document.createElement("a");
@@ -292,29 +332,8 @@ export default function VehicleDetail() {
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        // Also save the HTML version for the documents tab
-        try {
-          // Re-fetch HTML to save
-          const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-          const htmlRes = await fetch(`${baseUrl}/api/documents/generate`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              type: "contract",
-              vehicleId: id,
-              customerId: variables.customerId,
-              ...(variables.contractPlace ? { contractPlace: variables.contractPlace } : {}),
-              ...(variables.contractDate ? { contractDate: variables.contractDate } : {}),
-            }),
-          });
-          if (htmlRes.ok) {
-            const htmlData = await htmlRes.json();
-            await saveHtmlDocument(id!, htmlData.data.html, `${filename.replace(".pdf", ".html")}`, docName);
-          }
-        } catch { /* ignore save errors */ }
         queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
-        toast.success("Kaufvertrag als PDF gespeichert");
+        toast.success("Kaufvertrag archiviert und als PDF heruntergeladen");
       } else if ("html" in data && data.html) {
         let filename = "Dokument.html";
         let docName = "Dokument";
@@ -385,7 +404,7 @@ export default function VehicleDetail() {
     setGbPassportNumber(selectedGbCustomer.idDocumentNumber ?? "");
     setGbPassportValidUntil(
       selectedGbCustomer.idDocumentValidUntil
-        ? new Date(selectedGbCustomer.idDocumentValidUntil).toISOString().split("T")[0]
+        ? toDateInputValue(selectedGbCustomer.idDocumentValidUntil)
         : ""
     );
   }, [selectedGbCustomer]);
@@ -426,7 +445,7 @@ export default function VehicleDetail() {
         setContractDialogOpen(true);
         return;
       case "gelangensbestaetigung":
-        setGbCustomerId(vehicle.customerId ?? "");
+        setGbCustomerId(vehicle?.customerId ?? "");
         setGbDateOfReceipt("");
         setGbPassportType("");
         setGbPassportNumber("");
@@ -491,6 +510,7 @@ export default function VehicleDetail() {
       if (!pdfRes.ok) throw new Error("PDF-Erstellung fehlgeschlagen");
 
       const blob = await pdfRes.blob();
+      await saveBinaryDocument(id, blob, filename, docName, "purchase_contract");
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -500,24 +520,8 @@ export default function VehicleDetail() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      try {
-        const htmlRes = await fetch(`${baseUrl}/api/documents/generate-purchase-html`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        });
-
-        if (htmlRes.ok) {
-          const { data } = await htmlRes.json();
-          await saveHtmlDocument(id, data.html, filename.replace(".pdf", ".html"), docName);
-        }
-      } catch {
-        // Ignore HTML save errors after successful PDF creation.
-      }
-
       queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
-      toast.success("Ankaufvertrag als PDF gespeichert");
+      toast.success("Ankaufvertrag archiviert und als PDF heruntergeladen");
       setPurchaseDialogOpen(false);
     } catch {
       toast.error("Fehler beim Erstellen des Ankaufvertrags");
@@ -568,15 +572,15 @@ export default function VehicleDetail() {
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" asChild className="mt-1">
+        <div className="flex min-w-0 items-start gap-2 sm:gap-4">
+          <Button variant="ghost" size="icon" asChild className="mt-1 min-h-11 min-w-11">
             <Link to="/vehicles">
               <ArrowLeft className="h-5 w-5" />
             </Link>
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <h1 className="break-words text-2xl font-bold tracking-tight sm:text-3xl">
                 {vehicle.brand} {vehicle.model}
               </h1>
               <Badge variant="outline" className={statusConfig.className}>
@@ -588,12 +592,12 @@ export default function VehicleDetail() {
                 </Badge>
               ) : null}
             </div>
-            <p className="text-muted-foreground">
+            <p className="break-words text-sm text-muted-foreground sm:text-base">
               {vehicle.firstRegistration
-                ? new Date(vehicle.firstRegistration).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
+                ? formatDateOnly(vehicle.firstRegistration)
                 : vehicle.year
                   ? vehicle.year
-                  : null}
+                  : "Baujahr unbekannt"}
               {" "}&middot; {formatMileage(vehicle.mileage)}
               {vehicle.vin ? ` · ${vehicle.vin}` : ""}
               {vehicle.vehicleNumber ? (
@@ -606,7 +610,7 @@ export default function VehicleDetail() {
         </div>
 
         {/* Actions */}
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:shrink-0 [&_button]:min-h-11 sm:[&_button]:min-h-9">
           {vehicle.status !== "sold" && (
             <Button
               size="sm"
@@ -646,7 +650,7 @@ export default function VehicleDetail() {
             Dokument erstellen
           </Button>
 
-          <AlertDialog>
+          {canDeleteRecords ? <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
@@ -671,7 +675,7 @@ export default function VehicleDetail() {
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
-          </AlertDialog>
+          </AlertDialog> : null}
         </div>
       </div>
 
@@ -680,7 +684,7 @@ export default function VehicleDetail() {
           <DialogHeader>
             <DialogTitle>Dokument erstellen</DialogTitle>
             <DialogDescription>
-              Wählen Sie aus, welches Dokument erstellt werden soll.
+              Wähle aus, welches Dokument erstellt werden soll.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2 py-2">
@@ -732,7 +736,7 @@ export default function VehicleDetail() {
           <DialogHeader>
             <DialogTitle>Ankaufvertrag erstellen</DialogTitle>
             <DialogDescription>
-              Wählen Sie den Verkäufer aus oder geben Sie ihn manuell ein.
+              Wähle den Verkäufer aus oder gib ihn manuell ein.
             </DialogDescription>
           </DialogHeader>
 
@@ -1152,6 +1156,13 @@ export default function VehicleDetail() {
                   const blob = await res.blob();
                   const vn = vehicle?.vehicleNumber ?? id;
                   const filename = `Gelangensbestaetigung_${vn}.pdf`;
+                  await saveBinaryDocument(
+                    id!,
+                    blob,
+                    filename,
+                    `Gelangensbestätigung ${vn}`,
+                    "other_legal"
+                  );
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
@@ -1160,28 +1171,8 @@ export default function VehicleDetail() {
                   a.click();
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
-                  // Save HTML copy for documents tab
-                  try {
-                    const htmlRes = await fetch(`${baseUrl}/api/documents/generate-gelangensbestaetigung-html`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify({
-                        vehicleId: id,
-                        customerId: gbCustomerId,
-                        dateOfReceipt: gbDateOfReceipt,
-                        passportType: gbPassportType,
-                        passportNumber: gbPassportNumber,
-                        passportValidUntil: gbPassportValidUntil,
-                      }),
-                    });
-                    if (htmlRes.ok) {
-                      const { data } = await htmlRes.json();
-                      await saveHtmlDocument(id!, data.html, filename.replace(".pdf", ".html"), `Gelangensbestätigung ${vn}`);
-                    }
-                  } catch { /* ignore */ }
                   queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
-                  toast.success("Gelangensbestätigung erstellt");
+                  toast.success("Gelangensbestätigung archiviert und heruntergeladen");
                   setGbDialogOpen(false);
                 } catch {
                   toast.error("Fehler beim Erstellen der Gelangensbestätigung");
@@ -1454,6 +1445,13 @@ export default function VehicleDetail() {
                   if (!pdfRes.ok) throw new Error("PDF-Erstellung fehlgeschlagen");
                   const blob = await pdfRes.blob();
                   const filename = `Vermittlungsvertrag_${vn}.pdf`;
+                  await saveBinaryDocument(
+                    id!,
+                    blob,
+                    filename,
+                    `Vermittlungsvertrag ${vn}`,
+                    "contract"
+                  );
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
@@ -1462,22 +1460,8 @@ export default function VehicleDetail() {
                   a.click();
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
-                  // Save HTML version
-                  try {
-                    const htmlRes = await fetch(`${baseUrl}/api/documents/generate-vermittlung-html`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify(basePayload),
-                    });
-                    if (htmlRes.ok) {
-                      const { data } = await htmlRes.json();
-                      const docName = `Vermittlungsvertrag ${vn}`;
-                      await saveHtmlDocument(id!, data.html, filename.replace(".pdf", ".html"), docName);
-                    }
-                  } catch { /* ignore save errors */ }
                   queryClient.invalidateQueries({ queryKey: ["vehicle", id] });
-                  toast.success("Vermittlungsvertrag als PDF gespeichert");
+                  toast.success("Vermittlungsvertrag archiviert und als PDF heruntergeladen");
                   setVermDialogOpen(false);
                 } catch {
                   toast.error("Fehler beim Erstellen des Dokuments");
@@ -1506,8 +1490,9 @@ export default function VehicleDetail() {
           <CardContent>
             <div className="grid gap-4 grid-cols-2 sm:grid-cols-3">
               <InfoItem icon={Gauge} label="Kilometerstand" value={formatMileage(vehicle.mileage)} />
+              <InfoItem icon={Car} label="Baujahr" value={vehicle.year ? String(vehicle.year) : "Unbekannt"} />
               {vehicle.firstRegistration ? (
-                <InfoItem icon={Car} label="Erstzulassung" value={new Date(vehicle.firstRegistration).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })} />
+                <InfoItem icon={Car} label="Erstzulassung" value={formatDateOnly(vehicle.firstRegistration)} />
               ) : null}
               <InfoItem icon={Palette} label="Farbe" value={vehicle.color || "--"} />
               <InfoItem icon={Fuel} label="Kraftstoff" value={vehicle.fuelType || "--"} />
@@ -1604,10 +1589,7 @@ export default function VehicleDetail() {
             {vehicle.notes ? (
               <div className="mt-6">
                 <p className="mb-1 text-sm font-medium text-muted-foreground">Besondere Informationen</p>
-                <div
-                  className="text-sm prose prose-sm max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_strong]:font-semibold [&_p]:my-0.5"
-                  dangerouslySetInnerHTML={{ __html: vehicle.notes }}
-                />
+                <p className="whitespace-pre-wrap text-sm">{richTextToPlainText(vehicle.notes)}</p>
               </div>
             ) : null}
 
@@ -1936,7 +1918,17 @@ function SalesSection({ sales }: { sales: Vehicle["sales"] }) {
         <Card key={sale.id}>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
-              <p className="font-medium">{formatPrice(sale.salePrice)}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-medium">
+                  {sale.accountingStatus !== "legacy_ambiguous" &&
+                  sale.grossCents !== null
+                    ? formatPrice(sale.grossCents / 100)
+                    : "Preisprüfung nötig"}
+                </p>
+                {sale.status === "reversed" ? (
+                  <Badge variant="secondary">Storniert</Badge>
+                ) : null}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {new Date(sale.saleDate).toLocaleDateString("de-DE")}
               </p>
@@ -2151,7 +2143,7 @@ function SellDialog({
 
   const [customerId, setCustomerId] = useState("");
   const [salePrice, setSalePrice] = useState(gross.toFixed(2));
-  const [saleDate, setSaleDate] = useState(new Date().toISOString().split("T")[0]);
+  const [saleDate, setSaleDate] = useState(toLocalDateInputValue);
   const [notes, setNotes] = useState("");
   const [exportEnabled, setExportEnabled] = useState(vehicle.exportEnabled ?? false);
   const [transportCostDomestic, setTransportCostDomestic] = useState(vehicle.transportCostDomestic?.toString() ?? "");

@@ -139,10 +139,17 @@ function openPrintWindow(html: string) {
     throw new Error("Druckfenster konnte nicht geöffnet werden");
   }
 
-  win.document.write(
-    html + '<script>window.onload = function() { window.print(); }</s' + "cript>"
-  );
+  win.opener = null;
+  const printCsp =
+    "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'\">";
+  const protectedHtml = /<head(?:\s[^>]*)?>/i.test(html)
+    ? html.replace(/<head(?:\s[^>]*)?>/i, (head) => `${head}${printCsp}`)
+    : `<!doctype html><html><head>${printCsp}</head><body>${html}</body></html>`;
+  win.document.write(protectedHtml);
   win.document.close();
+  window.setTimeout(() => {
+    if (!win.closed) win.print();
+  }, 250);
 }
 
 function Section({
@@ -560,7 +567,7 @@ export function VehicleHandoverProtocolDialog({
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
-      anchor.download = `Uebergabeprotokoll_${vehicle.vehicleNumber}.pdf`;
+      anchor.download = `Übergabeprotokoll_${vehicle.vehicleNumber}.pdf`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

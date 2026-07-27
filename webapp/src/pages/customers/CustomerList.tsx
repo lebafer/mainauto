@@ -137,8 +137,17 @@ export default function CustomerList() {
                     {customers.map((customer) => (
                       <TableRow
                         key={customer.id}
-                        className="cursor-pointer"
+                        className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         onClick={() => navigate(`/customers/${customer.id}`)}
+                        role="link"
+                        tabIndex={0}
+                        aria-label={`${customer.firstName} ${customer.lastName} öffnen`}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            navigate(`/customers/${customer.id}`);
+                          }
+                        }}
                       >
                         <TableCell className="font-medium">
                           {customer.firstName} {customer.lastName}

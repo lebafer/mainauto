@@ -204,7 +204,7 @@ export default function SettingsDealer() {
         <CardHeader>
           <CardTitle>Dokumentenbranding</CardTitle>
           <CardDescription>
-            Eigenes Logo und individuelle Rechtstexte sind nur im Pro-Tarif verfuegbar.
+            Eigenes Logo und individuelle Rechtstexte sind nur im Pro-Tarif verfügbar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -248,7 +248,7 @@ export default function SettingsDealer() {
                   {logoUploadMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Laedt hoch...
+                      Lädt hoch...
                     </>
                   ) : (
                     <>
@@ -315,7 +315,7 @@ export default function SettingsDealer() {
         ) : (
           <>
             <Save className="mr-2 h-4 w-4" />
-            Aenderungen speichern
+            Änderungen speichern
           </>
         )}
       </Button>

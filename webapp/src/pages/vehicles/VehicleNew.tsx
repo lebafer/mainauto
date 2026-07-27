@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ArrowLeft, CheckCircle, ArrowRight, Plus } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "@/lib/api";
-import { type Vehicle } from "@/lib/vehicles";
+import { type Vehicle, toDateInputValue } from "@/lib/vehicles";
 import { type VehicleBriefDocumentType } from "../../../../backend/src/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,6 +43,7 @@ export default function VehicleNew() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", files.length === 1 ? label : `${label} ${index + 1}`);
+      formData.append("documentType", "other_legal");
 
       const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
         method: "POST",
@@ -105,7 +106,12 @@ export default function VehicleNew() {
             <h1 className="text-2xl font-bold tracking-tight">Fahrzeug angelegt!</h1>
             <p className="text-muted-foreground text-sm">
               <span className="font-mono">{createdVehicle.vehicleNumber}</span>
-              {" · "}{createdVehicle.brand} {createdVehicle.model} {createdVehicle.firstRegistration ? `(${new Date(createdVehicle.firstRegistration).getFullYear()})` : createdVehicle.year ? `(${createdVehicle.year})` : ""}
+              {" · "}{createdVehicle.brand} {createdVehicle.model}{" "}
+              {createdVehicle.firstRegistration
+                ? `(EZ ${toDateInputValue(createdVehicle.firstRegistration).slice(0, 4)})`
+                : createdVehicle.year
+                  ? `(Baujahr ${createdVehicle.year})`
+                  : "(Baujahr unbekannt)"}
             </p>
           </div>
         </div>

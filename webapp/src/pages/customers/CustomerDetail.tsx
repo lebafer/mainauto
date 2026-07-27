@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { StoredDocumentType } from "@/lib/vehicles";
 
 // Types
 interface CustomerVehicle {
@@ -67,6 +76,8 @@ interface CustomerDocument {
   id: string;
   name: string;
   url: string;
+  retentionLocked?: boolean;
+  softDeletedAt?: string | null;
   createdAt: string;
 }
 
@@ -74,6 +85,9 @@ interface CustomerSale {
   id: string;
   salePrice: number;
   saleDate: string;
+  status: "completed" | "reversed";
+  accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
+  grossCents: number | null;
   vehicle: {
     id: string;
     brand: string;
@@ -142,6 +156,7 @@ function DocumentUpload({
   const fileRef = useRef<HTMLInputElement>(null);
   const [docName, setDocName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [documentType, setDocumentType] = useState<StoredDocumentType>("general");
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async () => {
@@ -153,6 +168,7 @@ function DocumentUpload({
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("name", docName.trim());
+      formData.append("documentType", documentType);
 
       const res = await fetch(
         `${baseUrl}/api/customers/${customerId}/documents`,
@@ -168,6 +184,7 @@ function DocumentUpload({
       toast.success("Dokument hochgeladen");
       setDocName("");
       setSelectedFile(null);
+      setDocumentType("general");
       if (fileRef.current) fileRef.current.value = "";
       onUploaded();
     } catch {
@@ -180,7 +197,7 @@ function DocumentUpload({
   return (
     <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
       <p className="text-sm font-medium">Neues Dokument hochladen</p>
-      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
         <div className="space-y-1">
           <Label htmlFor="docName" className="text-xs text-muted-foreground">
             Bezeichnung
@@ -191,6 +208,25 @@ function DocumentUpload({
             value={docName}
             onChange={(e) => setDocName(e.target.value)}
           />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="customerDocType" className="text-xs text-muted-foreground">
+            Dokumentart
+          </Label>
+          <Select
+            value={documentType}
+            onValueChange={(value: StoredDocumentType) => setDocumentType(value)}
+          >
+            <SelectTrigger id="customerDocType">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="general">Allgemeines Dokument</SelectItem>
+              <SelectItem value="contract">Verkaufsvertrag</SelectItem>
+              <SelectItem value="purchase_contract">Ankaufvertrag</SelectItem>
+              <SelectItem value="other_legal">Sonstiger rechtlicher Beleg</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1">
           <Label htmlFor="docFile" className="text-xs text-muted-foreground">
@@ -250,6 +286,10 @@ export default function CustomerDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { session } = useAuth();
+  const canDeleteRecords = ["dealer_owner", "dealer_admin"].includes(
+    session?.dealerRole ?? ""
+  );
 
   const {
     data: customer,
@@ -264,12 +304,16 @@ export default function CustomerDetail() {
   const deleteMutation = useMutation({
     mutationFn: () => api.delete(`/api/customers/${id}`),
     onSuccess: () => {
-      toast.success("Kunde geloscht");
+      toast.success("Kunde gelöscht");
       queryClient.invalidateQueries({ queryKey: ["customers"] });
       navigate("/customers");
     },
-    onError: () => {
-      toast.error("Fehler beim Loschen");
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Der Kunde konnte nicht gelöscht werden."
+      );
     },
   });
 
@@ -277,11 +321,11 @@ export default function CustomerDetail() {
     mutationFn: (docId: string) =>
       api.delete(`/api/customers/${id}/documents/${docId}`),
     onSuccess: () => {
-      toast.success("Dokument geloscht");
+      toast.success("Dokument gelöscht");
       queryClient.invalidateQueries({ queryKey: ["customer", id] });
     },
     onError: () => {
-      toast.error("Fehler beim Loschen des Dokuments");
+      toast.error("Fehler beim Löschen des Dokuments");
     },
   });
 
@@ -294,7 +338,7 @@ export default function CustomerDetail() {
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-muted-foreground mb-4">Kunde nicht gefunden</p>
         <Button asChild variant="outline">
-          <Link to="/customers">Zuruck zur Ubersicht</Link>
+          <Link to="/customers">Zurück zur Übersicht</Link>
         </Button>
       </div>
     );
@@ -333,35 +377,38 @@ export default function CustomerDetail() {
               Bearbeiten
             </Link>
           </Button>
-          <AlertDialog>
+          {canDeleteRecords ? <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="outline" className="text-destructive hover:text-destructive">
                 <Trash2 className="mr-2 h-4 w-4" />
-                Loschen
+                Löschen
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Kunden loschen?</AlertDialogTitle>
+                <AlertDialogTitle>Kunden wirklich löschen?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Mochten Sie {customer.firstName} {customer.lastName} wirklich
-                  loschen? Diese Aktion kann nicht ruckgangig gemacht werden.
+                  {customer.firstName} {customer.lastName} wird dauerhaft gelöscht.
+                  Das ist nur möglich, wenn keine Fahrzeug- oder Verkaufshistorie
+                  mit diesem Kunden verknüpft ist. Zugeordnete Dokumente werden
+                  ebenfalls entfernt. Diese Aktion kann nicht rückgängig gemacht werden.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Abbrechen</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => deleteMutation.mutate()}
+                  disabled={deleteMutation.isPending}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   {deleteMutation.isPending ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   ) : null}
-                  Loschen
+                  Kunden endgültig löschen
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
-          </AlertDialog>
+          </AlertDialog> : null}
         </div>
       </div>
 
@@ -419,7 +466,7 @@ export default function CustomerDetail() {
           </TabsTrigger>
           <TabsTrigger value="sales" className="gap-1.5">
             <Receipt className="h-3.5 w-3.5" />
-            Verkaufe
+            Verkäufe
             {customer.sales.length > 0 ? (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
                 {customer.sales.length}
@@ -491,7 +538,7 @@ export default function CustomerDetail() {
             <CardHeader>
               <CardTitle className="text-base">Dokumente</CardTitle>
               <CardDescription>
-                Hochgeladene Dokumente fur diesen Kunden
+                Hochgeladene Dokumente für diesen Kunden
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -528,6 +575,11 @@ export default function CustomerDetail() {
                           <p className="text-xs text-muted-foreground">
                             {formatDate(doc.createdAt)}
                           </p>
+                          {doc.retentionLocked ? (
+                            <Badge variant="outline" className="mt-1 border-emerald-500/40 text-[11px] text-emerald-600">
+                              Aufbewahrungspflicht
+                            </Badge>
+                          ) : null}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -542,7 +594,7 @@ export default function CustomerDetail() {
                             </a>
                           </Button>
                         ) : null}
-                        <Button
+                        {canDeleteRecords && !doc.retentionLocked ? <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => deleteDocMutation.mutate(doc.id)}
@@ -550,7 +602,7 @@ export default function CustomerDetail() {
                           className="text-muted-foreground hover:text-destructive"
                         >
                           <X className="h-4 w-4" />
-                        </Button>
+                        </Button> : null}
                       </div>
                     </div>
                   ))}
@@ -564,9 +616,9 @@ export default function CustomerDetail() {
         <TabsContent value="sales">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Verkaufe</CardTitle>
+              <CardTitle className="text-base">Verkäufe</CardTitle>
               <CardDescription>
-                Verkaufshistorie fur diesen Kunden
+                Verkaufshistorie für diesen Kunden
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -574,7 +626,7 @@ export default function CustomerDetail() {
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <Receipt className="h-8 w-8 text-muted-foreground/40 mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    Keine Verkaufe vorhanden
+                    Keine Verkäufe vorhanden
                   </p>
                 </div>
               ) : (
@@ -599,9 +651,14 @@ export default function CustomerDetail() {
                       >
                         <TableCell>
                           <div>
-                            <p className="font-medium">
-                              {sale.vehicle.brand} {sale.vehicle.model}
-                            </p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-medium">
+                                {sale.vehicle.brand} {sale.vehicle.model}
+                              </p>
+                              {sale.status === "reversed" ? (
+                                <Badge variant="secondary">Storniert</Badge>
+                              ) : null}
+                            </div>
                             <p className="text-xs text-muted-foreground sm:hidden">
                               {formatDate(sale.saleDate)}
                             </p>
@@ -611,7 +668,10 @@ export default function CustomerDetail() {
                           {formatDate(sale.saleDate)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(sale.salePrice)}
+                          {sale.accountingStatus !== "legacy_ambiguous" &&
+                          sale.grossCents !== null
+                            ? formatCurrency(sale.grossCents / 100)
+                            : "—"}
                         </TableCell>
                       </TableRow>
                     ))}

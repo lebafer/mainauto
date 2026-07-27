@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "admin:upsert": "bun run scripts/upsert-superadmin.ts"
+    "admin:upsert": "bun run scripts/upsert-superadmin.ts",
+    "migration:preflight-sales": "bun run scripts/preflight-sales-migration.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
@@ -15,15 +17,21 @@
     "typescript": "5.8.3"
   },
   "dependencies": {
-    "@hono/node-server": "1.12.0",
     "@hono/zod-validator": "^0.7.6",
     "@prisma/client": "6",
     "@sparticuz/chromium": "^143.0.4",
-    "better-auth": "^1.4.18",
-    "hono": "4.6.0",
-    "puppeteer": "^24.37.5",
+    "better-auth": "^1.6.25",
+    "hono": "^4.12.32",
     "puppeteer-core": "^24.37.5",
     "stripe": "^20.4.1",
     "zod": "4.1.11"
+  },
+  "overrides": {
+    "basic-ftp": "5.3.1",
+    "defu": "6.1.7",
+    "effect": "3.22.0",
+    "follow-redirects": "1.16.0",
+    "ip-address": "10.3.1",
+    "ws": "8.21.1"
   }
 }

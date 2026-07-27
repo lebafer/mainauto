@@ -12,11 +12,15 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/vehicles";
 import type { FinancesData } from "../../../backend/src/types";
 import { useAuth } from "@/lib/auth-client";
+import { toLocalDateInputValue } from "@/lib/dates";
 
 // ─── Date helpers ─────────────────────────────────────────────
 
@@ -26,22 +30,20 @@ function getDateRange(preset: string): { from: string; to: string } | null {
     const from = new Date(now);
     from.setDate(now.getDate() - 6);
     return {
-      from: from.toISOString().split("T")[0],
-      to: now.toISOString().split("T")[0],
+      from: toLocalDateInputValue(from),
+      to: toLocalDateInputValue(now),
     };
   }
   if (preset === "month") {
     return {
-      from: new Date(now.getFullYear(), now.getMonth(), 1)
-        .toISOString()
-        .split("T")[0],
-      to: now.toISOString().split("T")[0],
+      from: toLocalDateInputValue(new Date(now.getFullYear(), now.getMonth(), 1)),
+      to: toLocalDateInputValue(now),
     };
   }
   if (preset === "year") {
     return {
-      from: new Date(now.getFullYear(), 0, 1).toISOString().split("T")[0],
-      to: now.toISOString().split("T")[0],
+      from: toLocalDateInputValue(new Date(now.getFullYear(), 0, 1)),
+      to: toLocalDateInputValue(now),
     };
   }
   return null; // "all" = no filter
@@ -158,8 +160,8 @@ export default function Finances() {
 
   // Computed KPI values
   const avgMargin =
-    finances && finances.vehiclesSold > 0
-      ? finances.totalProfit / finances.vehiclesSold
+    finances && finances.accountedSales > 0
+      ? finances.totalProfit / finances.accountedSales
       : null;
 
   // ── Loading state
@@ -197,26 +199,25 @@ export default function Finances() {
       </div>
 
       {/* ── Filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+      <div className="flex flex-col gap-4 rounded-xl border bg-card/40 p-3 sm:flex-row sm:items-end">
         {/* Preset pills */}
         <div className="flex gap-1.5 flex-wrap">
           {PRESETS.map(({ key, label }) => (
-            <button
+            <Button
               key={key}
+              type="button"
+              size="sm"
+              variant={!customRangeActive && preset === key ? "default" : "outline"}
+              aria-pressed={!customRangeActive && preset === key}
               onClick={() => {
                 setPreset(key);
                 setCustomFrom("");
                 setCustomTo("");
               }}
-              className={cn(
-                "px-3.5 py-1.5 rounded-full text-sm font-medium transition-all border",
-                !customRangeActive && preset === key
-                  ? "bg-foreground text-background border-foreground"
-                  : "bg-transparent text-muted-foreground border-border hover:text-foreground hover:border-foreground/40"
-              )}
+              className="min-h-10 rounded-full"
             >
               {label}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -224,44 +225,61 @@ export default function Finances() {
         <div className="hidden sm:block h-5 w-px bg-border/60" />
 
         {/* Custom date range */}
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground text-xs font-medium">Von</span>
-          <input
-            type="date"
-            value={customFrom}
-            onChange={(e) => setCustomFrom(e.target.value)}
-            className={cn(
-              "h-8 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
-              customRangeActive
-                ? "border-foreground ring-1 ring-foreground/20"
-                : "border-border focus:border-foreground/60"
-            )}
-          />
-          <span className="text-muted-foreground text-xs font-medium">Bis</span>
-          <input
-            type="date"
-            value={customTo}
-            onChange={(e) => setCustomTo(e.target.value)}
-            className={cn(
-              "h-8 rounded-lg border px-2.5 text-sm bg-background text-foreground transition-colors",
-              customRangeActive
-                ? "border-foreground ring-1 ring-foreground/20"
-                : "border-border focus:border-foreground/60"
-            )}
-          />
+        <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-[minmax(9rem,1fr)_minmax(9rem,1fr)_auto]">
+          <div className="space-y-1">
+            <Label htmlFor="finance-from" className="text-xs text-muted-foreground">Von</Label>
+            <Input
+              id="finance-from"
+              type="date"
+              value={customFrom}
+              max={customTo || undefined}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className={cn(customRangeActive ? "border-foreground ring-1 ring-foreground/20" : "")}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="finance-to" className="text-xs text-muted-foreground">Bis</Label>
+            <Input
+              id="finance-to"
+              type="date"
+              value={customTo}
+              min={customFrom || undefined}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className={cn(customRangeActive ? "border-foreground ring-1 ring-foreground/20" : "")}
+            />
+          </div>
           {customRangeActive ? (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => {
                 setCustomFrom("");
                 setCustomTo("");
               }}
-              className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+              className="min-h-10 self-end"
             >
               Zurücksetzen
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
+
+      {finances.hasAccountingWarnings ? (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="flex gap-3 p-4 text-sm">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium text-foreground">Historische Preise müssen geprüft werden</p>
+              <p className="mt-1 text-muted-foreground">
+                {finances.ambiguousSales} von {finances.vehiclesSold} Verkäufen
+                sind wegen uneindeutiger Altdaten nicht in Umsatz, Gewinn und
+                Durchschnittsmarge enthalten. Die betroffenen Zeilen sind unten markiert.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* ── KPI grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -316,7 +334,14 @@ export default function Finances() {
               </span>
             </span>
           }
-          subtext={formatPrice(finances.totalRevenue)}
+          subtext={
+            <span>
+              {formatPrice(finances.totalRevenue)}
+              {finances.hasAccountingWarnings
+                ? ` · ${finances.accountedSales}/${finances.vehiclesSold} zugeordnet`
+                : ""}
+            </span>
+          }
         />
 
         {/* 3. Gewinn */}
@@ -488,7 +513,15 @@ export default function Finances() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/30">
-                    {finances.sales.map((sale) => (
+                    {finances.sales.map((sale) => {
+                      const accountingReady =
+                        sale.accountingStatus !== "legacy_ambiguous" &&
+                        sale.purchasePrice !== null &&
+                        sale.additionalCosts !== null &&
+                        sale.salePrice !== null &&
+                        sale.profit !== null;
+
+                      return (
                       <tr
                         key={sale.id}
                         className="hover:bg-muted/30 transition-colors"
@@ -503,18 +536,23 @@ export default function Finances() {
                           <span className="ml-1.5 text-xs text-muted-foreground">
                             #{sale.vehicleNumber}
                           </span>
+                          {!accountingReady ? (
+                            <Badge variant="outline" className="ml-2 border-amber-500/50 text-amber-600">
+                              Preisprüfung nötig
+                            </Badge>
+                          ) : null}
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">
                           {sale.customerName}
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
-                          {formatPrice(sale.purchasePrice)}
+                          {accountingReady ? formatPrice(sale.purchasePrice!) : "—"}
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
-                          {sale.additionalCosts > 0 ? (
+                          {accountingReady && sale.additionalCosts! > 0 ? (
                             <div className="space-y-1 text-right">
                               <span className="block text-amber-500 font-medium">
-                                {formatPrice(sale.additionalCosts)}
+                                {formatPrice(sale.additionalCosts!)}
                               </span>
                               {sale.costBreakdown.length > 0 ? (
                                 <div className="space-y-0.5 text-[11px] leading-tight text-muted-foreground">
@@ -531,23 +569,30 @@ export default function Finances() {
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
-                          {formatPrice(sale.salePrice)}
+                          {accountingReady ? formatPrice(sale.salePrice!) : "—"}
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
                           <span
                             className={cn(
                               "font-bold",
-                              sale.profit >= 0
+                              accountingReady && sale.profit! >= 0
                                 ? "text-emerald-500"
-                                : "text-red-500"
+                                : accountingReady
+                                  ? "text-red-500"
+                                  : "text-muted-foreground"
                             )}
                           >
-                            {sale.profit >= 0 ? "+" : ""}
-                            {formatPrice(sale.profit)}
+                            {accountingReady ? (
+                              <>
+                                {sale.profit! >= 0 ? "+" : ""}
+                                {formatPrice(sale.profit!)}
+                              </>
+                            ) : "—"}
                           </span>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

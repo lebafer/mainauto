@@ -9,11 +9,58 @@ import {
   DEFAULT_PLATFORM_SLOGAN,
   DEFAULT_SUPPORT_EMAIL,
   slugifyDealerName,
+  normalizeHost,
 } from "../lib/dealers";
 import { addTrialDays, TRIAL_DAYS } from "../lib/billing";
 import { PublicSignupSchema } from "../types";
+import { env } from "../env";
+import { consumeRateLimit, getClientIp, rateLimitResponse } from "../lib/security";
+import { basename, extname, join } from "path";
 
 const publicRouter = new Hono();
+const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
+
+async function resolvePublicDealerDomain(hostHeader: string | undefined) {
+  const host = normalizeHost(hostHeader);
+  if (!host) return null;
+  return prisma.dealerDomain.findFirst({
+    where: { host, status: "active", verifiedAt: { not: null } },
+    include: { dealer: { include: { settings: true } } },
+  });
+}
+
+function isPlatformHost(host: string): boolean {
+  const backendHost = normalizeHost(new URL(env.BACKEND_URL).hostname);
+  const platformHost = normalizeHost(env.PLATFORM_DOMAIN);
+  return (
+    !host ||
+    host === backendHost ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === platformHost
+  );
+}
+
+async function resolvePublicTenant(hostHeader: string | undefined) {
+  const host = normalizeHost(hostHeader);
+  const domain = await resolvePublicDealerDomain(host);
+  if (domain) {
+    return { dealer: domain.dealer, domain };
+  }
+  if (!isPlatformHost(host)) {
+    return null;
+  }
+
+  const dealer = await prisma.dealer.findFirst({
+    where: {
+      isDefault: true,
+      status: "active",
+    },
+    include: { settings: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return dealer ? { dealer, domain: null } : { dealer: null, domain: null };
+}
 
 async function createUniqueDealerSlug(companyName: string) {
   const base = slugifyDealerName(companyName);
@@ -57,6 +104,57 @@ publicRouter.get("/plans", async (c) => {
 });
 
 publicRouter.get("/tenant-context", async (c) => {
+  const host = normalizeHost(c.req.header("host"));
+  const tenant = await resolvePublicTenant(host);
+  if (!tenant) {
+    return c.json(
+      { error: { code: "UNKNOWN_TENANT", message: "Mandant nicht gefunden" } },
+      404
+    );
+  }
+  if (tenant.dealer) {
+    const { dealer, domain } = tenant;
+    const settings = dealer.settings;
+    return c.json({
+      data: {
+        displayName: settings?.displayName || settings?.legalName || dealer.name,
+        logoUrl: settings?.logoUrl
+          ? `/api/public/branding/${basename(settings.logoUrl)}`
+          : null,
+        faviconUrl: settings?.faviconUrl
+          ? `/api/public/branding/${basename(settings.faviconUrl)}`
+          : null,
+        primaryColor: settings?.primaryColor ?? null,
+        accentColor: settings?.accentColor ?? null,
+        loginHeadline: settings?.loginHeadline ?? null,
+        supportEmail: settings?.supportEmail ?? settings?.email ?? null,
+        tenantStatus: dealer.status === "active" ? dealer.setupStatus : dealer.status,
+        dealer: {
+          id: dealer.id,
+          name: dealer.name,
+          slug: dealer.slug,
+          status: dealer.status,
+          setupStatus: dealer.setupStatus,
+          isDefault: dealer.isDefault,
+          createdAt: dealer.createdAt.toISOString(),
+          updatedAt: dealer.updatedAt.toISOString(),
+        },
+        activeDomain: domain
+          ? {
+              id: domain.id,
+              dealerId: domain.dealerId,
+              host: domain.host,
+              status: domain.status,
+              isPrimary: domain.isPrimary,
+              verifiedAt: domain.verifiedAt?.toISOString() ?? null,
+              createdAt: domain.createdAt.toISOString(),
+              updatedAt: domain.updatedAt.toISOString(),
+            }
+          : null,
+      },
+    });
+  }
+
   return c.json({
     data: {
       displayName: DEFAULT_PLATFORM_NAME,
@@ -73,10 +171,54 @@ publicRouter.get("/tenant-context", async (c) => {
   });
 });
 
+publicRouter.get("/branding/:fileName", async (c) => {
+  const fileName = c.req.param("fileName");
+  if (basename(fileName) !== fileName || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(fileName)) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Bild nicht gefunden" } }, 404);
+  }
+  const extension = extname(fileName).toLowerCase();
+  const contentType =
+    extension === ".jpg" || extension === ".jpeg"
+      ? "image/jpeg"
+      : extension === ".png"
+        ? "image/png"
+        : extension === ".webp"
+          ? "image/webp"
+          : null;
+  if (!contentType) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Bild nicht gefunden" } }, 404);
+  }
+
+  const tenant = await resolvePublicTenant(c.req.header("host"));
+  const settings = tenant?.dealer?.settings;
+  const allowedFiles = [settings?.logoUrl, settings?.faviconUrl]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => basename(value));
+  if (!allowedFiles.includes(fileName)) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Bild nicht gefunden" } }, 404);
+  }
+
+  const file = Bun.file(join(UPLOADS_DIR, fileName));
+  if (!(await file.exists())) {
+    return c.json({ error: { code: "NOT_FOUND", message: "Bild nicht gefunden" } }, 404);
+  }
+  c.header("Content-Type", contentType);
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("Cache-Control", "public, max-age=300");
+  c.header("Content-Security-Policy", "default-src 'none'; sandbox");
+  return c.body(file.stream() as unknown as ReadableStream);
+});
+
 publicRouter.post(
   "/signup",
   zValidator("json", PublicSignupSchema),
   async (c) => {
+    const rate = consumeRateLimit(`signup:${getClientIp(c)}`, {
+      limit: 5,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (!rate.allowed) return rateLimitResponse(c, rate.retryAfterSeconds);
+
     const data = c.req.valid("json");
     const normalizedEmail = data.email.trim().toLowerCase();
     const normalizedUsername = data.username.trim();

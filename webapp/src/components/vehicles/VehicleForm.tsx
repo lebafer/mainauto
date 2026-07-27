@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ChangeEvent, type FocusEvent } from "react";
-import { useForm, type FieldErrors, type Path } from "react-hook-form";
+import { useForm, type FieldErrors, type Path, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Link } from "react-router-dom";
@@ -26,6 +26,7 @@ import {
   featuresToJson,
   getVehicleManualCostsTotal,
   parseFeatures,
+  toDateInputValue,
 } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -178,10 +179,7 @@ function requiredNonNegativeNumber(label: string) {
       return value;
     },
     z
-      .number({
-        required_error: `${label} ist erforderlich`,
-        invalid_type_error: `${label} ist erforderlich`,
-      })
+      .number({ error: `${label} ist erforderlich` })
       .min(0, `${label} muss positiv sein`)
   );
 }
@@ -213,6 +211,10 @@ const vehicleFormSchema = z.object({
   vehicleNumber: z.string().trim().min(1, "Interne Nummer ist erforderlich"),
   brand: z.string().min(1, "Marke ist erforderlich"),
   model: z.string().min(1, "Modell ist erforderlich"),
+  year: z.preprocess(
+    (value) => value === "" || value === null || value === undefined ? undefined : Number(value),
+    z.number().int().min(1886, "Baujahr ist ungültig").max(new Date().getFullYear() + 1, "Baujahr liegt zu weit in der Zukunft").optional()
+  ),
   firstRegistration: z.string().optional().default(""),
   mileage: requiredNonNegativeNumber("Kilometerstand"),
   vin: z.string()
@@ -340,6 +342,7 @@ export function VehicleForm({
   const [quickAddSupplierOpen, setQuickAddSupplierOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [briefFiles, setBriefFiles] = useState<File[]>([]);
+  const [briefExternalProcessingConfirmed, setBriefExternalProcessingConfirmed] = useState(false);
   const previousIsPrivate = useRef<boolean | undefined>(undefined);
   const [briefResult, setBriefResult] = useState<{
     documentType: VehicleBriefDocumentType;
@@ -369,9 +372,10 @@ export function VehicleForm({
     vehicleNumber: vehicle?.vehicleNumber ?? defaultValues?.vehicleNumber ?? "",
     brand: vehicle?.brand ?? defaultValues?.brand ?? "",
     model: vehicle?.model ?? defaultValues?.model ?? "",
+    year: vehicle?.year ?? defaultValues?.year ?? undefined,
     firstRegistration: vehicle?.firstRegistration
-      ? new Date(vehicle.firstRegistration).toISOString().split("T")[0]
-      : defaultValues?.firstRegistration ?? "",
+      ? toDateInputValue(vehicle.firstRegistration)
+      : toDateInputValue(defaultValues?.firstRegistration),
     mileage: vehicle?.mileage ?? defaultValues?.mileage ?? 0,
     vin: vehicle?.vin ?? defaultValues?.vin ?? "",
     hsn: vehicle?.hsn ?? defaultValues?.hsn ?? "",
@@ -401,7 +405,7 @@ export function VehicleForm({
     huDue: vehicle?.huDue ? new Date(vehicle.huDue).toISOString().slice(0, 7) : defaultValues?.huDue ?? "",
     previousOwners: vehicle?.previousOwners ?? defaultValues?.previousOwners ?? undefined,
     serviceDueKm: vehicle?.serviceDueKm ?? defaultValues?.serviceDueKm ?? undefined,
-    serviceDueDate: vehicle?.serviceDueDate ? new Date(vehicle.serviceDueDate).toISOString().split("T")[0] : defaultValues?.serviceDueDate ?? "",
+    serviceDueDate: vehicle?.serviceDueDate ? toDateInputValue(vehicle.serviceDueDate) : toDateInputValue(defaultValues?.serviceDueDate),
     // Technical
     co2Emission: vehicle?.co2Emission ?? defaultValues?.co2Emission ?? undefined,
     displacement: vehicle?.displacement ?? defaultValues?.displacement ?? undefined,
@@ -435,7 +439,7 @@ export function VehicleForm({
   };
 
   const form = useForm<VehicleFormValues>({
-    resolver: zodResolver(vehicleFormSchema),
+    resolver: zodResolver(vehicleFormSchema) as Resolver<VehicleFormValues>,
     defaultValues: initialValues,
   });
 
@@ -572,6 +576,7 @@ export function VehicleForm({
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", files.length === 1 ? label : `${label} ${index + 1}`);
+      formData.append("documentType", "other_legal");
 
       const response = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
         method: "POST",
@@ -593,6 +598,7 @@ export function VehicleForm({
     mutationFn: async (files: File[]) => {
       const formData = new FormData();
       files.forEach((file) => formData.append("files", file));
+      formData.append("confirmExternalProcessing", "true");
 
       const response = await api.raw("/api/vehicles/extract-brief", {
         method: "POST",
@@ -608,6 +614,7 @@ export function VehicleForm({
       return VehicleBriefExtractResponseSchema.parse(json.data);
     },
     onSuccess: async (result, files) => {
+      setBriefExternalProcessingConfirmed(false);
       const warnings = [...result.warnings];
       const { applied, skipped } = applyExtractedFields(result.fields);
       let savedDocuments = 0;
@@ -650,6 +657,8 @@ export function VehicleForm({
   const watchedMarginTaxed = form.watch("marginTaxed") ?? false;
   const watchedIsPrivate = form.watch("isPrivate") ?? false;
   const isPrivateMode = privateVehiclesEnabled && watchedIsPrivate;
+  const hasCompletedSale =
+    vehicle?.sales?.some((sale) => sale.status === "completed") ?? false;
   const watchedPurchasePrice = form.watch("purchasePrice");
   const watchedFuelType = form.watch("fuelType");
   const watchedHasDamage = form.watch("hasDamage");
@@ -861,7 +870,11 @@ export function VehicleForm({
   }
 
   function handleBriefExtraction() {
-    if (briefFiles.length === 0 || extractBriefMutation.isPending) return;
+    if (
+      briefFiles.length === 0 ||
+      !briefExternalProcessingConfirmed ||
+      extractBriefMutation.isPending
+    ) return;
     setBriefResult(null);
     extractBriefMutation.mutate(briefFiles);
   }
@@ -983,12 +996,31 @@ export function VehicleForm({
                     Ausgewählt: {briefFiles.map((file) => file.name).join(", ")}
                   </p>
                 ) : null}
+                <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                  <Checkbox
+                    id="confirm-external-brief-processing"
+                    checked={briefExternalProcessingConfirmed}
+                    onCheckedChange={(checked) => setBriefExternalProcessingConfirmed(checked === true)}
+                    disabled={!aiBriefEnabled || extractBriefMutation.isPending}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="confirm-external-brief-processing" className="cursor-pointer text-xs leading-5">
+                    Ich bestätige, dass die ausgewählten Fahrzeugpapiere zur automatischen Auswertung an den
+                    eingesetzten KI-Dienstleister übertragen werden. Die Dokumente können personenbezogene Daten
+                    enthalten. Es werden nur die ausgewählten Dateien übertragen.
+                  </Label>
+                </div>
               </div>
 
               <Button
                 type="button"
                 onClick={handleBriefExtraction}
-                disabled={!aiBriefEnabled || briefFiles.length === 0 || extractBriefMutation.isPending}
+                disabled={
+                  !aiBriefEnabled ||
+                  briefFiles.length === 0 ||
+                  !briefExternalProcessingConfirmed ||
+                  extractBriefMutation.isPending
+                }
               >
                 {extractBriefMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1035,7 +1067,11 @@ export function VehicleForm({
                       </p>
                     </div>
                     <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={hasCompletedSale}
+                      />
                     </FormControl>
                   </FormItem>
                 )}
@@ -1172,6 +1208,28 @@ export function VehicleForm({
               />
               <FormField
                 control={form.control}
+                name="year"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Baujahr (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={1886}
+                        max={new Date().getFullYear() + 1}
+                        placeholder="z. B. 2022"
+                        value={field.value ?? ""}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Nicht mit der Erstzulassung verwechseln.</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
                 name="firstRegistration"
                 render={({ field }) => (
                   <FormItem>
@@ -1180,6 +1238,7 @@ export function VehicleForm({
                       <Input type="date" {...field} />
                     </FormControl>
                     <FormMessage />
+                    <p className="text-xs text-muted-foreground">Datum der ersten Zulassung, unabhängig vom Baujahr.</p>
                   </FormItem>
                 )}
               />
@@ -2095,7 +2154,7 @@ export function VehicleForm({
                       </FormLabel>
                       <p className="text-xs text-muted-foreground">
                         {watchedMarginTaxed
-                          ? "Der Verkaufspreis ist der Endpreis (Brutto = Netto)."
+                          ? "Der Verkaufspreis ist der Endpreis. Umsatzsteuer wird nur intern aus einer positiven Marge berechnet und nicht offen ausgewiesen."
                           : "Regelbesteuerung: MwSt wird auf den Nettopreis aufgeschlagen."}
                       </p>
                     </div>
@@ -2112,7 +2171,9 @@ export function VehicleForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {isPrivateMode ? "Einkaufspreis" : "Einkaufspreis Netto"}
+                      {isPrivateMode || watchedMarginTaxed
+                        ? "Einkaufspreis (Endbetrag)"
+                        : "Einkaufspreis Netto"}
                       <RequiredMark />
                     </FormLabel>
                     <FormControl>
@@ -2131,7 +2192,7 @@ export function VehicleForm({
 
               {isPrivateMode ? null : (
                 <>
-                  <FormItem>
+                  {!watchedMarginTaxed ? <FormItem>
                     <FormLabel>Einkaufspreis Brutto</FormLabel>
                     <FormControl>
                       <Input
@@ -2147,7 +2208,7 @@ export function VehicleForm({
                     <p className="text-xs text-muted-foreground">
                       Wird mit {watchedTaxRate}% MwSt berechnet.
                     </p>
-                  </FormItem>
+                  </FormItem> : null}
 
                   <FormField
                     control={form.control}
@@ -2175,7 +2236,7 @@ export function VehicleForm({
                   </Label>
 
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <FormField
+                    {!watchedMarginTaxed ? <FormField
                       control={form.control}
                       name="sellingPrice"
                       render={({ field }) => (
@@ -2194,11 +2255,10 @@ export function VehicleForm({
                           <FormMessage />
                         </FormItem>
                       )}
-                    />
+                    /> : null}
                     <FormItem>
                       <FormLabel>
-                        Verkaufspreis Brutto
-                        {watchedMarginTaxed ? " / Endpreis" : ""}
+                        {watchedMarginTaxed ? "Verkaufspreis / Endpreis" : "Verkaufspreis Brutto"}
                       </FormLabel>
                       <FormControl>
                         <Input
@@ -2219,7 +2279,7 @@ export function VehicleForm({
                       ) : null}
                       <p className="text-xs text-muted-foreground">
                         {watchedMarginTaxed
-                          ? "Bei Differenzbesteuerung ist Brutto gleich Netto."
+                          ? "Die Umsatzsteuer wird gegenüber dem Käufer nicht separat ausgewiesen."
                           : `Wird mit ${watchedTaxRate}% MwSt berechnet.`}
                       </p>
                     </FormItem>
@@ -2441,6 +2501,7 @@ export function VehicleForm({
                     <Select
                       onValueChange={field.onChange}
                       defaultValue={field.value}
+                      disabled={hasCompletedSale}
                     >
                       <FormControl>
                         <SelectTrigger>
@@ -2456,6 +2517,12 @@ export function VehicleForm({
                       </SelectContent>
                     </Select>
                     <FormMessage />
+                    {hasCompletedSale ? (
+                      <p className="text-xs text-muted-foreground">
+                        Status und Zuordnung werden durch den aktiven Verkauf festgelegt.
+                        Storniere den Verkauf, um das Fahrzeug wieder freizugeben.
+                      </p>
+                    ) : null}
                   </FormItem>
                 )}
               />

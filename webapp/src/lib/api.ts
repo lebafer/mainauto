@@ -1,5 +1,3 @@
-import { TOKEN_KEY } from "./auth-client";
-
 // In production use relative URLs, in development allow overriding backend host.
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || "";
 
@@ -17,13 +15,11 @@ interface ApiResponse<T> {
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = localStorage.getItem(TOKEN_KEY);
 
   const config: RequestInit = {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     credentials: "include",
@@ -60,16 +56,23 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 // Raw request for non-JSON endpoints (uploads, downloads, streams)
 async function rawRequest(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const url = `${API_BASE_URL}${endpoint}`;
-  const token = localStorage.getItem(TOKEN_KEY);
   const config: RequestInit = {
     ...options,
     headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     credentials: "include",
   };
-  return fetch(url, config);
+  const response = await fetch(url, config);
+  if (!response.ok) {
+    const json = await response.clone().json().catch(() => null);
+    throw new ApiError(
+      json?.error?.message || json?.message || `Request failed with status ${response.status}`,
+      response.status,
+      json?.error || json
+    );
+  }
+  return response;
 }
 
 export const api = {
@@ -102,17 +105,6 @@ export const api = {
 
   // Escape hatch for non-JSON endpoints
   raw: rawRequest,
-};
-
-// Sample endpoint types (extend as needed)
-export interface SampleResponse {
-  message: string;
-  timestamp: string;
-}
-
-// Sample API functions
-export const sampleApi = {
-  getSample: () => api.get<SampleResponse>("/api/sample"),
 };
 
 export { ApiError };

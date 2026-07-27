@@ -15,21 +15,10 @@ import {
 import { requirePlatformSuperAdmin } from "../lib/request-context";
 import { slugifyDealerName } from "../lib/dealers";
 import { createCredentialUser } from "../lib/auth-users";
+import { writeAuditLog } from "../lib/audit";
 
 const adminRouter = new Hono();
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
-
-async function deleteDealerLogoFile(logoUrl: string | null | undefined) {
-  if (!logoUrl?.startsWith("/api/uploads/")) {
-    return;
-  }
-
-  try {
-    await unlink(join(UPLOADS_DIR, basename(logoUrl)));
-  } catch {
-    // Missing upload files should not block dealer deletion.
-  }
-}
 
 adminRouter.use("*", async (c, next) => {
   const forbidden = requirePlatformSuperAdmin(c);
@@ -91,6 +80,8 @@ adminRouter.post(
   async (c) => {
     const data = c.req.valid("json");
     const slug = data.slug?.trim() || slugifyDealerName(data.name);
+    const normalizedOwnerEmail = data.owner.email.trim().toLowerCase();
+    const normalizedOwnerUsername = data.owner.username.trim();
 
     const existingDealer = await prisma.dealer.findUnique({ where: { slug } });
     if (existingDealer) {
@@ -102,7 +93,7 @@ adminRouter.post(
 
     const existingUser = await prisma.user.findFirst({
       where: {
-        OR: [{ email: data.owner.email }, { username: data.owner.username }],
+        OR: [{ email: normalizedOwnerEmail }, { username: normalizedOwnerUsername }],
       },
     });
     if (existingUser) {
@@ -112,64 +103,78 @@ adminRouter.post(
       );
     }
 
-    const owner = await createCredentialUser({
-      name: data.owner.name,
-      email: data.owner.email,
-      password: data.owner.password,
-      username: data.owner.username,
-    });
-
     const basicPlan = await prisma.plan.findFirst({
       where: { slug: "standard" },
     });
 
-    const dealer = await prisma.dealer.create({
-      data: {
-        name: data.name,
-        slug,
-        status: data.status,
-        setupStatus: data.setupStatus ?? "active",
-        settings: {
-          create: {
-            displayName: data.name,
-            legalName: data.name,
-          },
+    const dealer = await prisma.$transaction(async (tx) => {
+      const owner = await createCredentialUser(
+        {
+          name: data.owner.name,
+          email: normalizedOwnerEmail,
+          password: data.owner.password,
+          username: normalizedOwnerUsername,
         },
-        memberships: {
-          create: {
-            userId: owner.id,
-            role: "dealer_owner",
-            isDefault: true,
-            isActive: true,
+        tx
+      );
+      const created = await tx.dealer.create({
+        data: {
+          name: data.name,
+          slug,
+          status: data.status,
+          setupStatus: data.setupStatus ?? "active",
+          settings: {
+            create: {
+              displayName: data.name,
+              legalName: data.name,
+            },
           },
+          memberships: {
+            create: {
+              userId: owner.id,
+              role: "dealer_owner",
+              isDefault: true,
+              isActive: true,
+            },
+          },
+          subscriptions: basicPlan
+            ? {
+                create: {
+                  planId: basicPlan.id,
+                  status: "active",
+                },
+              }
+            : undefined,
         },
-        subscriptions: basicPlan
-          ? {
-              create: {
-                planId: basicPlan.id,
-                status: "active",
-              },
-            }
-          : undefined,
-      },
-      include: {
-        settings: true,
-        memberships: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                username: true,
+        include: {
+          settings: true,
+          memberships: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  username: true,
+                },
               },
             },
           },
+          subscriptions: {
+            include: { plan: true },
+          },
         },
-        subscriptions: {
-          include: { plan: true },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "admin.dealer_created",
+          entityType: "Dealer",
+          entityId: created.id,
         },
-      },
+        tx
+      );
+      return created;
     });
 
     return c.json({ data: dealer }, 201);
@@ -291,7 +296,7 @@ adminRouter.put(
         }
       }
 
-      return tx.dealer.update({
+      const updated = await tx.dealer.update({
         where: { id: dealerId },
         data: {
           ...(data.name !== undefined ? { name: data.name } : {}),
@@ -343,6 +348,20 @@ adminRouter.put(
           },
         },
       });
+      await writeAuditLog(
+        c,
+        {
+          action: "admin.dealer_updated",
+          entityType: "Dealer",
+          entityId: updated.id,
+          metadata: {
+            changedFields: Object.keys(data).sort(),
+            ownerChangedFields: data.owner ? Object.keys(data.owner).sort() : [],
+          },
+        },
+        tx
+      );
+      return updated;
     });
 
     return c.json({ data: dealer });
@@ -365,6 +384,18 @@ adminRouter.delete("/dealers/:dealerId", async (c) => {
           userId: true,
         },
       },
+      vehicles: {
+        select: {
+          images: { select: { fileName: true } },
+          documents: { select: { fileName: true, retentionLocked: true } },
+        },
+      },
+      customerDocuments: {
+        select: { fileName: true, retentionLocked: true },
+      },
+      _count: {
+        select: { sales: true, invoices: true },
+      },
     },
   });
 
@@ -378,8 +409,45 @@ adminRouter.delete("/dealers/:dealerId", async (c) => {
       400
     );
   }
+  if (dealer._count.sales > 0 || dealer._count.invoices > 0) {
+    return c.json(
+      {
+        error: {
+          code: "DEALER_HAS_FINANCIAL_HISTORY",
+          message:
+            "Autohaus mit Verkaufs- oder Rechnungshistorie kann aus Aufbewahrungsgründen nicht gelöscht werden.",
+        },
+      },
+      409
+    );
+  }
+  if (
+    dealer.vehicles.some((vehicle) =>
+      vehicle.documents.some((document) => document.retentionLocked)
+    ) ||
+    dealer.customerDocuments.some((document) => document.retentionLocked)
+  ) {
+    return c.json(
+      {
+        error: {
+          code: "DEALER_HAS_RETAINED_DOCUMENTS",
+          message:
+            "Autohaus mit aufbewahrungspflichtigen Dokumenten kann nicht gelöscht werden.",
+        },
+      },
+      409
+    );
+  }
 
   const affectedUserIds = [...new Set(dealer.memberships.map((membership) => membership.userId))];
+  const uploadFileNames = [
+    ...dealer.vehicles.flatMap((vehicle) => [
+      ...vehicle.images.map((image) => image.fileName),
+      ...vehicle.documents.map((document) => document.fileName),
+    ]),
+    ...dealer.customerDocuments.map((document) => document.fileName),
+    ...(dealer.settings?.logoUrl ? [basename(dealer.settings.logoUrl)] : []),
+  ];
 
   await prisma.$transaction(async (tx) => {
     await tx.dealer.delete({
@@ -397,10 +465,31 @@ adminRouter.delete("/dealers/:dealerId", async (c) => {
         });
       }
     }
+    await writeAuditLog(
+      c,
+      {
+        action: "dealer.deleted",
+        entityType: "Dealer",
+        entityId: dealerId,
+        metadata: { uploadCount: uploadFileNames.length },
+      },
+      tx
+    );
   });
 
-  await deleteDealerLogoFile(dealer.settings?.logoUrl);
-
+  await Promise.all(
+    [...new Set(uploadFileNames)].map(async (fileName) => {
+      try {
+        await unlink(join(UPLOADS_DIR, basename(fileName)));
+      } catch (error) {
+        console.warn("[admin] tenant_upload_cleanup_failed", {
+          dealerId,
+          fileName,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    })
+  );
   return c.json({ data: { success: true } });
 });
 
@@ -435,8 +524,8 @@ adminRouter.put(
         });
       }
 
-      if (targetSubscription) {
-        return tx.dealerSubscription.update({
+      const updated = targetSubscription
+        ? await tx.dealerSubscription.update({
           where: { id: targetSubscription.id },
           data: {
             status: data.status,
@@ -446,21 +535,35 @@ adminRouter.put(
             endsAt: data.endsAt ? new Date(data.endsAt) : null,
           },
           include: { plan: true },
-        });
-      }
-
-      return tx.dealerSubscription.create({
-        data: {
-          dealerId,
-          planId: data.planId,
-          status: data.status,
-          complimentaryAccess: data.complimentaryAccess ?? false,
-          featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
-          billingNotes: data.billingNotes ?? null,
-          endsAt: data.endsAt ? new Date(data.endsAt) : null,
+        })
+        : await tx.dealerSubscription.create({
+            data: {
+              dealerId,
+              planId: data.planId,
+              status: data.status,
+              complimentaryAccess: data.complimentaryAccess ?? false,
+              featureOverrides: data.featureOverrides as Prisma.InputJsonValue | undefined,
+              billingNotes: data.billingNotes ?? null,
+              endsAt: data.endsAt ? new Date(data.endsAt) : null,
+            },
+            include: { plan: true },
+          });
+      await writeAuditLog(
+        c,
+        {
+          action: "admin.subscription_updated",
+          entityType: "DealerSubscription",
+          entityId: updated.id,
+          metadata: {
+            dealerId,
+            planId: updated.planId,
+            status: updated.status,
+            complimentaryAccess: updated.complimentaryAccess,
+          },
         },
-        include: { plan: true },
-      });
+        tx
+      );
+      return updated;
     });
 
     return c.json({ data: subscription });
@@ -487,12 +590,28 @@ adminRouter.put(
       );
     }
 
-    const updatedSubscription = await prisma.dealerSubscription.update({
-      where: { id: subscription.id },
-      data: {
-        complimentaryAccess: data.complimentaryAccess,
-      },
-      include: { plan: true },
+    const updatedSubscription = await prisma.$transaction(async (tx) => {
+      const updated = await tx.dealerSubscription.update({
+        where: { id: subscription.id },
+        data: {
+          complimentaryAccess: data.complimentaryAccess,
+        },
+        include: { plan: true },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "admin.subscription_complimentary_updated",
+          entityType: "DealerSubscription",
+          entityId: updated.id,
+          metadata: {
+            dealerId,
+            complimentaryAccess: updated.complimentaryAccess,
+          },
+        },
+        tx
+      );
+      return updated;
     });
 
     return c.json({ data: updatedSubscription });

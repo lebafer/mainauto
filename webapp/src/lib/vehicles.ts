@@ -8,11 +8,24 @@ export interface VehicleImage {
   createdAt: string;
 }
 
+export type StoredDocumentType =
+  | "general"
+  | "legacy"
+  | "contract"
+  | "purchase_contract"
+  | "handover_protocol"
+  | "other_legal";
+
 export interface VehicleDocument {
   id: string;
   vehicleId: string;
   name: string;
   url: string;
+  fileName?: string;
+  fileType?: string | null;
+  documentType?: StoredDocumentType;
+  retentionLocked?: boolean;
+  softDeletedAt?: string | null;
   createdAt: string;
 }
 
@@ -31,6 +44,9 @@ export interface VehicleSale {
   customerId: string;
   salePrice: number;
   saleDate: string;
+  status: "completed" | "reversed";
+  accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
+  grossCents: number | null;
   customer?: VehicleCustomer;
 }
 
@@ -60,7 +76,7 @@ export interface Vehicle {
   vehicleNumber: string;
   brand: string;
   model: string;
-  year: number;
+  year?: number | null;
   firstRegistration?: string | null;
   mileage: number;
   vin: string;
@@ -297,6 +313,50 @@ export function formatMileage(value: number): string {
   return `${value.toLocaleString("de-DE")} km`;
 }
 
+export function toDateInputValue(value?: string | null): string {
+  if (!value) return "";
+  const isoDate = value.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+  if (isoDate) return isoDate;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, "0"),
+    String(parsed.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+export function formatDateOnly(
+  value?: string | null,
+  options: Intl.DateTimeFormatOptions = {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }
+): string {
+  const input = toDateInputValue(value);
+  if (!input) return "--";
+  const [year, month, day] = input.split("-").map(Number);
+  return new Intl.DateTimeFormat("de-DE", options).format(
+    new Date(year, month - 1, day)
+  );
+}
+
+export function richTextToPlainText(value: string): string {
+  if (!value) return "";
+  if (typeof DOMParser !== "undefined") {
+    const document = new DOMParser().parseFromString(value, "text/html");
+    document.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
+    document.querySelectorAll("p,li").forEach((node) => node.append("\n"));
+    return (document.body.textContent ?? "").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(?:p|li)>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .trim();
+}
+
 // Calculate gross price
 export function calculateGrossPrice(
   netPrice: number,
@@ -309,6 +369,11 @@ export function calculateGrossPrice(
   return netPrice * (1 + taxRate / 100);
 }
 
+export function parseTaxRateInput(value: string, fallback = 19): number {
+  const parsed = Number(value.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 // Calculate net price from gross
 export function calculateNetPrice(
   grossPrice: number,
@@ -319,6 +384,24 @@ export function calculateNetPrice(
     return grossPrice;
   }
   return grossPrice / (1 + taxRate / 100);
+}
+
+export function getResolvedSaleAmounts(sale: {
+  accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
+  grossSalePrice: number | null;
+  netSalePrice: number | null;
+}) {
+  if (
+    sale.accountingStatus === "legacy_ambiguous" ||
+    sale.grossSalePrice === null ||
+    sale.netSalePrice === null
+  ) {
+    return null;
+  }
+  return {
+    gross: sale.grossSalePrice,
+    net: sale.netSalePrice,
+  };
 }
 
 // Calculate tax amount

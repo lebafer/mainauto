@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { authClient, fetchSession, TOKEN_KEY } from "@/lib/auth-client";
+import { authClient, fetchSession } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-client";
 
@@ -34,14 +34,14 @@ export default function AdminLogin() {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!username.trim() || !password.trim()) return;
+    if (!username.trim() || password.length === 0) return;
 
     setIsLoading(true);
 
     try {
       const result = await authClient.signIn.username({
         username: username.trim(),
-        password: password.trim(),
+        password,
       });
 
       if (result.error) {
@@ -55,14 +55,8 @@ export default function AdminLogin() {
         throw new Error(authErrorMessage || "Benutzername oder Passwort ist falsch.");
       }
 
-      const token = (result.data as { token?: string } | null)?.token;
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-      }
-
       const nextSession = await fetchSession();
       if (nextSession?.user.platformRole !== "platform_super_admin") {
-        localStorage.removeItem(TOKEN_KEY);
         await authClient.signOut().catch(() => undefined);
         throw new Error("Dieser Zugang hat keinen Superadmin-Zugriff.");
       }
@@ -88,7 +82,7 @@ export default function AdminLogin() {
           <div>
             <CardTitle className="text-2xl">Superadmin Login</CardTitle>
             <CardDescription className="mt-2 text-slate-300">
-              Autohaeuser anlegen, Tarife setzen und Branding verwalten.
+              Autohäuser anlegen, Tarife setzen und Branding verwalten.
             </CardDescription>
           </div>
         </CardHeader>

@@ -67,7 +67,7 @@ export default function Billing() {
     }
 
     if (checkoutState === "cancelled") {
-      toast({ title: "Checkout abgebrochen", description: "Du kannst spaeter jederzeit weitermachen." });
+      toast({ title: "Checkout abgebrochen", description: "Du kannst später jederzeit weitermachen." });
     }
   }, [refetch, searchParams, toast]);
 
@@ -82,8 +82,8 @@ export default function Billing() {
     },
     onError: (error) => {
       toast({
-        title: "Checkout nicht verfuegbar",
-        description: error instanceof Error ? error.message : "Bitte versuche es spaeter erneut.",
+        title: "Checkout nicht verfügbar",
+        description: error instanceof Error ? error.message : "Bitte versuche es später erneut.",
         variant: "destructive",
       });
     },
@@ -99,19 +99,21 @@ export default function Billing() {
     },
     onError: (error) => {
       toast({
-        title: "Billing-Portal nicht verfuegbar",
-        description: error instanceof Error ? error.message : "Bitte versuche es spaeter erneut.",
+        title: "Billing-Portal nicht verfügbar",
+        description: error instanceof Error ? error.message : "Bitte versuche es später erneut.",
         variant: "destructive",
       });
     },
   });
 
-  const currentPlanSlug = (session?.subscription?.plan?.slug as PlanSlug | undefined) ?? "standard";
+  const currentPlanSlug = session?.subscription?.plan?.slug as PlanSlug | undefined;
   const daysRemaining = getTrialDaysRemaining(session?.billing.trialEndsAt ?? null);
   const currentPlan = useMemo(
     () => plansQuery.data?.find((plan) => plan.slug === currentPlanSlug) ?? null,
     [currentPlanSlug, plansQuery.data]
   );
+  const standardPlan = plansQuery.data?.find((plan) => plan.slug === "standard");
+  const proPlan = plansQuery.data?.find((plan) => plan.slug === "pro");
 
   if (!session) {
     return null;
@@ -148,8 +150,8 @@ export default function Billing() {
                 {session.billing.isComplimentary
                   ? "Dieses Autohaus wurde im Adminbereich kostenlos freigeschaltet. Stripe ist deshalb für den Zugriff aktuell nicht nötig."
                   : session.billing.requiresPayment
-                  ? "Waehle jetzt einen Tarif und aktiviere dein Abo, damit du wieder voll auf dein Autohaus zugreifen kannst."
-                  : "Verwalte hier Testphase, Upgrade und dein Zahlungsprofil. Alle Tarifwechsel laufen direkt ueber Stripe."}
+                  ? "Wähle jetzt einen Tarif und aktiviere dein Abo, damit du wieder voll auf dein Autohaus zugreifen kannst."
+                  : "Verwalte hier Testphase, Upgrade und dein Zahlungsprofil. Alle Tarifwechsel laufen direkt über Stripe."}
               </CardDescription>
             </div>
           </CardHeader>
@@ -197,11 +199,16 @@ export default function Billing() {
           <CardContent className="grid gap-3">
             <Button
               onClick={() => checkoutMutation.mutate("standard")}
-              disabled={checkoutMutation.isPending}
+              disabled={
+                checkoutMutation.isPending ||
+                currentPlanSlug === "standard" ||
+                session.billing.isComplimentary ||
+                standardPlan?.stripeConfigured === false
+              }
               variant="secondary"
               className="justify-between"
             >
-              Standard aktivieren
+              {currentPlanSlug === "standard" ? "Standard ist aktiv" : "Standard aktivieren"}
               {checkoutMutation.isPending && checkoutMutation.variables === "standard" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -210,10 +217,15 @@ export default function Billing() {
             </Button>
             <Button
               onClick={() => checkoutMutation.mutate("pro")}
-              disabled={checkoutMutation.isPending}
+              disabled={
+                checkoutMutation.isPending ||
+                currentPlanSlug === "pro" ||
+                session.billing.isComplimentary ||
+                proPlan?.stripeConfigured === false
+              }
               className="justify-between bg-amber-500 text-slate-950 hover:bg-amber-400"
             >
-              Pro aktivieren
+              {currentPlanSlug === "pro" ? "Pro ist aktiv" : "Pro aktivieren"}
               {checkoutMutation.isPending && checkoutMutation.variables === "pro" ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -228,7 +240,7 @@ export default function Billing() {
               {portalMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Oeffnet Portal...
+                  Öffnet Portal...
                 </>
               ) : (
                 <>
@@ -282,7 +294,7 @@ export default function Billing() {
                   className="w-full"
                   variant={plan.slug === "pro" ? "default" : "outline"}
                 >
-                  {isCurrent ? "Aktuell aktiv" : `${plan.name} waehlen`}
+                  {isCurrent ? "Aktuell aktiv" : `${plan.name} wählen`}
                 </Button>
               </CardContent>
             </Card>

@@ -46,17 +46,51 @@ enum DealerDomainStatus {
   disabled
 }
 
+enum InvoiceStatus {
+  issued
+  canceled
+}
+
+enum BusinessDocumentType {
+  INVOICE
+}
+
+enum SaleStatus {
+  completed
+  reversed
+}
+
+enum SaleAccountingStatus {
+  verified
+  legacy_snapshot
+  legacy_ambiguous
+}
+
+enum SalePriceMode {
+  gross
+  net
+}
+
+enum StoredDocumentType {
+  general
+  legacy
+  contract
+  purchase_contract
+  handover_protocol
+  other_legal
+}
+
 // ─── Dealer / SaaS Models ──────────────────────────────────────
 
 model Dealer {
-  id                   String                @id @default(cuid())
+  id                   String                    @id @default(cuid())
   name                 String
-  slug                 String                @unique
-  status               DealerStatus          @default(active)
-  setupStatus          DealerSetupStatus     @default(pending_setup)
-  isDefault            Boolean               @default(false)
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  slug                 String                    @unique
+  status               DealerStatus              @default(active)
+  setupStatus          DealerSetupStatus         @default(pending_setup)
+  isDefault            Boolean                   @default(false)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
   settings             DealerSettings?
   domains              DealerDomain[]
   memberships          DealerMembership[]
@@ -76,38 +110,39 @@ model Dealer {
   customColors         CustomColor[]
   customSuppliers      CustomSupplier[]
   customConnectorTypes CustomConnectorType[]
+  invoices             Invoice[]
 }
 
 model DealerSettings {
-  id                    String   @id @default(cuid())
-  dealerId              String   @unique
-  dealer                Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  displayName           String?
-  legalName             String?
-  addressLine1          String?
-  zip                   String?
-  city                  String?
-  country               String?
-  phone                 String?
-  email                 String?
-  supportEmail          String?
-  website               String?
-  taxId                 String?
-  legalRepresentative   String?
-  bankName              String?
-  iban                  String?
-  bic                   String?
-  logoUrl               String?
-  faviconUrl            String?
-  primaryColor          String?
-  accentColor           String?
-  loginHeadline         String?
-  documentFooterText    String?
-  documentLegalText     String?
-  purchaseTerms         String?
-  saleTerms             String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  dealerId            String   @unique
+  dealer              Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  displayName         String?
+  legalName           String?
+  addressLine1        String?
+  zip                 String?
+  city                String?
+  country             String?
+  phone               String?
+  email               String?
+  supportEmail        String?
+  website             String?
+  taxId               String?
+  legalRepresentative String?
+  bankName            String?
+  iban                String?
+  bic                 String?
+  logoUrl             String?
+  faviconUrl          String?
+  primaryColor        String?
+  accentColor         String?
+  loginHeadline       String?
+  documentFooterText  String?
+  documentLegalText   String?
+  purchaseTerms       String?
+  saleTerms           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
 
 model DealerDomain {
@@ -126,43 +161,43 @@ model DealerDomain {
 }
 
 model Plan {
-  id                  String               @id @default(cuid())
-  slug                String               @unique
-  name                String
-  description         String?
-  monthlyPriceCents   Int                  @default(0)
+  id                   String               @id @default(cuid())
+  slug                 String               @unique
+  name                 String
+  description          String?
+  monthlyPriceCents    Int                  @default(0)
   stripePriceMonthlyId String?
-  featureEntitlements Json
-  isActive            Boolean              @default(true)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  subscriptions       DealerSubscription[]
+  featureEntitlements  Json
+  isActive             Boolean              @default(true)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  subscriptions        DealerSubscription[]
 }
 
 model DealerSubscription {
-  id               String                   @id @default(cuid())
-  dealerId         String
-  dealer           Dealer                   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  planId           String
-  plan             Plan                     @relation(fields: [planId], references: [id], onDelete: Restrict)
-  status           DealerSubscriptionStatus @default(active)
-  stripeCustomerId String?
-  stripeSubscriptionId String?
+  id                      String                   @id @default(cuid())
+  dealerId                String
+  dealer                  Dealer                   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  planId                  String
+  plan                    Plan                     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status                  DealerSubscriptionStatus @default(active)
+  stripeCustomerId        String?
+  stripeSubscriptionId    String?
   stripeCheckoutSessionId String?
-  stripePriceId    String?
-  complimentaryAccess Boolean              @default(false)
-  featureOverrides Json?
-  billingNotes     String?
-  trialEndsAt      DateTime?
-  currentPeriodEndsAt DateTime?
-  startsAt         DateTime                 @default(now())
-  endsAt           DateTime?
-  createdAt        DateTime                 @default(now())
-  updatedAt        DateTime                 @updatedAt
+  stripePriceId           String?
+  complimentaryAccess     Boolean                  @default(false)
+  featureOverrides        Json?
+  billingNotes            String?
+  trialEndsAt             DateTime?
+  currentPeriodEndsAt     DateTime?
+  startsAt                DateTime                 @default(now())
+  endsAt                  DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
 
-  @@index([dealerId, status])
   @@unique([stripeSubscriptionId])
   @@unique([dealerId, planId])
+  @@index([dealerId, status])
 }
 
 model DealerMembership {
@@ -184,19 +219,21 @@ model DealerMembership {
 // ─── Auth Models ───────────────────────────────────────────────
 
 model User {
-  id              String             @id
-  name            String
-  email           String             @unique
-  emailVerified   Boolean            @default(false)
-  image           String?
-  username        String?            @unique
-  displayUsername String?
-  platformRole    PlatformRole       @default(user)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  sessions        Session[]
-  accounts        Account[]
-  memberships     DealerMembership[]
+  id               String             @id
+  name             String
+  email            String             @unique
+  emailVerified    Boolean            @default(false)
+  image            String?
+  username         String?            @unique
+  displayUsername  String?
+  platformRole     PlatformRole       @default(user)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  sessions         Session[]
+  accounts         Account[]
+  memberships      DealerMembership[]
+  reversedSales    Sale[]             @relation("SaleReversedBy")
+  canceledInvoices Invoice[]          @relation("InvoiceCanceledBy")
 }
 
 model Session {
@@ -253,11 +290,11 @@ model OnboardingInquiry {
 // ─── Counter for sequential vehicle numbers ────────────────────
 
 model Counter {
-  id       String   @id @default(cuid())
+  id       String @id @default(cuid())
   dealerId String
-  dealer   Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealer   Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
   key      String
-  value    Int      @default(0)
+  value    Int    @default(0)
 
   @@unique([dealerId, key])
 }
@@ -288,73 +325,73 @@ model Supplier {
 }
 
 model Vehicle {
-  id                     String                  @id @default(cuid())
-  dealerId               String
-  dealer                 Dealer                  @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  vehicleNumber          String
-  brand                  String
-  model                  String
-  year                   Int?
-  mileage                Int
-  vin                    String?
-  hsn                    String?
-  tsn                    String?
-  registrationDocNumber  String?
-  color                  String?
-  fuelType               String?
-  transmission           String?
-  power                  String?
-  features               String?
-  purchasePrice          Float
-  sellingPrice           Float
-  taxRate                Float                   @default(19.0)
-  marginTaxed            Boolean                 @default(false)
-  isPrivate              Boolean                 @default(false)
-  status                 String                  @default("available")
-  notes                  String?
-  internalNotes          String?
-  customerId             String?
-  customer               Customer?               @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  supplierId             String?
-  supplierRel            Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  handoverProtocol       VehicleHandoverProtocol?
-  images                 VehicleImage[]
-  documents              VehicleDocument[]
-  sales                  Sale[]
-  costs                  VehicleCost[]
-  workLog                WorkLogItem[]
-  co2Emission            Float?
-  displacement           Int?
-  powerKw                Float?
-  hasDamage              Boolean                 @default(false)
-  damageDescription      String?
-  damageAmount           Float?
-  batteryCapacity        Float?
-  electricRange          Int?
-  batterySoh             Float?
-  batteryType            String?
-  exportEnabled          Boolean                 @default(false)
-  transportCostDomestic  Float?
-  transportCostAbroad    Float?
-  customsDuties          Float?
-  registrationFees       Float?
-  repairCostsAbroad      Float?
-  firstRegistration      DateTime?
-  supplier               String?
-  chargingTime           Int?
-  connectorType          String?
-  huDue                  DateTime?
-  previousOwners         Int?
-  serviceDueKm           Int?
-  serviceDueDate         DateTime?
-  bodyType               String?
-  doors                  Int?
-  seats                  Int?
-  driveType              String?
-  emissionClass          String?
-  dealerPrice            Float?
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
+  id                    String                   @id @default(cuid())
+  dealerId              String
+  dealer                Dealer                   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  vehicleNumber         String
+  brand                 String
+  model                 String
+  year                  Int?
+  mileage               Int
+  vin                   String?
+  hsn                   String?
+  tsn                   String?
+  registrationDocNumber String?
+  color                 String?
+  fuelType              String?
+  transmission          String?
+  power                 String?
+  features              String?
+  purchasePrice         Float
+  sellingPrice          Float
+  taxRate               Float                    @default(19.0)
+  marginTaxed           Boolean                  @default(false)
+  isPrivate             Boolean                  @default(false)
+  status                String                   @default("available")
+  notes                 String?
+  internalNotes         String?
+  customerId            String?
+  customer              Customer?                @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  supplierId            String?
+  supplierRel           Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  handoverProtocol      VehicleHandoverProtocol?
+  images                VehicleImage[]
+  documents             VehicleDocument[]
+  sales                 Sale[]
+  costs                 VehicleCost[]
+  workLog               WorkLogItem[]
+  co2Emission           Float?
+  displacement          Int?
+  powerKw               Float?
+  hasDamage             Boolean                  @default(false)
+  damageDescription     String?
+  damageAmount          Float?
+  batteryCapacity       Float?
+  electricRange         Int?
+  batterySoh            Float?
+  batteryType           String?
+  exportEnabled         Boolean                  @default(false)
+  transportCostDomestic Float?
+  transportCostAbroad   Float?
+  customsDuties         Float?
+  registrationFees      Float?
+  repairCostsAbroad     Float?
+  firstRegistration     DateTime?
+  supplier              String?
+  chargingTime          Int?
+  connectorType         String?
+  huDue                 DateTime?
+  previousOwners        Int?
+  serviceDueKm          Int?
+  serviceDueDate        DateTime?
+  bodyType              String?
+  doors                 Int?
+  seats                 Int?
+  driveType             String?
+  emissionClass         String?
+  dealerPrice           Float?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   @@unique([dealerId, vehicleNumber])
   @@index([dealerId, status])
@@ -386,16 +423,19 @@ model VehicleImage {
 }
 
 model VehicleDocument {
-  id        String   @id @default(cuid())
-  dealerId  String
-  dealer    Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  name      String
-  url       String
-  fileName  String
-  fileType  String?
-  vehicleId String
-  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  id              String             @id @default(cuid())
+  dealerId        String
+  dealer          Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  name            String
+  url             String
+  fileName        String
+  fileType        String?
+  documentType    StoredDocumentType @default(general)
+  retentionLocked Boolean            @default(false)
+  softDeletedAt   DateTime?
+  vehicleId       String
+  vehicle         Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt       DateTime           @default(now())
 }
 
 model VehicleHandoverProtocol {
@@ -439,48 +479,119 @@ model Customer {
 }
 
 model CustomerDocument {
-  id         String   @id @default(cuid())
-  dealerId   String
-  dealer     Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  name       String
-  url        String
-  fileName   String
-  fileType   String?
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+  id              String             @id @default(cuid())
+  dealerId        String
+  dealer          Dealer             @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  name            String
+  url             String
+  fileName        String
+  fileType        String?
+  documentType    StoredDocumentType @default(general)
+  retentionLocked Boolean            @default(false)
+  softDeletedAt   DateTime?
+  customerId      String
+  customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt       DateTime           @default(now())
 }
 
 model Sale {
-  id         String   @id @default(cuid())
-  dealerId   String
-  dealer     Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
-  vehicleId  String
-  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  customerId String
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  salePrice  Float
-  taxRate    Float    @default(19.0)
-  saleDate   DateTime @default(now())
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                  String               @id @default(cuid())
+  dealerId            String
+  dealer              Dealer               @relation(fields: [dealerId], references: [id], onDelete: Restrict)
+  vehicleId           String
+  vehicle             Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  customerId          String
+  customer            Customer             @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salePrice           Float
+  taxRate             Float                @default(19.0)
+  accountingStatus    SaleAccountingStatus @default(verified)
+  priceModeSnapshot   SalePriceMode?
+  marginTaxedSnapshot Boolean?
+  grossCents          Int?
+  netCents            Int?
+  taxCents            Int?
+  marginTaxCents      Int?
+  purchasePriceCents  Int?
+  manualCostsCents    Int?
+  exportCostsCents    Int?
+  totalCostCents      Int?
+  saleDate            DateTime             @default(now())
+  notes               String?
+  status              SaleStatus           @default(completed)
+  reversedAt          DateTime?
+  reversedById        String?
+  reversedBy          User?                @relation("SaleReversedBy", fields: [reversedById], references: [id], onDelete: SetNull)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  invoice             Invoice?
 
   @@index([dealerId, saleDate])
+  @@index([dealerId, vehicleId, status])
+}
+
+model Invoice {
+  id                         String               @id @default(cuid())
+  dealerId                   String
+  dealer                     Dealer               @relation(fields: [dealerId], references: [id], onDelete: Restrict)
+  saleId                     String               @unique
+  sale                       Sale                 @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  documentType               BusinessDocumentType @default(INVOICE)
+  invoiceNumber              String
+  status                     InvoiceStatus        @default(issued)
+  issuedAt                   DateTime             @default(now())
+  dueAt                      DateTime?
+  grossCents                 Int
+  netCents                   Int
+  taxCents                   Int
+  marginTaxCents             Int                  @default(0)
+  taxRate                    Float
+  marginTaxed                Boolean
+  htmlArtifact               String               @db.Text
+  artifactSha256             String
+  templateVersion            String
+  canceledAt                 DateTime?
+  canceledById               String?
+  canceledBy                 User?                @relation("InvoiceCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+  cancelReason               String?
+  cancellationArtifact       String?              @db.Text
+  cancellationArtifactSha256 String?
+  notes                      String?
+  snapshot                   Json
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+
+  @@unique([dealerId, invoiceNumber])
+  @@index([dealerId, issuedAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  dealerId   String?
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([dealerId, createdAt])
+  @@index([entityType, entityId])
 }
 
 model WorkLogItem {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   dealerId    String
-  dealer      Dealer   @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealer      Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
   vehicleId   String
-  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   description String
-  status      String   @default("open")
+  status      String    @default("open")
   assignee    String?
   dueDate     DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model CustomBrand {

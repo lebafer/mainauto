@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -67,7 +67,7 @@ export function QuickAddSupplierDialog({
   const queryClient = useQueryClient();
 
   const form = useForm<QuickSupplierValues>({
-    resolver: zodResolver(QuickSupplierSchema),
+    resolver: zodResolver(QuickSupplierSchema) as Resolver<QuickSupplierValues>,
     defaultValues: {
       name: "",
       supplierType: "gewerblich",

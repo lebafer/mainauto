@@ -136,8 +136,17 @@ export default function SupplierList() {
               {filtered.map((supplier) => (
                 <TableRow
                   key={supplier.id}
-                  className="cursor-pointer hover:bg-muted/50 transition-colors"
+                  className="cursor-pointer transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => navigate(`/suppliers/${supplier.id}`)}
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`${supplier.name} öffnen`}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      navigate(`/suppliers/${supplier.id}`);
+                    }
+                  }}
                 >
                   <TableCell className="font-medium">{supplier.name}</TableCell>
                   <TableCell>

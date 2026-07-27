@@ -1,5 +1,4 @@
 import { Navigate, Link } from "react-router-dom";
-import { motion } from "framer-motion";
 import { ArrowRight, Bot, Building2, CheckCircle2, Users2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-client";
 import { useQuery } from "@tanstack/react-query";
@@ -54,12 +53,7 @@ export default function LandingPage() {
         </header>
 
         <main className="grid flex-1 gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45 }}
-            className="space-y-8"
-          >
+          <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <Badge className="w-fit rounded-full bg-[#19477e]/10 px-4 py-1 text-[#19477e] hover:bg-[#19477e]/10 dark:text-[#c8dbf7]">
               SaaS für moderne Autohäuser
             </Badge>
@@ -112,14 +106,9 @@ export default function LandingPage() {
                 <Link to="/login">Zum Login</Link>
               </Button>
             </div>
-          </motion.section>
+          </section>
 
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.1 }}
-            className="space-y-4"
-          >
+          <section className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <Card className="border-[#19477e]/15 bg-[linear-gradient(180deg,#0f2542_0%,#102d50_100%)] text-slate-50 shadow-2xl">
               <CardHeader>
                 <CardTitle>Tarife</CardTitle>
@@ -153,7 +142,7 @@ export default function LandingPage() {
                 </div>
               </CardContent>
             </Card>
-          </motion.section>
+          </section>
         </main>
       </div>
     </div>

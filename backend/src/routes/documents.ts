@@ -8,14 +8,17 @@ import {
 } from "../types";
 import { access, readFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import puppeteer, { type Browser } from "puppeteer";
-import puppeteerCore from "puppeteer-core";
+import puppeteerCore, { type Browser } from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
 import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
 import { getDocumentPriceSummary } from "../lib/documentPrices";
 import { getPurchaseContractPriceSummary } from "../lib/purchaseContractPrices";
+import {
+  escapeTemplateData,
+  sanitizeGeneratedHtml,
+} from "../lib/documentSecurity";
 
 const BROWSER_ARGS = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"];
 const SYSTEM_BROWSER_PATHS = [
@@ -23,15 +26,11 @@ const SYSTEM_BROWSER_PATHS = [
   "/usr/bin/chromium-browser",
   "/usr/bin/google-chrome",
   "/usr/bin/google-chrome-stable",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ];
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
-
-async function launchWithPuppeteer(): Promise<Browser> {
-  return puppeteer.launch({
-    args: BROWSER_ARGS,
-    headless: true,
-  });
-}
 
 async function canAccessPath(path: string): Promise<boolean> {
   try {
@@ -50,12 +49,9 @@ async function launchWithPuppeteerCore(executablePath: string, args: string[]): 
   });
 }
 
-// Launch browser compatible with both dev (puppeteer) and production (serverless chromium)
+// Launch the explicitly configured/container/system browser through puppeteer-core.
 async function launchBrowser(): Promise<Browser> {
   const isProduction = process.env.NODE_ENV === "production" || process.env.VIBECODE_PRODUCTION === "true";
-  if (!isProduction) {
-    return launchWithPuppeteer();
-  }
 
   const preferredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
   if (preferredPath) {
@@ -80,21 +76,46 @@ async function launchBrowser(): Promise<Browser> {
     }
   }
 
-  try {
-    const executablePath = await chromium.executablePath();
-    console.info(`[documents] using_sparticuz_browser=${executablePath}`);
-    return await launchWithPuppeteerCore(executablePath, [...chromium.args, ...BROWSER_ARGS]);
-  } catch (error) {
-    console.warn("[documents] sparticuz_browser_launch_failed_fallback_to_puppeteer", error);
-    return launchWithPuppeteer();
+  if (isProduction) {
+    try {
+      const executablePath = await chromium.executablePath();
+      console.info(`[documents] using_sparticuz_browser=${executablePath}`);
+      return await launchWithPuppeteerCore(executablePath, [...chromium.args, ...BROWSER_ARGS]);
+    } catch (error) {
+      console.warn("[documents] sparticuz_browser_launch_failed", error);
+    }
   }
+
+  throw new Error(
+    "Kein Chromium/Chrome gefunden. PUPPETEER_EXECUTABLE_PATH auf einen installierten Browser setzen."
+  );
 }
 
-async function htmlToPdf(html: string): Promise<Uint8Array> {
+export async function htmlToPdf(
+  html: string,
+  options: { alreadySanitized?: boolean } = {}
+): Promise<Uint8Array> {
   const browser = await launchBrowser();
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on("request", (request) => {
+      const url = request.url();
+      if (url === "about:blank" || url.startsWith("data:")) {
+        void request.continue();
+      } else {
+        void request.abort();
+      }
+    });
+    page.setDefaultNavigationTimeout(15_000);
+    await page.setContent(
+      options.alreadySanitized ? html : sanitizeGeneratedHtml(html),
+      {
+      waitUntil: "domcontentloaded",
+      timeout: 15_000,
+      }
+    );
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -280,9 +301,10 @@ async function resolveDocumentLogoSrc(
     return null;
   }
 
-  if (/^data:/i.test(logoUrl) || /^https?:\/\//i.test(logoUrl)) {
+  if (/^data:image\//i.test(logoUrl)) {
     return logoUrl;
   }
+  if (/^https?:\/\//i.test(logoUrl)) return null;
 
   if (logoUrl.startsWith("/api/uploads/")) {
     const fileName = basename(logoUrl);
@@ -462,15 +484,6 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
 function plainTextFromHtml(value: string | null | undefined): string {
   if (!value) {
     return "";
@@ -528,7 +541,7 @@ function getPrivateSalesContractLegalHtml(dealerName: string): string {
   return `
     <p class="legal-text"><strong>Verkürzung der Verjährungsfrist beim Verkauf von Gebrauchtfahrzeugen</strong></p>
     <p class="legal-text">Die gesetzlich geregelte Verjährungsfrist für die Geltendmachung von Ansprüchen wegen Sachmängeln und/oder Rechtsmängeln einer Sache beträgt 2 Jahre. Hiervon abweichend wurde ich über Folgendes informiert:</p>
-    <p class="legal-text">Die ${escapeHtml(dealerName)} als Verkäufer wird den Kaufgegenstand nur im Falle der Vereinbarung einer Verjährungsfrist von 1 Jahr für Ansprüche wegen Sachmängeln und Rechtsmängeln verkaufen.</p>
+    <p class="legal-text">Die ${dealerName} als Verkäufer wird den Kaufgegenstand nur im Falle der Vereinbarung einer Verjährungsfrist von 1 Jahr für Ansprüche wegen Sachmängeln und Rechtsmängeln verkaufen.</p>
     <p class="legal-text">Die Verkürzung der Verjährungsfrist auf 1 Jahr wird jedoch nicht für Schäden gelten, die auf einer grob fahrlässigen oder vorsätzlichen Verletzung von Pflichten des Verkäufers, seines gesetzlichen Vertreters oder seines Erfüllungsgehilfen beruhen sowie bei Verletzung von Leben, Körper oder Gesundheit.</p>
     <p class="legal-text">Hat der Verkäufer aufgrund der gesetzlichen Bestimmungen für einen Schaden aufzukommen, der leicht fahrlässig verursacht wurde, so haftet der Verkäufer nur beschränkt: Die Haftung besteht nur bei Verletzung vertragswesentlicher Pflichten, etwa solcher, die der Kaufvertrag dem Verkäufer nach seinem Inhalt und Zweck gerade auferlegen will oder deren Erfüllung die ordnungsgemäße Durchführung des Kaufvertrages überhaupt erst ermöglicht und auf deren Einhaltung der Käufer regelmäßig vertraut und vertrauen darf. Diese Haftung ist auf den bei Vertragsabschluss vorhersehbaren typischen Schaden begrenzt.</p>
     <p class="legal-text">Ausgeschlossen ist die persönliche Haftung der gesetzlichen Vertreter, Erfüllungsgehilfen und Betriebsangehörigen des Verkäufers für von ihnen durch leichte Fahrlässigkeit verursachte Schäden.</p>
@@ -594,6 +607,8 @@ function generateOffer(
   ,
   logoSrc: string | null = null
 ): string {
+  vehicle = escapeTemplateData(vehicle);
+  customer = customer ? escapeTemplateData(customer) : customer;
   const gross = calculateGross(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
   const tax = calculateTaxAmount(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
 
@@ -682,6 +697,7 @@ function generatePriceTag(vehicle: {
   marginTaxed: boolean;
   features: string | null;
 }, logoSrc: string | null = null): string {
+  vehicle = escapeTemplateData(vehicle);
   const gross = calculateGross(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
 
   return `<!DOCTYPE html>
@@ -864,6 +880,10 @@ function generateContract(
   },
   logoSrc: string | null = null
 ): string {
+  vehicle = escapeTemplateData(vehicle);
+  customer = escapeTemplateData(customer);
+  dealerProfile = escapeTemplateData(dealerProfile);
+  contractMeta = contractMeta ? escapeTemplateData(contractMeta) : contractMeta;
   const contractDate = contractMeta?.date ? new Date(contractMeta.date) : new Date();
   const contractDateFormatted = formatDateDE(contractDate);
   const contractPlace = contractMeta?.place?.trim() || getDealerSignatureCity(dealerProfile);
@@ -965,10 +985,10 @@ function generateContract(
 
   const damageDetails: string[] = [];
   if (vehicle.hasDamage && vehicle.damageDescription?.trim()) {
-    damageDetails.push(escapeHtml(vehicle.damageDescription.trim()));
+    damageDetails.push(vehicle.damageDescription.trim());
   }
   if (vehicle.hasDamage && vehicle.damageAmount != null) {
-    damageDetails.push(`Bekannte Schadenshöhe/Reparaturkosten: ${escapeHtml(formatGermanPrice(vehicle.damageAmount))}`);
+    damageDetails.push(`Bekannte Schadenshöhe/Reparaturkosten: ${formatGermanPrice(vehicle.damageAmount)}`);
   }
 
   const damageDisclosureHtml = `<div class="features-block">
@@ -1165,7 +1185,7 @@ function generateContract(
     </div>
   </div>
   <div class="sig-meta-row">
-    <div class="sig-meta">Ort, Datum<br>${escapeHtml(contractPlace)}, ${contractDateFormatted}</div>
+    <div class="sig-meta">Ort, Datum<br>${contractPlace}, ${contractDateFormatted}</div>
     <div class="sig-meta">&nbsp;</div>
   </div>
 
@@ -1207,6 +1227,9 @@ function generatePurchaseContract(
   dealerProfile: DealerDocumentProfile,
   logoSrc: string | null = null
 ): string {
+  vehicle = escapeTemplateData(vehicle);
+  seller = escapeTemplateData(seller);
+  dealerProfile = escapeTemplateData(dealerProfile);
   const today = new Date();
   const todayFormatted = formatDateDE(today);
   const sellerCityLine = getPartyCityLine(seller);
@@ -1475,7 +1498,13 @@ documentsRouter.post(
         return c.json({ error: { message: "Invalid document type", code: "BAD_REQUEST" } }, 400);
     }
 
-    return c.json({ data: { html, type, vehicleNumber: vehicle.vehicleNumber } });
+    return c.json({
+      data: {
+        html: sanitizeGeneratedHtml(html),
+        type,
+        vehicleNumber: vehicle.vehicleNumber,
+      },
+    });
   }
 );
 
@@ -1542,7 +1571,9 @@ documentsRouter.post(
     }
 
     const html = generatePurchaseContract(vehicle, seller, dealerProfile, logoSrc);
-    return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
+    return c.json({
+      data: { html: sanitizeGeneratedHtml(html), vehicleNumber: vehicle.vehicleNumber },
+    });
   }
 );
 
@@ -1620,6 +1651,9 @@ function generateGelangensbestaetigung(
   dealerProfile: DealerDocumentProfile,
   logoSrc: string | null = null
 ): string {
+  vehicle = escapeTemplateData(vehicle);
+  customer = escapeTemplateData(customer);
+  dealerProfile = escapeTemplateData(dealerProfile);
   // Build customer name line
   const customerName = customer.company
     ? customer.company
@@ -1860,7 +1894,7 @@ documentsRouter.post(
         passportValidUntil ??
         (customer.idDocumentValidUntil ? formatDateDE(customer.idDocumentValidUntil) : ""),
     }, dealerProfile, logoSrc);
-    return c.json({ data: { html } });
+    return c.json({ data: { html: sanitizeGeneratedHtml(html) } });
   }
 );
 
@@ -1922,6 +1956,10 @@ function generateVermittlungsvertrag(
   dealerProfile: DealerDocumentProfile,
   logoSrc: string | null = null
 ): string {
+  vehicle = escapeTemplateData(vehicle);
+  buyer = escapeTemplateData(buyer);
+  seller = escapeTemplateData(seller);
+  dealerProfile = escapeTemplateData(dealerProfile);
   const today = new Date();
   const todayFormatted = formatDateDE(today);
 
@@ -2267,7 +2305,9 @@ documentsRouter.post("/generate-vermittlung-html", async (c) => {
   if (!seller) return c.json({ error: { message: "Seller info required", code: "BAD_REQUEST" } }, 400);
 
   const html = generateVermittlungsvertrag(vehicle, buyer, seller, dealerProfile, logoSrc);
-  return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
+  return c.json({
+    data: { html: sanitizeGeneratedHtml(html), vehicleNumber: vehicle.vehicleNumber },
+  });
 });
 
 documentsRouter.post(
@@ -2299,7 +2339,9 @@ documentsRouter.post(
       bic: dealerProfile.bic,
       logoUrl: dealerProfile.logoUrl,
     }, logoSrc, sketchSrc);
-    return c.json({ data: { html, vehicleNumber: vehicle.vehicleNumber } });
+    return c.json({
+      data: { html: sanitizeGeneratedHtml(html), vehicleNumber: vehicle.vehicleNumber },
+    });
   }
 );
 

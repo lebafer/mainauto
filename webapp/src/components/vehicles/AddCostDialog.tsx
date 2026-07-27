@@ -26,7 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 const COST_TYPE_PRESETS = [
   "Lackierung",
   "Reifen",
-  "Dübel",
+  "Beulen-/Dellenreparatur",
   "HU/AU",
   "Inspektion",
   "Sonstiges",
@@ -92,9 +92,9 @@ export function AddCostDialog({ vehicleId, open, onOpenChange }: AddCostDialogPr
         <div className="space-y-4 py-2">
           {/* Cost type */}
           <div className="space-y-2">
-            <Label>Kostenart</Label>
+            <Label htmlFor="cost-type">Kostenart</Label>
             <Select value={costType} onValueChange={setCostType}>
-              <SelectTrigger>
+              <SelectTrigger id="cost-type" aria-label="Kostenart auswählen">
                 <SelectValue placeholder="Kostenart wählen..." />
               </SelectTrigger>
               <SelectContent>
@@ -109,6 +109,8 @@ export function AddCostDialog({ vehicleId, open, onOpenChange }: AddCostDialogPr
 
             {isCustom ? (
               <Input
+                id="custom-cost-type"
+                aria-label="Eigene Kostenart"
                 placeholder="Kostenart eingeben..."
                 value={customCostType}
                 onChange={(e) => setCustomCostType(e.target.value)}
@@ -119,12 +121,13 @@ export function AddCostDialog({ vehicleId, open, onOpenChange }: AddCostDialogPr
 
           {/* Amount */}
           <div className="space-y-2">
-            <Label>Betrag (EUR)</Label>
+            <Label htmlFor="cost-amount">Betrag (EUR)</Label>
             <div className="relative">
               <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
                 €
               </span>
               <Input
+                id="cost-amount"
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -138,8 +141,9 @@ export function AddCostDialog({ vehicleId, open, onOpenChange }: AddCostDialogPr
 
           {/* Notes */}
           <div className="space-y-2">
-            <Label>Notizen <span className="text-muted-foreground font-normal">(optional)</span></Label>
+            <Label htmlFor="cost-notes">Notizen <span className="text-muted-foreground font-normal">(optional)</span></Label>
             <Textarea
+              id="cost-notes"
               rows={2}
               placeholder="Beschreibung, Lieferant, Bemerkungen..."
               value={notes}

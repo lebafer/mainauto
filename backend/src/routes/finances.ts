@@ -1,6 +1,13 @@
 import { Hono } from "hono";
 import { prisma } from "../prisma";
-import { getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
+import {
+  getCurrentDealerId,
+  getCurrentEntitlements,
+  requireDealerRole,
+} from "../lib/request-context";
+import { fromCents, toCents } from "../lib/money";
+import { FinancesDateRangeSchema } from "../types";
+import { getBerlinDateRange } from "../lib/financeDates";
 
 const financesRouter = new Hono();
 
@@ -16,10 +23,14 @@ function normalizeAmount(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+function amountCents(value: number | null | undefined): number {
+  return toCents(normalizeAmount(value));
+}
+
 function getManualAdditionalCosts(vehicle: {
   costs: Array<{ amount: number }>;
 }): number {
-  return vehicle.costs.reduce((sum, cost) => sum + normalizeAmount(cost.amount), 0);
+  return fromCents(vehicle.costs.reduce((sum, cost) => sum + amountCents(cost.amount), 0));
 }
 
 function getExportAdditionalCosts(vehicle: {
@@ -30,77 +41,68 @@ function getExportAdditionalCosts(vehicle: {
   registrationFees?: number | null;
   repairCostsAbroad?: number | null;
 }): number {
-  return EXPORT_COST_FIELDS.reduce((sum, { key }) => {
+  const totalCents = EXPORT_COST_FIELDS.reduce((sum, { key }) => {
     if (key !== "transportCostDomestic" && !vehicle.exportEnabled) {
       return sum;
     }
 
-    return sum + normalizeAmount(vehicle[key]);
+    return sum + amountCents(vehicle[key]);
   }, 0);
-}
-
-function getCostBreakdown(vehicle: {
-  costs: Array<{ costType: string; amount: number }>;
-  exportEnabled?: boolean | null;
-  transportCostDomestic?: number | null;
-  transportCostAbroad?: number | null;
-  customsDuties?: number | null;
-  registrationFees?: number | null;
-  repairCostsAbroad?: number | null;
-}) {
-  const manualCosts = vehicle.costs
-    .filter((cost) => normalizeAmount(cost.amount) > 0)
-    .map((cost) => ({
-      label: cost.costType,
-      amount: normalizeAmount(cost.amount),
-      category: "manual" as const,
-    }));
-
-  const exportCosts = EXPORT_COST_FIELDS.flatMap(({ key, label }) => {
-    if (key !== "transportCostDomestic" && !vehicle.exportEnabled) {
-      return [];
-    }
-
-    const amount = normalizeAmount(vehicle[key]);
-    if (amount <= 0) {
-      return [];
-    }
-
-    return [{ label, amount, category: "export" as const }];
-  });
-
-  return [...manualCosts, ...exportCosts];
+  return fromCents(totalCents);
 }
 
 // GET /api/finances?from=ISO_DATE&to=ISO_DATE
 financesRouter.get("/", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const dealerId = getCurrentDealerId(c);
   const privateVehiclesEnabled = getCurrentEntitlements(c).private_vehicles === true;
   const fromParam = c.req.query("from");
   const toParam = c.req.query("to");
 
-  // Build date filters
-  const fromDate = fromParam ? new Date(fromParam) : undefined;
-  // Make "to" inclusive by setting to end of day
-  let toDate: Date | undefined;
-  if (toParam) {
-    toDate = new Date(toParam);
-    toDate.setHours(23, 59, 59, 999);
+  const parsedRange = FinancesDateRangeSchema.safeParse({
+    from: fromParam,
+    to: toParam,
+  });
+  if (!parsedRange.success) {
+    return c.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Datumsfilter müssen gültige Daten im Format YYYY-MM-DD sein",
+        },
+      },
+      400
+    );
+  }
+  const { fromDate, toDateExclusive } = getBerlinDateRange(parsedRange.data);
+
+  if (fromDate && toDateExclusive && fromDate >= toDateExclusive) {
+    return c.json(
+      {
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Das Startdatum darf nicht nach dem Enddatum liegen",
+        },
+      },
+      400
+    );
   }
 
   const saleDateFilter =
-    fromDate || toDate
+    fromDate || toDateExclusive
       ? {
           ...(fromDate ? { gte: fromDate } : {}),
-          ...(toDate ? { lte: toDate } : {}),
+          ...(toDateExclusive ? { lt: toDateExclusive } : {}),
         }
       : undefined;
 
   const createdAtFilter =
-    fromDate || toDate
+    fromDate || toDateExclusive
       ? {
           ...(fromDate ? { gte: fromDate } : {}),
-          ...(toDate ? { lte: toDate } : {}),
+          ...(toDateExclusive ? { lt: toDateExclusive } : {}),
         }
       : undefined;
 
@@ -108,12 +110,17 @@ financesRouter.get("/", async (c) => {
   const salesInPeriod = await prisma.sale.findMany({
     where: {
       dealerId,
+      status: "completed",
       ...(privateVehiclesEnabled ? { vehicle: { isPrivate: false } } : {}),
       ...(saleDateFilter ? { saleDate: saleDateFilter } : {}),
     },
     include: {
       vehicle: {
-        include: { costs: true },
+        select: {
+          vehicleNumber: true,
+          brand: true,
+          model: true,
+        },
       },
       customer: true,
     },
@@ -142,27 +149,26 @@ financesRouter.get("/", async (c) => {
 
   // --- Compute purchases aggregates ---
   const vehiclesBoughtCount = vehiclesBoughtInPeriod.length;
-  const totalPurchaseCost = vehiclesBoughtInPeriod.reduce(
-    (sum, v) => sum + v.purchasePrice,
+  const totalPurchaseCostCents = vehiclesBoughtInPeriod.reduce(
+    (sum, v) => sum + amountCents(v.purchasePrice),
     0
   );
-  const totalManualCosts = vehiclesBoughtInPeriod.reduce(
-    (sum, v) => sum + getManualAdditionalCosts(v),
+  const totalManualCostsCents = vehiclesBoughtInPeriod.reduce(
+    (sum, v) => sum + toCents(getManualAdditionalCosts(v)),
     0
   );
-  const totalExportCosts = vehiclesBoughtInPeriod.reduce(
-    (sum, v) => sum + getExportAdditionalCosts(v),
+  const totalExportCostsCents = vehiclesBoughtInPeriod.reduce(
+    (sum, v) => sum + toCents(getExportAdditionalCosts(v)),
     0
   );
-  const totalAdditionalCosts = vehiclesBoughtInPeriod.reduce(
-    (sum, v) => sum + getManualAdditionalCosts(v) + getExportAdditionalCosts(v),
-    0
-  );
+  const totalAdditionalCostsCents = totalManualCostsCents + totalExportCostsCents;
+  const totalPurchaseCost = fromCents(totalPurchaseCostCents);
+  const totalManualCosts = fromCents(totalManualCostsCents);
+  const totalExportCosts = fromCents(totalExportCostsCents);
+  const totalAdditionalCosts = fromCents(totalAdditionalCostsCents);
 
   // --- Compute sales aggregates ---
   const vehiclesSoldCount = salesInPeriod.length;
-  const totalRevenue = salesInPeriod.reduce((sum, s) => sum + s.salePrice, 0);
-
   // Per-sale profit calculation
   type SaleRow = {
     id: string;
@@ -170,26 +176,55 @@ financesRouter.get("/", async (c) => {
     vehicleNumber: string;
     brand: string;
     model: string;
-    purchasePrice: number;
-    manualAdditionalCosts: number;
-    exportAdditionalCosts: number;
-    additionalCosts: number;
+    accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
+    purchasePrice: number | null;
+    manualAdditionalCosts: number | null;
+    exportAdditionalCosts: number | null;
+    additionalCosts: number | null;
     costBreakdown: Array<{
       label: string;
       amount: number;
       category: "manual" | "export";
     }>;
-    salePrice: number;
-    profit: number;
+    salePrice: number | null;
+    grossSalePrice: number | null;
+    netSalePrice: number | null;
+    saleTaxAmount: number | null;
+    disclosedTaxAmount: number | null;
+    marginTaxAmount: number | null;
+    profit: number | null;
     customerName: string;
   };
 
   const saleRows: SaleRow[] = salesInPeriod.map((sale) => {
-    const manualAdditionalCosts = getManualAdditionalCosts(sale.vehicle);
-    const exportAdditionalCosts = getExportAdditionalCosts(sale.vehicle);
-    const additionalCosts = manualAdditionalCosts + exportAdditionalCosts;
+    const hasCompleteSnapshot =
+      sale.grossCents !== null &&
+      sale.netCents !== null &&
+      sale.taxCents !== null &&
+      sale.marginTaxCents !== null &&
+      sale.purchasePriceCents !== null &&
+      sale.manualCostsCents !== null &&
+      sale.exportCostsCents !== null &&
+      sale.totalCostCents !== null;
+    const grossSalePrice = hasCompleteSnapshot ? fromCents(sale.grossCents!) : null;
+    const netSalePrice = hasCompleteSnapshot ? fromCents(sale.netCents!) : null;
+    const disclosedTaxAmount = hasCompleteSnapshot ? fromCents(sale.taxCents!) : null;
+    const marginTaxAmount = hasCompleteSnapshot ? fromCents(sale.marginTaxCents!) : null;
+    const saleTaxAmount =
+      hasCompleteSnapshot
+        ? fromCents(sale.taxCents! + sale.marginTaxCents!)
+        : null;
+    const purchasePrice = hasCompleteSnapshot ? fromCents(sale.purchasePriceCents!) : null;
+    const manualAdditionalCosts = hasCompleteSnapshot ? fromCents(sale.manualCostsCents!) : null;
+    const exportAdditionalCosts = hasCompleteSnapshot ? fromCents(sale.exportCostsCents!) : null;
+    const additionalCosts =
+      hasCompleteSnapshot
+        ? fromCents(sale.manualCostsCents! + sale.exportCostsCents!)
+        : null;
     const profit =
-      sale.salePrice - sale.vehicle.purchasePrice - additionalCosts;
+      hasCompleteSnapshot
+        ? fromCents(sale.netCents! - sale.totalCostCents!)
+        : null;
     const customerName =
       `${sale.customer.firstName} ${sale.customer.lastName}`.trim();
 
@@ -199,20 +234,67 @@ financesRouter.get("/", async (c) => {
       vehicleNumber: sale.vehicle.vehicleNumber,
       brand: sale.vehicle.brand,
       model: sale.vehicle.model,
-      purchasePrice: sale.vehicle.purchasePrice,
+      accountingStatus: sale.accountingStatus,
+      purchasePrice,
       manualAdditionalCosts,
       exportAdditionalCosts,
       additionalCosts,
-      costBreakdown: getCostBreakdown(sale.vehicle),
-      salePrice: sale.salePrice,
+      costBreakdown: [
+        ...(manualAdditionalCosts && manualAdditionalCosts > 0
+          ? [{ label: "Zusatzkosten (Snapshot)", amount: manualAdditionalCosts, category: "manual" as const }]
+          : []),
+        ...(exportAdditionalCosts && exportAdditionalCosts > 0
+          ? [{ label: "Exportkosten (Snapshot)", amount: exportAdditionalCosts, category: "export" as const }]
+          : []),
+      ],
+      salePrice: grossSalePrice,
+      grossSalePrice,
+      netSalePrice,
+      saleTaxAmount,
+      disclosedTaxAmount,
+      marginTaxAmount,
       profit,
       customerName,
     };
   });
 
-  const totalProfit = saleRows.reduce((sum, s) => sum + s.profit, 0);
-  const profitableSales = saleRows.filter((s) => s.profit > 0).length;
-  const lossSales = saleRows.filter((s) => s.profit <= 0).length;
+  const accountedSaleRows = saleRows.filter(
+    (sale): sale is SaleRow & {
+      grossSalePrice: number;
+      netSalePrice: number;
+      saleTaxAmount: number;
+      disclosedTaxAmount: number;
+      marginTaxAmount: number;
+      profit: number;
+    } =>
+      sale.grossSalePrice !== null &&
+      sale.netSalePrice !== null &&
+      sale.saleTaxAmount !== null &&
+      sale.disclosedTaxAmount !== null &&
+      sale.marginTaxAmount !== null &&
+      sale.profit !== null
+  );
+  const totalGrossRevenueCents = accountedSaleRows.reduce((sum, s) => sum + toCents(s.grossSalePrice), 0);
+  const totalNetRevenueCents = accountedSaleRows.reduce((sum, s) => sum + toCents(s.netSalePrice), 0);
+  const totalSalesTaxCents = accountedSaleRows.reduce((sum, s) => sum + toCents(s.saleTaxAmount), 0);
+  const totalDisclosedSalesTaxCents = accountedSaleRows.reduce(
+    (sum, sale) => sum + toCents(sale.disclosedTaxAmount),
+    0
+  );
+  const totalMarginTaxCents = accountedSaleRows.reduce(
+    (sum, sale) => sum + toCents(sale.marginTaxAmount),
+    0
+  );
+  const totalProfitCents = accountedSaleRows.reduce((sum, s) => sum + toCents(s.profit), 0);
+  const totalGrossRevenue = fromCents(totalGrossRevenueCents);
+  const totalNetRevenue = fromCents(totalNetRevenueCents);
+  const totalSalesTax = fromCents(totalSalesTaxCents);
+  const totalDisclosedSalesTax = fromCents(totalDisclosedSalesTaxCents);
+  const totalMarginTax = fromCents(totalMarginTaxCents);
+  const totalRevenue = totalGrossRevenue;
+  const totalProfit = fromCents(totalProfitCents);
+  const profitableSales = accountedSaleRows.filter((s) => s.profit > 0).length;
+  const lossSales = accountedSaleRows.filter((s) => s.profit <= 0).length;
 
   // Best sale (highest profit)
   let bestSale: {
@@ -222,8 +304,8 @@ financesRouter.get("/", async (c) => {
     profit: number;
   } | null = null;
 
-  if (saleRows.length > 0) {
-    const best = saleRows.reduce((prev, curr) =>
+  if (accountedSaleRows.length > 0) {
+    const best = accountedSaleRows.reduce((prev, curr) =>
       curr.profit > prev.profit ? curr : prev
     );
     bestSale = {
@@ -236,9 +318,8 @@ financesRouter.get("/", async (c) => {
 
   // --- Stock aggregates ---
   const vehiclesInStockCount = vehiclesInStock.length;
-  const stockValue = vehiclesInStock.reduce(
-    (sum, v) => sum + v.purchasePrice,
-    0
+  const stockValue = fromCents(
+    vehiclesInStock.reduce((sum, v) => sum + amountCents(v.purchasePrice), 0)
   );
 
   return c.json({
@@ -249,7 +330,16 @@ financesRouter.get("/", async (c) => {
       totalExportCosts,
       totalAdditionalCosts,
       vehiclesSold: vehiclesSoldCount,
+      accountedSales: accountedSaleRows.length,
+      ambiguousSales: saleRows.filter((sale) => sale.accountingStatus === "legacy_ambiguous").length,
+      legacySnapshotSales: saleRows.filter((sale) => sale.accountingStatus === "legacy_snapshot").length,
+      hasAccountingWarnings: saleRows.some((sale) => sale.accountingStatus !== "verified"),
       totalRevenue,
+      totalGrossRevenue,
+      totalNetRevenue,
+      totalSalesTax,
+      totalDisclosedSalesTax,
+      totalMarginTax,
       totalProfit,
       profitableSales,
       lossSales,

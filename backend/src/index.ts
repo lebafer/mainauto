@@ -1,7 +1,8 @@
 import { Hono } from "hono";
+import type { DealerDomain } from "@prisma/client";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
-import { serveStatic } from "hono/bun";
+import { bodyLimit } from "hono/body-limit";
+import { randomUUID } from "crypto";
 import { auth } from "./auth";
 import { env } from "./env";
 import { prisma } from "./prisma";
@@ -30,6 +31,8 @@ import { settingsRouter } from "./routes/settings";
 import { adminRouter } from "./routes/admin";
 import { publicRouter } from "./routes/public";
 import { billingRouter } from "./routes/billing";
+import { invoicesRouter } from "./routes/invoices";
+import { uploadsRouter } from "./routes/uploads";
 
 type Variables = {
   user: {
@@ -49,7 +52,7 @@ type Variables = {
         updatedAt: Date;
       })
     | null;
-  resolvedDomain: null;
+  resolvedDomain: DealerDomain | null;
   tenantStatus: "unknown" | "pending_setup" | "active" | "suspended" | "inactive";
   billing: {
     status: "active" | "trialing" | "past_due" | "suspended" | "canceled" | "none";
@@ -100,6 +103,18 @@ const allowedOrigins = parseAllowedOrigins(env.CORS_ALLOWED_ORIGINS);
 
 app.use(
   "*",
+  bodyLimit({
+    maxSize: 100 * 1024 * 1024,
+    onError: (c) =>
+      c.json(
+        { error: { code: "PAYLOAD_TOO_LARGE", message: "Anfrage ist zu groß" } },
+        413
+      ),
+  })
+);
+
+app.use(
+  "*",
   cors({
     origin: (origin) => {
       if (!origin) {
@@ -120,7 +135,47 @@ app.use(
   })
 );
 
-app.use("*", logger());
+app.use("*", async (c, next) => {
+  const requestId = c.req.header("x-request-id")?.slice(0, 100) || randomUUID();
+  const startedAt = performance.now();
+  c.header("X-Request-Id", requestId);
+  try {
+    await next();
+  } finally {
+    console.info(
+      JSON.stringify({
+        event: "http_request",
+        requestId,
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: Math.round(performance.now() - startedAt),
+      })
+    );
+  }
+});
+
+app.use("*", async (c, next) => {
+  const contentLength = Number(c.req.header("content-length") ?? "0");
+  if (Number.isFinite(contentLength) && contentLength > 100 * 1024 * 1024) {
+    return c.json(
+      { error: { code: "PAYLOAD_TOO_LARGE", message: "Anfrage ist zu groß" } },
+      413
+    );
+  }
+  const contentType = c.req.header("content-type")?.toLowerCase() ?? "";
+  if (
+    Number.isFinite(contentLength) &&
+    contentType.includes("application/json") &&
+    contentLength > 2 * 1024 * 1024
+  ) {
+    return c.json(
+      { error: { code: "PAYLOAD_TOO_LARGE", message: "JSON-Anfrage ist zu groß" } },
+      413
+    );
+  }
+  return next();
+});
 
 app.use("*", async (c, next) => {
   const host = normalizeHost(c.req.header("host"));
@@ -158,7 +213,7 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => {
   return auth.handler(c.req.raw);
 });
 
-app.options("/api/auth/*", (c) => c.text("", 204));
+app.options("/api/auth/*", (c) => c.body(null, 204));
 
 app.use("/api/*", async (c, next) => {
   if (
@@ -170,7 +225,7 @@ app.use("/api/*", async (c, next) => {
   }
 
   if (c.req.method === "OPTIONS") {
-    return c.text("", 204);
+    return c.body(null, 204);
   }
 
   const session = await auth.api.getSession({
@@ -220,9 +275,54 @@ app.use("/api/*", async (c, next) => {
     },
   });
 
-  const resolvedDealer = c.get("resolvedDealer");
   const memberships = (dbUser?.memberships ?? []) as ActiveDealerMembership[];
-  const activeMembership = pickActiveMembership(memberships);
+  const requestHost = c.get("resolvedHost");
+  const backendHost = normalizeHost(new URL(env.BACKEND_URL).hostname);
+  const platformHost = normalizeHost(env.PLATFORM_DOMAIN);
+  const isPlatformRequest =
+    !requestHost ||
+    requestHost === backendHost ||
+    requestHost === "localhost" ||
+    requestHost === "127.0.0.1" ||
+    requestHost === platformHost;
+  const activeDomain = requestHost
+    ? await prisma.dealerDomain.findFirst({
+        where: {
+          host: requestHost,
+          status: "active",
+          verifiedAt: { not: null },
+        },
+      })
+    : null;
+  if (!activeDomain && !isPlatformRequest) {
+    return c.json(
+      {
+        error: {
+          code: "UNKNOWN_TENANT",
+          message: "Keine aktive Mandanten-Domain gefunden",
+        },
+      },
+      404
+    );
+  }
+
+  const activeMembership = activeDomain
+    ? memberships.find((membership) => membership.dealerId === activeDomain.dealerId) ?? null
+    : pickActiveMembership(memberships);
+  if (activeDomain && !activeMembership && dbUser?.platformRole !== "platform_super_admin") {
+    return c.json(
+      {
+        error: {
+          code: "TENANT_MEMBERSHIP_REQUIRED",
+          message: "Kein Zugriff auf diesen Mandanten",
+        },
+      },
+      403
+    );
+  }
+  if (activeDomain) {
+    c.set("resolvedDomain", activeDomain);
+  }
   const entitlements = getMembershipEntitlements(activeMembership);
   const effectiveDealer = activeMembership?.dealer ?? null;
   const billing = getBillingState(getCurrentSubscription(activeMembership?.dealer.subscriptions));
@@ -329,17 +429,11 @@ app.use("/api/*", async (c, next) => {
   return next();
 });
 
-app.use(
-  "/api/uploads/*",
-  serveStatic({
-    root: "./uploads",
-    rewriteRequestPath: (path) => path.replace(/^\/api\/uploads/, ""),
-  })
-);
-
+app.route("/api/uploads", uploadsRouter);
 app.route("/api/vehicles", vehiclesRouter);
 app.route("/api/customers", customersRouter);
 app.route("/api/sales", salesRouter);
+app.route("/api/documents/invoices", invoicesRouter);
 app.route("/api/documents", documentsRouter);
 app.route("/api/brands", brandsRouter);
 app.route("/api/colors", colorsRouter);
