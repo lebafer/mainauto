@@ -3,6 +3,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { useEffect } from "react";
 import { Bold, List } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface RichTextEditorProps {
   value: string;
@@ -59,38 +60,44 @@ export function RichTextEditor({
     >
       {/* Toolbar */}
       <div className="flex items-center gap-1 border-b border-input px-2 py-1">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onMouseDown={(e) => {
             e.preventDefault();
             editor?.chain().focus().toggleBold().run();
           }}
           className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
+            "h-9 w-9 transition-colors",
             "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             isBoldActive && "bg-accent text-accent-foreground"
           )}
-          title="Bold"
+          title="Fett"
+          aria-label="Fettschrift umschalten"
           aria-pressed={isBoldActive}
         >
           <Bold className="h-4 w-4" />
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onMouseDown={(e) => {
             e.preventDefault();
             editor?.chain().focus().toggleBulletList().run();
           }}
           className={cn(
-            "inline-flex h-7 w-7 items-center justify-center rounded transition-colors",
+            "h-9 w-9 transition-colors",
             "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
             isBulletListActive && "bg-accent text-accent-foreground"
           )}
-          title="Bullet list"
+          title="Aufzählung"
+          aria-label="Aufzählung umschalten"
           aria-pressed={isBulletListActive}
         >
           <List className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Editor area */}

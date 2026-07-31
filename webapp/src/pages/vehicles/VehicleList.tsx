@@ -12,6 +12,7 @@ import {
   calculateGrossPrice,
   STATUS_CONFIG,
   getFileUrl,
+  toDateInputValue,
 } from "@/lib/vehicles";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -140,8 +141,17 @@ export default function VehicleList() {
                 return (
                   <TableRow
                     key={vehicle.id}
-                    className="cursor-pointer"
+                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => navigate(`/vehicles/${vehicle.id}`)}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`${vehicle.brand} ${vehicle.model} öffnen`}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/vehicles/${vehicle.id}`);
+                      }
+                    }}
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
@@ -175,8 +185,8 @@ export default function VehicleList() {
                           </p>
                           <p className="text-xs text-muted-foreground sm:hidden">
                             {vehicle.firstRegistration
-                              ? new Date(vehicle.firstRegistration).getFullYear()
-                              : vehicle.year ?? "--"} &middot;{" "}
+                              ? toDateInputValue(vehicle.firstRegistration).slice(0, 4)
+                              : vehicle.year ?? "Baujahr unbekannt"} &middot;{" "}
                             {formatMileage(vehicle.mileage)}
                           </p>
                         </div>
@@ -184,8 +194,8 @@ export default function VehicleList() {
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {vehicle.firstRegistration
-                        ? new Date(vehicle.firstRegistration).getFullYear()
-                        : vehicle.year ?? "--"}
+                        ? toDateInputValue(vehicle.firstRegistration).slice(0, 4)
+                        : vehicle.year ?? "Unbekannt"}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {formatMileage(vehicle.mileage)}

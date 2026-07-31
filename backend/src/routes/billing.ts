@@ -3,47 +3,35 @@ import { zValidator } from "@hono/zod-validator";
 import type Stripe from "stripe";
 import { prisma } from "../prisma";
 import { getCurrentDealer, getCurrentMembership, getCurrentUser, requireDealerRole } from "../lib/request-context";
-import { addTrialDays, getCurrentSubscription } from "../lib/billing";
+import { getResolvedDomain } from "../lib/request-context";
+import { getCurrentSubscription } from "../lib/billing";
+import { buildBillingReturnUrl } from "../lib/billingUrls";
 import { getStripeClient, isStripeEnabled } from "../lib/stripe";
 import {
   BillingCheckoutCreateSchema,
   BillingPortalCreateSchema,
   StripeCheckoutMetadataSchema,
 } from "../types";
+import { env } from "../env";
 
 const billingRouter = new Hono();
 
 function getAppOrigin(c: { req: { header: (name: string) => string | undefined } }) {
-  const explicitOrigin = c.req.header("origin")?.trim();
-  if (explicitOrigin) {
-    return explicitOrigin.replace(/\/$/, "");
+  const resolvedDomain = getResolvedDomain(c as never);
+  if (resolvedDomain?.host) {
+    return `https://${resolvedDomain.host}`;
   }
 
-  const referer = c.req.header("referer")?.trim();
-  if (referer) {
-    try {
-      return new URL(referer).origin;
-    } catch {
-      // ignore
-    }
+  const configuredOrigins = (env.CORS_ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value !== "" && !value.includes("*"));
+  const explicitOrigin = c.req.header("origin")?.trim().replace(/\/$/, "");
+  if (explicitOrigin && configuredOrigins.includes(explicitOrigin)) {
+    return explicitOrigin;
   }
 
-  const host =
-    c.req.header("x-forwarded-host")?.split(",")[0]?.trim() ||
-    c.req.header("host")?.trim();
-  const proto =
-    c.req.header("x-forwarded-proto")?.split(",")[0]?.trim() ||
-    "https";
-
-  return host ? `${proto}://${host}` : "";
-}
-
-function buildReturnUrl(origin: string, returnPath: string | undefined, fallbackPath: string) {
-  if (returnPath?.startsWith("/")) {
-    return `${origin}${returnPath}`;
-  }
-
-  return `${origin}${fallbackPath}`;
+  return new URL(env.PUBLIC_APP_URL ?? env.BACKEND_URL).origin;
 }
 
 function mapStripeStatus(status: Stripe.Subscription.Status) {
@@ -90,7 +78,7 @@ async function syncStripeSubscription(subscription: Stripe.Subscription) {
   }
 
   const existing =
-    (metadata.success
+    (metadata.success && metadata.data.dealerSubscriptionId
       ? await prisma.dealerSubscription.findUnique({
           where: { id: metadata.data.dealerSubscriptionId },
         })
@@ -219,32 +207,13 @@ billingRouter.post(
     }
 
     const currentSubscription = getCurrentSubscription(membership?.dealer.subscriptions);
-    const pendingSubscription = await prisma.dealerSubscription.upsert({
-      where: {
-        dealerId_planId: {
-          dealerId: dealer.id,
-          planId: selectedPlan.id,
-        },
-      },
-      update: {
-        status: currentSubscription?.status === "active" ? "active" : "trialing",
-        trialEndsAt: currentSubscription?.trialEndsAt ?? addTrialDays(new Date()),
-        stripePriceId: selectedPlan.stripePriceMonthlyId,
-      },
-      create: {
-        dealerId: dealer.id,
-        planId: selectedPlan.id,
-        status: "trialing",
-        trialEndsAt: currentSubscription?.trialEndsAt ?? addTrialDays(new Date()),
-        stripePriceId: selectedPlan.stripePriceMonthlyId,
-      },
-    });
-
-  const stripe = getStripeClient();
-  const stripeCustomerId = pendingSubscription.stripeCustomerId ?? currentSubscription?.stripeCustomerId ?? null;
-  const dealerSettings = (dealer.settings as { legalName?: string | null } | null | undefined) ?? null;
-  const customerId =
-    stripeCustomerId ??
+    // Do not create or mutate a local subscription before Stripe confirms it.
+    // Otherwise an abandoned upgrade checkout could grant the selected plan.
+    const stripe = getStripeClient();
+    const stripeCustomerId = currentSubscription?.stripeCustomerId ?? null;
+    const dealerSettings = (dealer.settings as { legalName?: string | null } | null | undefined) ?? null;
+    const customerId =
+      stripeCustomerId ??
       (
         await stripe.customers.create({
           name: dealerSettings?.legalName ?? dealer.name,
@@ -258,15 +227,24 @@ billingRouter.post(
     const metadata = {
       dealerId: dealer.id,
       planSlug: selectedPlan.slug,
-      dealerSubscriptionId: pendingSubscription.id,
     };
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       customer: customerId,
       client_reference_id: dealer.id,
-      success_url: buildReturnUrl(origin, data.returnPath, "/billing?checkout=success"),
-      cancel_url: buildReturnUrl(origin, data.returnPath, "/billing?checkout=cancelled"),
+      success_url: buildBillingReturnUrl(
+        origin,
+        data.returnPath,
+        "/billing",
+        "success"
+      ),
+      cancel_url: buildBillingReturnUrl(
+        origin,
+        data.returnPath,
+        "/billing",
+        "cancelled"
+      ),
       line_items: [
         {
           price: selectedPlan.stripePriceMonthlyId,
@@ -276,20 +254,11 @@ billingRouter.post(
       metadata,
       subscription_data: {
         metadata,
-        ...(pendingSubscription.trialEndsAt && pendingSubscription.trialEndsAt.getTime() > Date.now()
+        ...(currentSubscription?.trialEndsAt && currentSubscription.trialEndsAt.getTime() > Date.now()
           ? {
-              trial_end: Math.floor(pendingSubscription.trialEndsAt.getTime() / 1000),
+              trial_end: Math.floor(currentSubscription.trialEndsAt.getTime() / 1000),
             }
           : {}),
-      },
-    });
-
-    await prisma.dealerSubscription.update({
-      where: { id: pendingSubscription.id },
-      data: {
-        stripeCustomerId: customerId,
-        stripeCheckoutSessionId: session.id,
-        stripePriceId: selectedPlan.stripePriceMonthlyId,
       },
     });
 
@@ -330,7 +299,7 @@ billingRouter.post(
     const origin = getAppOrigin(c);
     const session = await stripe.billingPortal.sessions.create({
       customer: stripeCustomerId,
-      return_url: buildReturnUrl(origin, data.returnPath, "/billing"),
+      return_url: buildBillingReturnUrl(origin, data.returnPath, "/billing"),
     });
 
     return c.json({ data: { url: session.url } });
@@ -369,7 +338,7 @@ billingRouter.post("/webhook", async (c) => {
       const session = event.data.object as Stripe.Checkout.Session;
       const metadata = StripeCheckoutMetadataSchema.safeParse(session.metadata);
 
-      if (metadata.success) {
+      if (metadata.success && metadata.data.dealerSubscriptionId) {
         await prisma.dealerSubscription.update({
           where: { id: metadata.data.dealerSubscriptionId },
           data: {

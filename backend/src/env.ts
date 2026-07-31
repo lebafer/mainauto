@@ -15,12 +15,14 @@ const envSchema = z.object({
   // Auth
   BETTER_AUTH_SECRET: z.string().min(1),
   BACKEND_URL: z.string().url(),
+  PUBLIC_APP_URL: z.string().url().optional(),
   COOKIE_DOMAIN: z.string().optional(),
   PLATFORM_DOMAIN: z
     .string()
     .optional()
-    .default("tenant.local")
+    .default("carops.de")
     .transform((value) => value.trim().replace(/^\.+/, "").toLowerCase()),
+  PLATFORM_SUPPORT_EMAIL: z.string().email().optional().default("support@carops.de"),
   AUTH_DISABLE_CSRF_CHECK: z
     .string()
     .optional()

@@ -212,8 +212,10 @@ export function WorkLogTab({ vehicleId, workLog }: WorkLogTabProps) {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <button
+                          type="button"
+                          aria-label={`Status von ${item.description} ändern`}
                           className={cn(
-                            "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-opacity hover:opacity-80",
+                            "inline-flex min-h-9 items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-opacity hover:opacity-80",
                             statusCfg.className
                           )}
                           disabled={updateMutation.isPending}

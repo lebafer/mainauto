@@ -24,7 +24,22 @@ import { existsSync } from "fs";
 import { tmpdir } from "os";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements, requireEntitlement } from "../lib/request-context";
+import {
+  getCurrentDealer,
+  getCurrentDealerId,
+  getCurrentEntitlements,
+  requireDealerRole,
+  requireEntitlement,
+} from "../lib/request-context";
+import { fromCents, toCents } from "../lib/money";
+import { consumeRateLimit, rateLimitResponse } from "../lib/security";
+import {
+  UploadValidationError,
+  isRetentionDocumentType,
+  parseStoredDocumentType,
+  validateUpload,
+} from "../lib/uploads";
+import { writeAuditLog } from "../lib/audit";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -48,6 +63,14 @@ const BRIEF_ALLOWED_MIME_TYPES = new Set([
 const execFileAsync = promisify(execFile);
 const vehicleImageOrderBy = [{ isPrimary: "desc" as const }, { createdAt: "asc" as const }];
 
+function roundMoney(value: number | null | undefined): number | null | undefined {
+  return value == null ? value : fromCents(toCents(value));
+}
+
+function roundRequiredMoney(value: number): number {
+  return fromCents(toCents(value));
+}
+
 function isVehicleNumberConflict(error: unknown): boolean {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
     return false;
@@ -60,6 +83,25 @@ function isVehicleNumberConflict(error: unknown): boolean {
     return target.includes("vehicleNumber");
   }
   return typeof target === "string" && target.includes("vehicleNumber");
+}
+
+function isSerializableConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
+}
+
+class VehicleSaleInvariantError extends Error {
+  constructor(
+    public readonly code:
+      | "VEHICLE_SALE_STATUS_LOCKED"
+      | "VEHICLE_SALE_CUSTOMER_LOCKED"
+      | "VEHICLE_SALE_PRIVATE_LOCKED",
+    message: string
+  ) {
+    super(message);
+  }
 }
 
 function normalizeString(value: unknown): string | undefined {
@@ -719,6 +761,12 @@ vehiclesRouter.post("/extract-brief", async (c) => {
   if (forbidden) {
     return forbidden;
   }
+  const dealerId = getCurrentDealerId(c);
+  const rate = consumeRateLimit(`ai:${dealerId}`, {
+    limit: 30,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!rate.allowed) return rateLimitResponse(c, rate.retryAfterSeconds);
 
   if (!env.OPENAI_API_KEY) {
     return c.json(
@@ -728,6 +776,17 @@ vehiclesRouter.post("/extract-brief", async (c) => {
   }
 
   const formData = await c.req.formData();
+  if (formData.get("confirmExternalProcessing") !== "true") {
+    return c.json(
+      {
+        error: {
+          message: "Die externe Verarbeitung muss ausdrücklich bestätigt werden",
+          code: "EXTERNAL_PROCESSING_CONSENT_REQUIRED",
+        },
+      },
+      400
+    );
+  }
   const uploaded = [...formData.getAll("files"), ...formData.getAll("files[]")];
   const files = uploaded.filter((item): item is File => item instanceof File);
 
@@ -820,7 +879,10 @@ vehiclesRouter.get("/", async (c) => {
       customer: true,
       supplierRel: true,
       _count: {
-        select: { sales: true, documents: true },
+        select: {
+          sales: true,
+          documents: { where: { softDeletedAt: null } },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -848,7 +910,10 @@ vehiclesRouter.get("/:id", async (c) => {
     where: { id, dealerId },
     include: {
       images: { orderBy: vehicleImageOrderBy },
-      documents: { orderBy: { createdAt: "desc" } },
+      documents: {
+        where: { softDeletedAt: null },
+        orderBy: { createdAt: "desc" },
+      },
       customer: true,
       supplierRel: true,
       sales: {
@@ -1000,12 +1065,13 @@ vehiclesRouter.post(
     }
 
     // Convert power (number) to string for Prisma, strip empty strings
-    const firstReg = data.firstRegistration ? new Date(data.firstRegistration) : null;
     const isPrivateVehicle = privateVehiclesEnabled && data.isPrivate === true;
     const vehicleData = {
       ...data,
       vehicleNumber: data.vehicleNumber.trim(),
-      year: data.year ?? (firstReg ? firstReg.getFullYear() : new Date().getFullYear()),
+      // Baujahr and Erstzulassung are distinct facts. Never invent a build year
+      // from the registration date or the current year.
+      year: data.year ?? null,
       power: data.power !== undefined ? String(data.power) : undefined,
       vin: data.vin || null,
       hsn: data.hsn || null,
@@ -1014,7 +1080,8 @@ vehiclesRouter.post(
       color: data.color || null,
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
-      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
+      purchasePrice: roundRequiredMoney(data.purchasePrice),
+      sellingPrice: isPrivateVehicle ? 0 : roundRequiredMoney(data.sellingPrice),
       taxRate: isPrivateVehicle ? 19 : data.taxRate,
       marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
       isPrivate: data.isPrivate,
@@ -1029,15 +1096,15 @@ vehiclesRouter.post(
       co2Emission: data.co2Emission ?? null,
       displacement: data.displacement ?? null,
       powerKw: data.powerKw ?? null,
-      damageAmount: data.damageAmount ?? null,
+      damageAmount: roundMoney(data.damageAmount) ?? null,
       batteryCapacity: data.batteryCapacity ?? null,
       electricRange: data.electricRange ?? null,
       batterySoh: data.batterySoh ?? null,
-      transportCostDomestic: isPrivateVehicle ? null : data.transportCostDomestic ?? null,
-      transportCostAbroad: isPrivateVehicle ? null : data.transportCostAbroad ?? null,
-      customsDuties: isPrivateVehicle ? null : data.customsDuties ?? null,
-      registrationFees: isPrivateVehicle ? null : data.registrationFees ?? null,
-      repairCostsAbroad: isPrivateVehicle ? null : data.repairCostsAbroad ?? null,
+      transportCostDomestic: isPrivateVehicle ? null : roundMoney(data.transportCostDomestic) ?? null,
+      transportCostAbroad: isPrivateVehicle ? null : roundMoney(data.transportCostAbroad) ?? null,
+      customsDuties: isPrivateVehicle ? null : roundMoney(data.customsDuties) ?? null,
+      registrationFees: isPrivateVehicle ? null : roundMoney(data.registrationFees) ?? null,
+      repairCostsAbroad: isPrivateVehicle ? null : roundMoney(data.repairCostsAbroad) ?? null,
       // Additional fields
       firstRegistration: data.firstRegistration ? new Date(data.firstRegistration) : null,
       supplier: data.supplier || null,
@@ -1057,7 +1124,7 @@ vehiclesRouter.post(
       driveType: data.driveType || null,
       emissionClass: data.emissionClass || null,
       exportEnabled: isPrivateVehicle ? false : data.exportEnabled,
-      dealerPrice: isPrivateVehicle ? null : data.dealerPrice ?? null,
+      dealerPrice: isPrivateVehicle ? null : roundMoney(data.dealerPrice) ?? null,
     };
 
     try {
@@ -1099,7 +1166,6 @@ vehiclesRouter.put(
     if (!existing) {
       return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
     }
-
     if (data.customerId) {
       const customer = await prisma.customer.findFirst({
         where: { id: data.customerId, dealerId },
@@ -1131,7 +1197,12 @@ vehiclesRouter.put(
       color: data.color !== undefined ? (data.color || null) : undefined,
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
-      sellingPrice: isPrivateVehicle ? 0 : data.sellingPrice,
+      purchasePrice: data.purchasePrice !== undefined ? roundMoney(data.purchasePrice) : undefined,
+      sellingPrice: isPrivateVehicle
+        ? 0
+        : data.sellingPrice !== undefined
+          ? roundMoney(data.sellingPrice)
+          : undefined,
       taxRate: isPrivateVehicle ? 19 : data.taxRate,
       marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
       isPrivate: data.isPrivate,
@@ -1145,6 +1216,7 @@ vehiclesRouter.put(
           : undefined,
       // New nullable string fields
       damageDescription: data.damageDescription !== undefined ? (data.damageDescription || null) : undefined,
+      damageAmount: data.damageAmount !== undefined ? roundMoney(data.damageAmount) : undefined,
       batteryType: data.batteryType !== undefined ? (data.batteryType || null) : undefined,
       // Additional new fields
       firstRegistration: data.firstRegistration !== undefined ? (data.firstRegistration ? new Date(data.firstRegistration) : null) : undefined,
@@ -1168,72 +1240,200 @@ vehiclesRouter.put(
       transportCostDomestic: isPrivateVehicle
         ? null
         : data.transportCostDomestic !== undefined
-          ? (data.transportCostDomestic ?? null)
+          ? (roundMoney(data.transportCostDomestic) ?? null)
           : undefined,
       transportCostAbroad: isPrivateVehicle
         ? null
         : data.transportCostAbroad !== undefined
-          ? (data.transportCostAbroad ?? null)
+          ? (roundMoney(data.transportCostAbroad) ?? null)
           : undefined,
       customsDuties: isPrivateVehicle
         ? null
         : data.customsDuties !== undefined
-          ? (data.customsDuties ?? null)
+          ? (roundMoney(data.customsDuties) ?? null)
           : undefined,
       registrationFees: isPrivateVehicle
         ? null
         : data.registrationFees !== undefined
-          ? (data.registrationFees ?? null)
+          ? (roundMoney(data.registrationFees) ?? null)
           : undefined,
       repairCostsAbroad: isPrivateVehicle
         ? null
         : data.repairCostsAbroad !== undefined
-          ? (data.repairCostsAbroad ?? null)
+          ? (roundMoney(data.repairCostsAbroad) ?? null)
           : undefined,
-      dealerPrice: isPrivateVehicle ? null : data.dealerPrice !== undefined ? (data.dealerPrice ?? null) : undefined,
+      dealerPrice: isPrivateVehicle
+        ? null
+        : data.dealerPrice !== undefined
+          ? (roundMoney(data.dealerPrice) ?? null)
+          : undefined,
     };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const vehicle = await prisma.$transaction(
+          async (tx) => {
+            const saleAtCommit = await tx.sale.findFirst({
+              where: { dealerId, vehicleId: id, status: "completed" },
+              select: { customerId: true },
+            });
+            const transactionUpdateData = { ...updateData };
+            if (saleAtCommit) {
+              if (data.status !== undefined && data.status !== "sold") {
+                throw new VehicleSaleInvariantError(
+                  "VEHICLE_SALE_STATUS_LOCKED",
+                  "Ein verkauftes Fahrzeug muss den Status „verkauft“ behalten"
+                );
+              }
+              if (
+                data.customerId !== undefined &&
+                (data.customerId || null) !== saleAtCommit.customerId
+              ) {
+                throw new VehicleSaleInvariantError(
+                  "VEHICLE_SALE_CUSTOMER_LOCKED",
+                  "Der Käufer eines abgeschlossenen Verkaufs kann hier nicht geändert werden"
+                );
+              }
+              if (data.isPrivate === true) {
+                throw new VehicleSaleInvariantError(
+                  "VEHICLE_SALE_PRIVATE_LOCKED",
+                  "Ein verkauftes Händlerfahrzeug kann nicht privat markiert werden"
+                );
+              }
+              transactionUpdateData.status = "sold";
+              transactionUpdateData.customerId = saleAtCommit.customerId;
+              transactionUpdateData.isPrivate = false;
+            }
 
-    try {
-      const vehicle = await prisma.vehicle.update({
-        where: { id },
-        data: updateData,
-        include: {
-          images: true,
-          documents: true,
-          customer: true,
-          supplierRel: true,
-          workLog: { orderBy: { createdAt: "asc" } },
-        },
-      });
-
-      return c.json({ data: vehicle });
-    } catch (error) {
-      if (isVehicleNumberConflict(error)) {
-        return c.json(
-          { error: { message: "Fahrzeugnummer existiert bereits", code: "VEHICLE_NUMBER_CONFLICT" } },
-          409
+            return tx.vehicle.update({
+              where: { id },
+              data: transactionUpdateData,
+              include: {
+                images: true,
+                documents: { where: { softDeletedAt: null } },
+                customer: true,
+                supplierRel: true,
+                workLog: { orderBy: { createdAt: "asc" } },
+              },
+            });
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
         );
+        return c.json({ data: vehicle });
+      } catch (error) {
+        if (error instanceof VehicleSaleInvariantError) {
+          return c.json(
+            { error: { message: error.message, code: error.code } },
+            409
+          );
+        }
+        if (isVehicleNumberConflict(error)) {
+          return c.json(
+            { error: { message: "Fahrzeugnummer existiert bereits", code: "VEHICLE_NUMBER_CONFLICT" } },
+            409
+          );
+        }
+        if (isSerializableConflict(error) && attempt < 2) {
+          continue;
+        }
+        if (isSerializableConflict(error)) {
+          return c.json(
+            {
+              error: {
+                message: "Fahrzeug wurde parallel geändert. Bitte erneut versuchen.",
+                code: "VEHICLE_UPDATE_CONFLICT",
+              },
+            },
+            409
+          );
+        }
+        throw error;
       }
-      throw error;
     }
+    throw new Error("Vehicle update retry loop completed unexpectedly");
   }
 );
 
 // DELETE /api/vehicles/:id - delete vehicle
 vehiclesRouter.delete("/:id", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const id = c.req.param("id");
   const dealerId = getCurrentDealerId(c);
 
   const existing = await prisma.vehicle.findFirst({
     where: { id, dealerId },
-    include: { images: true, documents: true },
+    include: {
+      images: true,
+      documents: true,
+      _count: { select: { sales: true } },
+    },
   });
 
   if (!existing) {
     return c.json({ error: { message: "Vehicle not found", code: "NOT_FOUND" } }, 404);
   }
+  if (existing._count.sales > 0) {
+    return c.json(
+      {
+        error: {
+          message: "Fahrzeuge mit Verkaufshistorie können nicht gelöscht werden",
+          code: "VEHICLE_HAS_SALES",
+        },
+      },
+      409
+    );
+  }
+  if (existing.documents.some((document) => document.retentionLocked)) {
+    await writeAuditLog(c, {
+      action: "vehicle.deletion_blocked_retention",
+      entityType: "Vehicle",
+      entityId: id,
+    });
+    return c.json(
+      {
+        error: {
+          message:
+            "Fahrzeuge mit aufbewahrungspflichtigen Dokumenten können nicht gelöscht werden",
+          code: "VEHICLE_HAS_RETAINED_DOCUMENTS",
+        },
+      },
+      409
+    );
+  }
 
-  // Delete associated files from disk
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.vehicle.delete({ where: { id } });
+      await writeAuditLog(
+        c,
+        {
+          action: "vehicle.deleted",
+          entityType: "Vehicle",
+          entityId: id,
+        },
+        tx
+      );
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return c.json(
+        {
+          error: {
+            message: "Fahrzeuge mit Verkaufshistorie können nicht gelöscht werden",
+            code: "VEHICLE_HAS_SALES",
+          },
+        },
+        409
+      );
+    }
+    throw error;
+  }
+
+  // Remove physical files only after the database deletion has committed.
   for (const image of existing.images) {
     const filePath = join(UPLOADS_DIR, image.fileName);
     try {
@@ -1250,8 +1450,6 @@ vehiclesRouter.delete("/:id", async (c) => {
       // File may already be deleted
     }
   }
-
-  await prisma.vehicle.delete({ where: { id } });
 
   return c.body(null, 204);
 });
@@ -1277,31 +1475,49 @@ vehiclesRouter.post("/:id/images", async (c) => {
   const existingImagesCount = await prisma.vehicleImage.count({ where: { vehicleId: id, dealerId } });
   const isPrimary = requestedPrimary || existingImagesCount === 0;
 
-  const ext = file.name.split(".").pop() || "jpg";
-  const fileName = `${randomUUID()}.${ext}`;
+  let validated;
+  try {
+    validated = await validateUpload(file, {
+      kind: "image",
+      maxBytes: 10 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: { message: error.message, code: error.code } }, 400);
+    }
+    throw error;
+  }
+  const fileName = `${randomUUID()}.${validated.extension}`;
   const filePath = join(UPLOADS_DIR, fileName);
 
   const arrayBuffer = await file.arrayBuffer();
   await Bun.write(filePath, arrayBuffer);
   console.info(`[uploads] vehicle_image_saved vehicleId=${id} file=${fileName}`);
 
-  // If this image is set as primary, unset others
-  if (isPrimary) {
-    await prisma.vehicleImage.updateMany({
-      where: { vehicleId: id, dealerId },
-      data: { isPrimary: false },
-    });
-  }
+  let image;
+  try {
+    image = await prisma.$transaction(async (tx) => {
+      if (isPrimary) {
+        await tx.vehicleImage.updateMany({
+          where: { vehicleId: id, dealerId },
+          data: { isPrimary: false },
+        });
+      }
 
-  const image = await prisma.vehicleImage.create({
-    data: {
-      dealerId,
-      url: `/api/uploads/${fileName}`,
-      fileName,
-      isPrimary,
-      vehicleId: id,
-    },
-  });
+      return tx.vehicleImage.create({
+        data: {
+          dealerId,
+          url: `/api/uploads/${fileName}`,
+          fileName,
+          isPrimary,
+          vehicleId: id,
+        },
+      });
+    });
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined);
+    throw error;
+  }
 
   return c.json({ data: image }, 201);
 });
@@ -1341,20 +1557,21 @@ vehiclesRouter.delete("/:id/images/:imageId", async (c) => {
   const imageId = c.req.param("imageId");
   const dealerId = getCurrentDealerId(c);
 
-  const image = await prisma.vehicleImage.findFirst({ where: { id: imageId, dealerId } });
+  const image = await prisma.vehicleImage.findFirst({
+    where: { id: imageId, vehicleId, dealerId },
+  });
   if (!image) {
     return c.json({ error: { message: "Image not found", code: "NOT_FOUND" } }, 404);
   }
 
-  // Delete file from disk
+  await prisma.vehicleImage.delete({ where: { id: imageId } });
+
   const filePath = join(UPLOADS_DIR, image.fileName);
   try {
     await unlink(filePath);
   } catch {
     // File may already be deleted
   }
-
-  await prisma.vehicleImage.delete({ where: { id: imageId } });
 
   if (image.isPrimary) {
     const fallbackImage = await prisma.vehicleImage.findFirst({
@@ -1385,53 +1602,111 @@ vehiclesRouter.post("/:id/documents", async (c) => {
 
   const formData = await c.req.formData();
   const file = formData.get("file") as File | null;
-  const name = (formData.get("name") as string) || file?.name || "Untitled";
+  const name = String(formData.get("name") || file?.name || "Untitled").slice(0, 240);
+  const documentType = parseStoredDocumentType(formData.get("documentType"));
 
   if (!file) {
     return c.json({ error: { message: "No file provided", code: "BAD_REQUEST" } }, 400);
   }
 
-  const ext = file.name.split(".").pop() || "pdf";
-  const fileName = `${randomUUID()}.${ext}`;
+  let validated;
+  try {
+    validated = await validateUpload(file, {
+      kind: "document",
+      maxBytes: 20 * 1024 * 1024,
+      allowHtml: true,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: { message: error.message, code: error.code } }, 400);
+    }
+    throw error;
+  }
+  const fileName = `${randomUUID()}.${validated.extension}`;
   const filePath = join(UPLOADS_DIR, fileName);
 
   const arrayBuffer = await file.arrayBuffer();
   await Bun.write(filePath, arrayBuffer);
   console.info(`[uploads] vehicle_document_saved vehicleId=${id} file=${fileName}`);
 
-  const doc = await prisma.vehicleDocument.create({
-    data: {
-      dealerId,
-      name,
-      url: `/api/uploads/${fileName}`,
-      fileName,
-      fileType: file.type || null,
-      vehicleId: id,
-    },
-  });
+  let doc;
+  try {
+    doc = await prisma.vehicleDocument.create({
+      data: {
+        dealerId,
+        name,
+        url: `/api/uploads/${fileName}`,
+        fileName,
+        fileType: validated.contentType,
+        documentType,
+        retentionLocked: isRetentionDocumentType(documentType),
+        vehicleId: id,
+      },
+    });
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined);
+    throw error;
+  }
 
   return c.json({ data: doc }, 201);
 });
 
 // DELETE /api/vehicles/:id/documents/:docId - delete document
 vehiclesRouter.delete("/:id/documents/:docId", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const docId = c.req.param("docId");
   const dealerId = getCurrentDealerId(c);
 
-  const doc = await prisma.vehicleDocument.findFirst({ where: { id: docId, dealerId } });
+  const vehicleId = c.req.param("id");
+  const doc = await prisma.vehicleDocument.findFirst({
+    where: { id: docId, vehicleId, dealerId, softDeletedAt: null },
+  });
   if (!doc) {
     return c.json({ error: { message: "Document not found", code: "NOT_FOUND" } }, 404);
   }
 
-  // Delete file from disk
+  if (doc.retentionLocked) {
+    await prisma.$transaction(async (tx) => {
+      await tx.vehicleDocument.update({
+        where: { id: docId },
+        data: { softDeletedAt: new Date() },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "vehicle_document.soft_deleted",
+          entityType: "VehicleDocument",
+          entityId: docId,
+          metadata: { documentType: doc.documentType },
+        },
+        tx
+      );
+    });
+    return c.body(null, 204);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.vehicleDocument.delete({ where: { id: docId } });
+    await writeAuditLog(
+      c,
+      {
+        action: "vehicle_document.deleted",
+        entityType: "VehicleDocument",
+        entityId: docId,
+        metadata: { documentType: doc.documentType },
+      },
+      tx
+    );
+  });
+
   const filePath = join(UPLOADS_DIR, doc.fileName);
   try {
     await unlink(filePath);
   } catch {
     // File may already be deleted
   }
-
-  await prisma.vehicleDocument.delete({ where: { id: docId } });
 
   return c.body(null, 204);
 });
@@ -1455,7 +1730,7 @@ vehiclesRouter.post(
         dealerId,
         vehicleId: id,
         costType: data.costType,
-        amount: data.amount,
+        amount: fromCents(toCents(data.amount)),
         notes: data.notes || null,
       },
     });
@@ -1469,7 +1744,10 @@ vehiclesRouter.delete("/:id/costs/:costId", async (c) => {
   const costId = c.req.param("costId");
   const dealerId = getCurrentDealerId(c);
 
-  const cost = await prisma.vehicleCost.findFirst({ where: { id: costId, dealerId } });
+  const vehicleId = c.req.param("id");
+  const cost = await prisma.vehicleCost.findFirst({
+    where: { id: costId, vehicleId, dealerId },
+  });
   if (!cost) {
     return c.json({ error: { message: "Cost not found", code: "NOT_FOUND" } }, 404);
   }
@@ -1517,7 +1795,10 @@ vehiclesRouter.put(
     const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
 
-    const existing = await prisma.workLogItem.findFirst({ where: { id: itemId, dealerId } });
+    const vehicleId = c.req.param("id");
+    const existing = await prisma.workLogItem.findFirst({
+      where: { id: itemId, vehicleId, dealerId },
+    });
     if (!existing) {
       return c.json({ error: { message: "WorkLog item not found", code: "NOT_FOUND" } }, 404);
     }
@@ -1540,7 +1821,10 @@ vehiclesRouter.delete("/:id/worklog/:itemId", async (c) => {
   const itemId = c.req.param("itemId");
   const dealerId = getCurrentDealerId(c);
 
-  const existing = await prisma.workLogItem.findFirst({ where: { id: itemId, dealerId } });
+  const vehicleId = c.req.param("id");
+  const existing = await prisma.workLogItem.findFirst({
+    where: { id: itemId, vehicleId, dealerId },
+  });
   if (!existing) {
     return c.json({ error: { message: "WorkLog item not found", code: "NOT_FOUND" } }, 404);
   }

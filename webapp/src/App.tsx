@@ -85,7 +85,7 @@ const App = () => (
               <Route
                 path="/billing"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["dealer_owner", "dealer_admin"]}>
                     <AppLayout>
                       <Billing />
                     </AppLayout>
@@ -246,7 +246,7 @@ const App = () => (
               <Route
                 path="/finances"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["dealer_owner", "dealer_admin"]}>
                     <AppLayout>
                       <Finances />
                     </AppLayout>
@@ -257,7 +257,7 @@ const App = () => (
               <Route
                 path="/settings/dealer"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["dealer_owner", "dealer_admin"]}>
                     <AppLayout>
                       <SettingsDealer />
                     </AppLayout>
@@ -268,7 +268,7 @@ const App = () => (
               <Route
                 path="/settings/team"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowedRoles={["dealer_owner", "dealer_admin"]}>
                     <AppLayout>
                       <SettingsTeam />
                     </AppLayout>

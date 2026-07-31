@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { toDateInputValue } from "@/lib/vehicles";
 
 const COUNTRIES = [
   "Deutschland",
@@ -146,7 +147,7 @@ export default function CustomerEdit() {
         idDocumentType: customer.idDocumentType ?? "",
         idDocumentNumber: customer.idDocumentNumber ?? "",
         idDocumentValidUntil: customer.idDocumentValidUntil
-          ? new Date(customer.idDocumentValidUntil).toISOString().split("T")[0]
+          ? toDateInputValue(customer.idDocumentValidUntil)
           : "",
         notes: customer.notes ?? "",
         customerType: customer.customerType ?? "privat",
@@ -181,7 +182,7 @@ export default function CustomerEdit() {
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-muted-foreground mb-4">Kunde nicht gefunden</p>
         <Button asChild variant="outline">
-          <Link to="/customers">Zuruck zur Ubersicht</Link>
+          <Link to="/customers">Zurück zur Übersicht</Link>
         </Button>
       </div>
     );

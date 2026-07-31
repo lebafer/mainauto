@@ -1,12 +1,46 @@
-# Root-level runtime and secrets
+# Secrets and machine-local configuration
 .env
-.env.production
-.env.local
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+!**/.env.*.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.agekey
+*.pgpass
+credentials/
+secrets/
 
-# Local deployment artifacts
-backups/
-backups-staging/
+# Runtime data must never enter version control
+backend/prisma/dev.db
+backend/prisma/dev.db-*
+backend/prisma/dev.db-shm
+backend/prisma/dev.db-wal
+backend/uploads/
+uploads/
 data/
 data-staging/
-deploy/.env.compose
-.env.staging
+backups/
+backups-staging/
+*.dump
+*.sql.gz
+*.tar.gz.age
+*.dump.age
+*.gpg
+
+# Generated output and local tooling
+node_modules/
+**/node_modules/
+.pnpm-store/
+coverage/
+dist/
+**/dist/
+*.tsbuildinfo
+*.log
+.DS_Store

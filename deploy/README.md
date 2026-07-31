@@ -1,117 +1,241 @@
-# MainAuto Production Deployment
+# CarOps – sicherer Produktionsbetrieb
 
-## 1) Prepare server
-1. Copy this project to your server.
-2. Copy `deploy/.env.compose.example` to `.env` in project root and set real secrets.
-3. (Optional but recommended) Copy `deploy/.env.staging.example` to `.env.staging` for a separate staging stack.
-4. Replace placeholder values (`POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `INITIAL_ADMIN_PASSWORD`) before first start.
-5. Keep `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` for reliable PDF generation in Docker.
-6. Make sure Cloudflare + Nginx Proxy Manager route `mainauto.rabauke.uk` to host port `8080`.
+Diese Anleitung beschreibt den Compose-Betrieb für `https://carops.de`. Änderungen
+zuerst in Staging prüfen. Die Anwendung wird hinter einem TLS-Reverse-Proxy
+betrieben; PostgreSQL und Backend veröffentlichen keine Host-Ports.
 
-## 2) First start
-Create persistent host folders first:
+## 1. Server und SSH vorbereiten
+
+- Einen dedizierten, nicht als `root` arbeitenden Deploy-Benutzer verwenden.
+- Root-Login und Passwort-Login in SSH deaktivieren, Schlüssel-Login erzwingen und
+  SSH-Zugriff per Firewall auf bekannte Admin-Netze begrenzen.
+- Docker-Zugriff ist praktisch Root-Zugriff. Mitgliedschaft in der `docker`-Gruppe
+  nur dem dedizierten Deploy-Benutzer geben und dessen SSH-Schlüssel besonders
+  schützen.
+- Repository beispielsweise unter `/opt/mainauto` ablegen. Keine Produktionsdaten
+  oder `.env`-Dateien in Git aufnehmen.
+
+Einmalige Verzeichnisvorbereitung mit administrativen Rechten:
+
 ```bash
-mkdir -p data/postgres data/uploads backups
+cd /opt/mainauto
+install -d -m 0700 -o 70 -g 70 data/postgres
+install -d -m 0700 -o 1001 -g 1001 data/uploads
+install -d -m 0700 -o deploy -g deploy backups
+cp deploy/.env.compose.example .env
+chown deploy:deploy .env
+chmod 0600 .env
 ```
 
-Then start containers:
-```bash
-docker compose --env-file .env -p mainauto-prod up -d --build
+`70:70` ist der Benutzer des gepinnten PostgreSQL-Alpine-Images.
+`APP_UID=1001` und `APP_GID=1001` entsprechen dem bestehenden Upload-Verzeichnis.
+Bei einer anderen Host-UID müssen `.env`, Eigentümer und Compose-Werte gemeinsam
+angepasst werden.
+
+## 2. Secrets und Domains konfigurieren
+
+In `.env` mindestens alle `replace-me`-Werte ersetzen. Sichere Zufallswerte können
+beispielsweise mit `openssl rand -base64 48` erzeugt werden.
+
+Wesentliche Produktionswerte:
+
+```dotenv
+WEB_BIND_ADDRESS=0.0.0.0
+WEB_PORT=8080
+APP_UID=1001
+APP_GID=1001
+BACKEND_URL=https://carops.de
+PUBLIC_APP_URL=https://carops.de
+PLATFORM_DOMAIN=carops.de
+PLATFORM_SUPPORT_EMAIL=support@carops.de
+CORS_ALLOWED_ORIGINS=https://carops.de
+AUTH_DISABLE_CSRF_CHECK=false
+BOOTSTRAP_ADMIN=false
 ```
 
-If you want to bootstrap the first admin once:
-1. Set `BOOTSTRAP_ADMIN=true` and `INITIAL_ADMIN_USERNAME` / `INITIAL_ADMIN_PASSWORD` in `.env`.
-2. Start containers.
-3. After first successful login, set `BOOTSTRAP_ADMIN=false` again and restart backend:
-```bash
-docker compose --env-file .env -p mainauto-prod up -d backend
+`POSTGRES_PASSWORD`, `DATABASE_URL` und `BETTER_AUTH_SECRET` haben in Compose
+keine funktionsfähigen Defaultwerte; ein Start ohne diese Werte schlägt fehl.
+`COOKIE_DOMAIN` sollte leer bleiben, solange kein bewusstes
+Cross-Subdomain-Setup benötigt wird.
+
+## 3. Netzwerk und Reverse Proxy
+
+Der bestehende Nginx Proxy Manager erreicht `192.168.178.66:8080`. Deshalb bindet
+Compose kompatibel standardmäßig an `0.0.0.0:8080`. Der Port darf weder am Router
+ins Internet weitergeleitet noch allgemein im Server-Firewallprofil freigegeben
+werden: Erlaubt wird ausschließlich die IP beziehungsweise das Docker-Netz des
+Reverse Proxys.
+
+Wenn der TLS-Proxy direkt auf demselben Host läuft und Loopback erreichen kann,
+ist die strengere Einstellung vorzuziehen:
+
+```dotenv
+WEB_BIND_ADDRESS=127.0.0.1
 ```
 
-## 3) Health checks
+Der TLS-Proxy muss `Host`, `X-Forwarded-For` und `X-Forwarded-Proto` korrekt setzen.
+Nur `carops.de` auf Port 8080 routen. TLS 1.2/1.3 aktivieren, HTTP dauerhaft auf
+HTTPS umleiten und Zertifikatserneuerung überwachen.
+
+`deploy/nginx.conf` vertraut Client-IP-Header ausschließlich dem aktuell
+ermittelten Nginx-Proxy-Manager-Netz `172.19.0.0/16`. Nach einer Änderung am
+Docker-Netz muss `set_real_ip_from` vor dem Rollout angepasst werden. Direkte
+Zugriffe auf Port 8080 müssen zusätzlich per Firewall ausgeschlossen bleiben;
+sonst könnten Angreifer Client-IP-Header fälschen und Rate-Limits umgehen.
+
+## 4. Preflight und Start
+
+Vor jedem Deployment:
+
 ```bash
-curl -sSf http://127.0.0.1:8080/ >/dev/null
-curl -sSf http://127.0.0.1:8080/health
+./deploy/hardening-check.sh .env
+test "$(stat -c '%u:%g' data/uploads)" = "$(awk -F= '/^APP_UID=/{u=$2} /^APP_GID=/{g=$2} END{print u \":\" g}' .env)"
+docker compose --env-file .env -p carops-prod config --quiet
 ```
 
-## 4) Staging environment
-Create isolated staging folders:
+Danach bauen und starten:
+
 ```bash
-mkdir -p data-staging/postgres data-staging/uploads backups-staging
+docker compose --env-file .env -p carops-prod up -d --build
+docker compose --env-file .env -p carops-prod ps
+curl -fsS http://127.0.0.1:8080/health
+curl -fsS https://carops.de/health
 ```
 
-Start staging stack:
+Backend und Web laufen ohne Root-Rechte. Ihre Root-Dateisysteme sind read-only;
+nur Upload-Volume und begrenzte `tmpfs`-Verzeichnisse sind beschreibbar. Sämtliche
+Linux-Capabilities sind entfernt und `no-new-privileges` ist aktiv. Da die
+Anwendung Chromium derzeit weiterhin mit `--no-sandbox` startet, sind diese
+Containergrenzen sicherheitsrelevant und dürfen nicht entfernt werden.
+
+### Einmaliger erster Admin
+
+`BOOTSTRAP_ADMIN=true` sowie ein langes Einmalpasswort nur für den ersten Start
+setzen. Nach erfolgreicher Anmeldung sofort:
+
+1. `BOOTSTRAP_ADMIN=false` setzen.
+2. `INITIAL_ADMIN_PASSWORD` und sonstige Bootstrap-Werte leeren.
+3. Backend mit
+   `docker compose --env-file .env -p carops-prod up -d --force-recreate backend`
+   neu erstellen.
+
+## 5. Staging
+
+Staging verwendet eigene Daten, Secrets, Ports und eine eigene Domain:
+
 ```bash
-docker compose --env-file .env.staging -p mainauto-staging up -d --build
+cp deploy/.env.staging.example .env.staging
+chmod 0600 .env.staging
+install -d -m 0700 data-staging/postgres data-staging/uploads backups-staging
+docker compose --env-file .env.staging -p carops-staging up -d --build
 ```
 
-Typical staging checks:
+Vorher die Eigentümer analog zur Produktion auf PostgreSQL- beziehungsweise
+`APP_UID:APP_GID` setzen. Staging darf niemals Produktionsdaten oder
+Produktions-Secrets verwenden.
+
+## 6. Verschlüsselte Backups
+
+Das Skript schreibt atomar, verwendet `umask 077`, setzt Dateien auf Modus `0600`,
+erstellt SHA-256-Manifeste und entfernt nur abgeschlossene Dateien mit passendem
+Prefix nach Ablauf der Retention.
+
+Empfohlen mit `age`:
+
 ```bash
-curl -sSf http://127.0.0.1:8081/ >/dev/null
-curl -sSf http://127.0.0.1:8081/health
+COMPOSE_ENV_FILE=.env \
+COMPOSE_PROJECT_NAME=carops-prod \
+BACKUP_DIR=/opt/mainauto/backups \
+BACKUP_PREFIX=carops \
+RETENTION_DAYS=14 \
+BACKUP_ENCRYPTION=age \
+AGE_RECIPIENT='age1...' \
+./deploy/backup.sh
 ```
 
-Route `staging-mainauto.rabauke.uk` in Nginx Proxy Manager to host port `8081`.
+Alternativ:
 
-## 5) Deploy workflow (staging -> live)
-1. Deploy feature branch to staging:
-```bash
-git fetch origin
-git checkout <feature-branch>
-docker compose --env-file .env.staging -p mainauto-staging up -d --build
-```
-2. Test in staging.
-3. Merge to `main`.
-4. Deploy `main` to production:
-```bash
-git checkout main
-git pull
-docker compose --env-file .env -p mainauto-prod up -d --build
-```
+- `BACKUP_ENCRYPTION=gpg` und `GPG_RECIPIENT=...`
+- `BACKUP_ENCRYPTION=none` nur auf bereits verschlüsseltem Storage
+- `BACKUP_OFFSITE_HOOK=/absoluter/pfad/upload-backup` für ein ausführbares
+  Offsite-Skript. Es erhält Datenbank, Upload-Archiv und Manifest als Argumente
+  und muss Uploadfehler mit einem Exit-Code ungleich null melden.
 
-## 6) Daily backups (14-day retention)
-Production cron (02:30):
-```bash
-30 2 * * * cd /path/to/mainauto_management_app && COMPOSE_ENV_FILE=.env COMPOSE_PROJECT_NAME=mainauto-prod BACKUP_DIR=./backups BACKUP_PREFIX=mainauto ./deploy/backup.sh >> /var/log/mainauto-backup.log 2>&1
+Ein täglicher systemd-Timer ist Cron vorzuziehen. Das Backup-Log ebenfalls über
+Journald oder `logrotate` begrenzen. Für eine klassische Logdatei:
+
+```text
+/var/log/carops-backup.log {
+  weekly
+  rotate 8
+  compress
+  missingok
+  notifempty
+  create 0600 deploy deploy
+}
 ```
 
-Staging cron (03:00):
+Mindestens eine verschlüsselte, immutable Offsite-Kopie in einem getrennten Konto
+aufbewahren. Zugriff und fehlgeschlagene Backup-Läufe alarmieren.
+
+## 7. Backup prüfen und Restore proben
+
+Nach jedem Backup Checksummen und Archivstruktur prüfen:
+
 ```bash
-0 3 * * * cd /path/to/mainauto_management_app && COMPOSE_ENV_FILE=.env.staging COMPOSE_PROJECT_NAME=mainauto-staging BACKUP_DIR=./backups-staging BACKUP_PREFIX=mainauto_staging ./deploy/backup.sh >> /var/log/mainauto-staging-backup.log 2>&1
+AGE_IDENTITY_FILE=/sicherer/pfad/carops.agekey \
+./deploy/restore-check.sh \
+  backups/carops_db_YYYYMMDDTHHMMSSZ.dump.age \
+  backups/carops_uploads_YYYYMMDDTHHMMSSZ.tar.gz.age \
+  backups/carops_manifest_YYYYMMDDTHHMMSSZ.sha256
 ```
 
-Backups are written to `BACKUP_DIR` (default `./backups`).
+Der Strukturcheck ersetzt keinen echten Restore. Monatlich in einen isolierten,
+nicht öffentlich erreichbaren Staging-Stack zurückspielen und Login,
+Fahrzeugbilder sowie PDF-Erzeugung prüfen.
 
-## 7) Restore
-### Restore database
-```bash
-cat backups/mainauto_db_YYYYMMDD_HHMMSS.sql | docker compose --env-file .env -p mainauto-prod exec -T postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-```
+Für einen geplanten Produktions-Restore:
 
-### Restore uploads
-```bash
-docker compose --env-file .env -p mainauto-prod exec -T backend sh -lc 'rm -rf /app/uploads/*'
-cat backups/mainauto_uploads_YYYYMMDD_HHMMSS.tar.gz | docker compose --env-file .env -p mainauto-prod exec -T backend sh -lc 'tar -xzf - -C /app/uploads'
-```
+1. Wartungsfenster aktivieren und aktuellen Backup-Snapshot erstellen.
+2. Anwendungen stoppen, aber PostgreSQL laufen lassen.
+3. Backup entschlüsseln und Manifest prüfen.
+4. Datenbank mit `pg_restore --clean --if-exists --no-owner --no-privileges`
+   wiederherstellen.
+5. Das Upload-Verzeichnis zuerst in ein datiertes, nur lesbares
+   Rollback-Verzeichnis verschieben und danach das Archiv in ein neues
+   `data/uploads` entpacken.
+6. Eigentümer `APP_UID:APP_GID` und Modus `0700` setzen, Stack starten und
+   fachliche Smoke-Tests durchführen.
 
-## 8) Cutover checklist
-1. Rotate `BETTER_AUTH_SECRET` and DB password before go-live.
-2. Ensure no real credentials are committed in repo `.env` files.
-3. Confirm `BOOTSTRAP_ADMIN=false` after initial admin is created.
-4. Verify login, vehicle CRUD, upload, and document PDF generation.
-5. Run one backup and one restore test before productive usage.
+Die genauen Restore-Kommandos immer zuerst mit denselben Image-Versionen in
+Staging validieren. Ein Restore ist destruktiv und darf nicht ungeprüft gegen die
+Produktionsdatenbank laufen.
 
-## 9) PDF troubleshooting
-If document generation returns HTTP 500:
-```bash
-docker compose --env-file .env -p mainauto-prod logs backend --tail=200 | grep -i documents
-```
-You should see one of these startup hints in logs:
-- `using_browser_executable=...`
-- `using_system_browser=...`
-- `using_sparticuz_browser=...`
+## 8. Rotation und Incident-Betrieb
 
-## 10) Auth troubleshooting (Safari 403)
-If Safari login gets `403` on `/api/auth/sign-in/username` while Chrome works:
-1. Ensure `BACKEND_URL` and `CORS_ALLOWED_ORIGINS` exactly match the public staging domain.
-2. As staging-only fallback, set `AUTH_DISABLE_CSRF_CHECK=true` and recreate backend.
-3. Keep production at `AUTH_DISABLE_CSRF_CHECK=false`.
+- `BETTER_AUTH_SECRET`: Rotation invalidiert Sitzungen; Wartungsfenster und
+  erneute Anmeldung ankündigen.
+- PostgreSQL-Passwort: Datenbankrolle und `DATABASE_URL` koordiniert ändern.
+- OpenAI-/Stripe-Schlüssel: Beim Anbieter rotieren, `.env` aktualisieren,
+  Backend neu erstellen und alte Schlüssel widerrufen.
+- SSH-/Backup-Schlüssel: mindestens jährlich sowie sofort nach Personalwechsel
+  oder Verdacht rotieren.
+- Stripe-Webhook-Secret nach Rotation im Stripe-Dashboard und in `.env`
+  synchronisieren.
+
+Produktionszugriffe, fehlgeschlagene Logins, Admin-Aktionen, Backupstatus,
+Speicherplatz, Container-Restarts und Zertifikatsablauf zentral überwachen.
+Docker-Logs sind auf fünf Dateien à 10 MiB begrenzt.
+
+## 9. Update- und Cutover-Checkliste
+
+1. Verschlüsseltes Backup plus erfolgreichen `restore-check` bestätigen.
+2. Neue Images in Staging mit `--build` bauen.
+3. Login, Kunden, Fahrzeuge, An-/Verkauf, Rechnungen, Verträge, Uploads und PDFs
+   testen.
+4. Dependency- und Container-Scans ausführen; Patchupdates getrennt von
+   Funktionsänderungen deployen.
+5. Produktion aktualisieren und `/health` intern wie extern prüfen.
+6. Logs und Restart-Zähler mindestens 30 Minuten beobachten.
+7. `BOOTSTRAP_ADMIN=false`, `AUTH_DISABLE_CSRF_CHECK=false`, Dateirechte,
+   Firewall und Offsite-Backup erneut bestätigen.

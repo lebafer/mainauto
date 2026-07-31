@@ -177,6 +177,8 @@ export default function SettingsTeam() {
               <Input
                 id={key}
                 type={key === "password" ? "password" : "text"}
+                minLength={key === "password" ? 12 : undefined}
+                autoComplete={key === "password" ? "new-password" : undefined}
                 value={newMember[key as keyof typeof newMember]}
                 onChange={(event) => setNewMember((current) => ({ ...current, [key]: event.target.value }))}
               />
@@ -198,7 +200,17 @@ export default function SettingsTeam() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="w-full md:w-fit">
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={
+              createMutation.isPending ||
+              !newMember.name.trim() ||
+              !newMember.email.trim() ||
+              !newMember.username.trim() ||
+              newMember.password.length < 12
+            }
+            className="w-full md:w-fit"
+          >
             {createMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -312,13 +324,15 @@ export default function SettingsTeam() {
           <DialogHeader>
             <DialogTitle>Teammitglied bearbeiten</DialogTitle>
             <DialogDescription>
-              Stammdaten, Rolle und Zugang dieses Teammitglieds anpassen.
+              {editingMember?.user.id === session?.user.id
+                ? "Eigene Stammdaten sowie Rolle und Status dieser Mitgliedschaft anpassen."
+                : "Rolle und Status dieser Mitgliedschaft anpassen. Globale Zugangsdaten kann nur die betreffende Person selbst ändern."}
             </DialogDescription>
           </DialogHeader>
 
           {editingMember && editForm ? (
             <div className="grid gap-4 py-2 md:grid-cols-2">
-              {[
+              {editingMember.user.id === session?.user.id ? [
                 ["name", "Name"],
                 ["email", "E-Mail"],
                 ["username", "Benutzername"],
@@ -329,6 +343,8 @@ export default function SettingsTeam() {
                   <Input
                     id={`edit-${key}`}
                     type={key === "password" ? "password" : "text"}
+                    minLength={key === "password" ? 12 : undefined}
+                    autoComplete={key === "password" ? "new-password" : undefined}
                     value={editForm[key as keyof TeamMemberEditForm] as string}
                     placeholder={key === "password" ? "Leer lassen, um es nicht zu ändern" : undefined}
                     onChange={(event) =>
@@ -338,7 +354,7 @@ export default function SettingsTeam() {
                     }
                   />
                 </div>
-              ))}
+              )) : null}
 
               <div className="space-y-2">
                 <Label>Rolle</Label>
@@ -391,15 +407,17 @@ export default function SettingsTeam() {
                 if (!editingMember || !editForm) return;
 
                 const payload: Record<string, unknown> = {
-                  name: editForm.name,
-                  email: editForm.email,
-                  username: editForm.username || null,
                   role: editForm.role,
                   isActive: editForm.isActive,
                 };
 
-                if (editForm.password.trim()) {
-                  payload.password = editForm.password;
+                if (editingMember.user.id === session?.user.id) {
+                  payload.name = editForm.name;
+                  payload.email = editForm.email;
+                  payload.username = editForm.username || null;
+                  if (editForm.password.length > 0) {
+                    payload.password = editForm.password;
+                  }
                 }
 
                 updateMutation.mutate({

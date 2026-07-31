@@ -1,12 +1,23 @@
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Upload, FileText, X, Loader2, Download } from "lucide-react";
-import { type VehicleDocument, getFileUrl } from "@/lib/vehicles";
+import { api } from "@/lib/api";
+import { useAuth } from "@/lib/auth-client";
+import { Upload, FileText, X, Loader2, Download, Receipt } from "lucide-react";
+import { Link } from "react-router-dom";
+import type { Invoice } from "../../../../backend/src/types";
+import { type StoredDocumentType, type VehicleDocument, getFileUrl } from "@/lib/vehicles";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -42,7 +53,13 @@ function getDocumentContentLabel(name: string): string {
   return "Dokument";
 }
 
-function getDocumentFileTypeLabel(url: string): string {
+function getDocumentFileTypeLabel(url: string, fileType?: string | null): string {
+  if (fileType === "application/pdf") return "PDF";
+  if (fileType?.startsWith("image/")) return "Bild";
+  if (fileType) {
+    const subtype = fileType.split("/")[1];
+    if (subtype) return subtype.toUpperCase();
+  }
   const extension = url.split(".").pop()?.split("?")[0]?.toLowerCase();
   if (!extension) return "Datei";
   if (extension === "pdf") return "PDF";
@@ -56,32 +73,47 @@ export function VehicleDocumentsTab({
   vehicleId,
   documents,
 }: VehicleDocumentsTabProps) {
+  const { session } = useAuth();
+  const canManageInvoices = ["dealer_owner", "dealer_admin"].includes(
+    session?.dealerRole ?? ""
+  );
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [docName, setDocName] = useState("");
   const [docFile, setDocFile] = useState<File | null>(null);
+  const [documentType, setDocumentType] = useState<StoredDocumentType>("general");
+  const { data: sales = [] } = useQuery({
+    queryKey: ["sales"],
+    queryFn: () => api.get<Array<{ id: string; vehicleId: string }>>("/api/sales"),
+  });
+  const { data: invoices = [] } = useQuery({
+    queryKey: ["invoices"],
+    queryFn: () => api.get<Invoice[]>("/api/documents/invoices"),
+    enabled: canManageInvoices,
+  });
+  const vehicleSaleIds = new Set(
+    sales.filter((sale) => sale.vehicleId === vehicleId).map((sale) => sale.id)
+  );
+  const vehicleInvoices = invoices.filter((invoice) => vehicleSaleIds.has(invoice.saleId));
 
   const uploadMutation = useMutation({
     mutationFn: async ({
       file,
       name,
+      documentType,
     }: {
       file: File;
       name: string;
+      documentType: StoredDocumentType;
     }) => {
-      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", name);
-      const res = await fetch(
-        `${baseUrl}/api/vehicles/${vehicleId}/documents`,
-        {
-          method: "POST",
-          body: formData,
-          credentials: "include",
-        }
-      );
-      if (!res.ok) throw new Error("Upload fehlgeschlagen");
+      formData.append("documentType", documentType);
+      const res = await api.raw(`/api/vehicles/${vehicleId}/documents`, {
+        method: "POST",
+        body: formData,
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -90,6 +122,7 @@ export function VehicleDocumentsTab({
       setDialogOpen(false);
       setDocName("");
       setDocFile(null);
+      setDocumentType("general");
     },
     onError: () => {
       toast.error("Fehler beim Hochladen");
@@ -98,12 +131,9 @@ export function VehicleDocumentsTab({
 
   const deleteMutation = useMutation({
     mutationFn: async (docId: string) => {
-      const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-      const res = await fetch(
-        `${baseUrl}/api/vehicles/${vehicleId}/documents/${docId}`,
-        { method: "DELETE", credentials: "include" }
-      );
-      if (!res.ok) throw new Error("Löschen fehlgeschlagen");
+      await api.raw(`/api/vehicles/${vehicleId}/documents/${docId}`, {
+        method: "DELETE",
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
@@ -116,7 +146,7 @@ export function VehicleDocumentsTab({
 
   function handleUpload() {
     if (!docFile || !docName.trim()) return;
-    uploadMutation.mutate({ file: docFile, name: docName.trim() });
+    uploadMutation.mutate({ file: docFile, name: docName.trim(), documentType });
   }
 
   async function handleDownload(doc: VehicleDocument) {
@@ -148,8 +178,63 @@ export function VehicleDocumentsTab({
     }
   }
 
+  async function handleInvoiceDownload(invoice: Invoice) {
+    try {
+      const response = await api.raw(`/api/documents/invoices/${invoice.id}/pdf`);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `Rechnung_${invoice.invoiceNumber}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      toast.error("Rechnung konnte nicht heruntergeladen werden");
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {canManageInvoices && vehicleSaleIds.size > 0 ? (
+        <section className="space-y-2" aria-labelledby="vehicle-invoices-title">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 id="vehicle-invoices-title" className="text-sm font-semibold">Rechnungen</h3>
+            {vehicleInvoices.length === 0 ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/sales">Rechnung unter Verkäufe erstellen</Link>
+              </Button>
+            ) : null}
+          </div>
+          {vehicleInvoices.map((invoice) => (
+            <div
+              key={invoice.id}
+              className="flex flex-col gap-3 rounded-lg border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <Receipt className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{invoice.invoiceNumber}</p>
+                    <Badge variant={invoice.status === "issued" ? "default" : "secondary"}>
+                      {invoice.status === "issued" ? "Ausgestellt" : "Storniert"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(invoice.issuedAt).toLocaleDateString("de-DE")} · {invoice.grossAmount.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => void handleInvoiceDownload(invoice)}>
+                <Download className="mr-2 h-4 w-4" />
+                PDF
+              </Button>
+            </div>
+          ))}
+        </section>
+      ) : null}
+
       {/* Upload dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
@@ -158,22 +243,47 @@ export function VehicleDocumentsTab({
             Dokument hochladen
           </Button>
         </DialogTrigger>
-        <DialogContent>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Dokument hochladen</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Dokumentname</Label>
+              <Label htmlFor="vehicle-document-name">Dokumentname</Label>
               <Input
+                id="vehicle-document-name"
                 placeholder="z.B. TÜV-Bericht, Kaufvertrag..."
                 value={docName}
                 onChange={(e) => setDocName(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Datei</Label>
+              <Label htmlFor="vehicle-document-type">Dokumentart</Label>
+              <Select
+                value={documentType}
+                onValueChange={(value: StoredDocumentType) => setDocumentType(value)}
+              >
+                <SelectTrigger id="vehicle-document-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">Allgemeines Dokument</SelectItem>
+                  <SelectItem value="contract">Verkaufs-/Vermittlungsvertrag</SelectItem>
+                  <SelectItem value="purchase_contract">Ankaufvertrag</SelectItem>
+                  <SelectItem value="handover_protocol">Übergabeprotokoll</SelectItem>
+                  <SelectItem value="other_legal">Sonstiger rechtlicher Beleg</SelectItem>
+                </SelectContent>
+              </Select>
+              {documentType !== "general" ? (
+                <p className="text-xs text-muted-foreground">
+                  Rechtliche Belege werden gegen versehentliches Löschen geschützt.
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vehicle-document-file">Datei</Label>
               <Input
+                id="vehicle-document-file"
                 type="file"
                 onChange={(e) => setDocFile(e.target.files?.[0] ?? null)}
               />
@@ -205,7 +315,7 @@ export function VehicleDocumentsTab({
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center justify-between rounded-lg border px-4 py-3"
+              className="flex flex-col gap-3 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
@@ -216,22 +326,27 @@ export function VehicleDocumentsTab({
                       {getDocumentContentLabel(doc.name)}
                     </Badge>
                     <Badge variant="secondary" className="text-[11px]">
-                      {getDocumentFileTypeLabel(doc.url)}
+                      {getDocumentFileTypeLabel(doc.url, doc.fileType)}
                     </Badge>
+                    {doc.retentionLocked ? (
+                      <Badge variant="outline" className="border-emerald-500/40 text-[11px] text-emerald-600">
+                        Aufbewahrungspflicht
+                      </Badge>
+                    ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {new Date(doc.createdAt).toLocaleDateString("de-DE")}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
                 <Button
                   variant="ghost"
                   size="sm"
                   asChild
                 >
                   <a href={getFileUrl(doc.url)} target="_blank" rel="noopener noreferrer">
-                    Öffnen
+                    <span className="sr-only sm:not-sr-only">Öffnen</span>
                   </a>
                 </Button>
                 <Button
@@ -240,14 +355,15 @@ export function VehicleDocumentsTab({
                   onClick={() => handleDownload(doc)}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  Download
+                  <span className="sr-only sm:not-sr-only">Download</span>
                 </Button>
-                <AlertDialog>
+                {canManageInvoices && !doc.retentionLocked ? <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      aria-label={`Dokument ${doc.name} löschen`}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -269,7 +385,7 @@ export function VehicleDocumentsTab({
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
-                </AlertDialog>
+                </AlertDialog> : null}
               </div>
             </div>
           ))}

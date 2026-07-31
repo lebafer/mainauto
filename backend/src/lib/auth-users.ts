@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { hashPassword } from "better-auth/crypto";
 import { prisma } from "../prisma";
-import type { PlatformRole } from "@prisma/client";
+import type { PlatformRole, Prisma } from "@prisma/client";
 
 interface CreateCredentialUserInput {
   name: string;
@@ -11,13 +11,16 @@ interface CreateCredentialUserInput {
   platformRole?: PlatformRole;
 }
 
-export async function createCredentialUser(input: CreateCredentialUserInput) {
+export async function createCredentialUser(
+  input: CreateCredentialUserInput,
+  transaction?: Prisma.TransactionClient
+) {
   const userId = randomUUID();
   const passwordHash = await hashPassword(input.password);
   const normalizedEmail = input.email.trim().toLowerCase();
   const normalizedUsername = input.username?.trim() || null;
 
-  return prisma.$transaction(async (tx) => {
+  const create = async (tx: Prisma.TransactionClient) => {
     const user = await tx.user.create({
       data: {
         id: userId,
@@ -40,7 +43,9 @@ export async function createCredentialUser(input: CreateCredentialUserInput) {
     });
 
     return user;
-  });
+  };
+
+  return transaction ? create(transaction) : prisma.$transaction(create);
 }
 
 export async function upsertCredentialUser(input: CreateCredentialUserInput) {

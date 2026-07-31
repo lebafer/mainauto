@@ -1,4 +1,11 @@
 import { z } from "zod";
+import { MAX_MONEY_AMOUNT } from "./lib/money";
+
+const IsoDateSchema = z.iso.date();
+const IsoDateTimeSchema = z.iso.datetime({ offset: true });
+const OptionalIsoDateSchema = z.union([IsoDateSchema, IsoDateTimeSchema]);
+const LimitedTextSchema = (max: number) => z.string().trim().max(max);
+const MoneyAmountSchema = z.number().finite().min(0).max(MAX_MONEY_AMOUNT);
 
 // ─── Dealer / SaaS Schemas ───────────────────────────────────
 
@@ -77,6 +84,9 @@ export const DealerDomainSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
 });
+export const SafeDealerDomainSchema = DealerDomainSchema.omit({
+  verificationToken: true,
+});
 
 export const DealerMembershipSchema = z.object({
   id: z.string(),
@@ -138,7 +148,7 @@ export const AdminDealerCreateSchema = z.object({
     name: z.string().min(2, "Name ist erforderlich"),
     email: z.string().email("Gueltige E-Mail erforderlich"),
     username: z.string().min(3, "Benutzername ist erforderlich"),
-    password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+    password: z.string().min(12, "Passwort muss mindestens 12 Zeichen haben"),
   }),
 });
 
@@ -152,7 +162,7 @@ export const AdminDealerUpdateSchema = z.object({
       name: z.string().min(2, "Name ist erforderlich").optional(),
       email: z.string().email("Gueltige E-Mail erforderlich").optional(),
       username: z.string().min(3, "Benutzername ist erforderlich").nullable().optional(),
-      password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben").optional(),
+      password: z.string().min(12, "Passwort muss mindestens 12 Zeichen haben").optional(),
     })
     .optional(),
 });
@@ -161,7 +171,7 @@ export const DealerTeamMemberCreateSchema = z.object({
   name: z.string().min(2, "Name ist erforderlich"),
   email: z.string().email("Gueltige E-Mail erforderlich"),
   username: z.string().min(3, "Benutzername ist erforderlich"),
-  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+  password: z.string().min(12, "Passwort muss mindestens 12 Zeichen haben"),
   role: DealerMembershipRoleSchema.default("staff"),
 });
 
@@ -170,7 +180,7 @@ export const DealerTeamRoleUpdateSchema = z.object({
   name: z.string().min(2, "Name ist erforderlich").optional(),
   email: z.string().email("Gueltige E-Mail erforderlich").optional(),
   username: z.string().min(3, "Benutzername ist erforderlich").nullable().optional(),
-  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben").optional(),
+  password: z.string().min(12, "Passwort muss mindestens 12 Zeichen haben").optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -197,7 +207,7 @@ export const PublicTenantContextSchema = z.object({
   supportEmail: z.string().nullable(),
   tenantStatus: TenantStatusSchema,
   dealer: DealerSchema.nullable(),
-  activeDomain: DealerDomainSchema.nullable(),
+  activeDomain: SafeDealerDomainSchema.nullable(),
 });
 
 export const PublicPlanSchema = z.object({
@@ -212,11 +222,11 @@ export const PublicPlanSchema = z.object({
 });
 
 export const PublicSignupSchema = z.object({
-  companyName: z.string().min(2, "Firmenname ist erforderlich"),
-  ownerName: z.string().min(2, "Name ist erforderlich"),
+  companyName: z.string().trim().min(2, "Firmenname ist erforderlich").max(160),
+  ownerName: z.string().trim().min(2, "Name ist erforderlich").max(160),
   email: z.string().email("Gueltige E-Mail erforderlich"),
-  username: z.string().min(3, "Benutzername ist erforderlich"),
-  password: z.string().min(8, "Passwort muss mindestens 8 Zeichen haben"),
+  username: z.string().trim().min(3, "Benutzername ist erforderlich").max(80),
+  password: z.string().min(12, "Passwort muss mindestens 12 Zeichen haben").max(200),
   planSlug: z.enum(["standard", "pro"]),
 });
 
@@ -256,7 +266,7 @@ export const BillingStateSchema = z.object({
 export const StripeCheckoutMetadataSchema = z.object({
   dealerId: z.string(),
   planSlug: z.enum(["standard", "pro"]),
-  dealerSubscriptionId: z.string(),
+  dealerSubscriptionId: z.string().optional(),
 });
 
 export const SessionContextSchema = z.object({
@@ -271,7 +281,7 @@ export const SessionContextSchema = z.object({
   dealer: DealerSchema.nullable(),
   dealerRole: DealerMembershipRoleSchema.nullable(),
   dealerSettings: DealerSettingsSchema.nullable(),
-  activeDomain: DealerDomainSchema.nullable().optional(),
+  activeDomain: SafeDealerDomainSchema.nullable().optional(),
   tenantStatus: TenantStatusSchema.default("unknown"),
   resolvedHost: z.string().nullable().optional(),
   entitlements: FeatureEntitlementsSchema,
@@ -293,9 +303,9 @@ export type SessionContext = z.infer<typeof SessionContextSchema>;
 // ─── Vehicle Schemas ─────────────────────────────────────────
 
 export const VehicleCreateSchema = z.object({
-  vehicleNumber: z.string().trim().min(1, "Vehicle number is required"),
-  brand: z.string().min(1, "Brand is required"),
-  model: z.string().min(1, "Model is required"),
+  vehicleNumber: z.string().trim().min(1, "Vehicle number is required").max(80),
+  brand: z.string().trim().min(1, "Brand is required").max(120),
+  model: z.string().trim().min(1, "Model is required").max(160),
   year: z.number().int().min(1900).max(2100).optional(),
   mileage: z.number().int().min(0),
   vin: z.string().optional(),
@@ -307,14 +317,14 @@ export const VehicleCreateSchema = z.object({
   transmission: z.string().optional(),
   power: z.union([z.number(), z.string()]).optional().transform(v => v !== undefined && v !== "" ? Number(v) : undefined),
   features: z.string().optional(), // JSON string of features array
-  purchasePrice: z.number().min(0),
-  sellingPrice: z.number().min(0),
+  purchasePrice: MoneyAmountSchema,
+  sellingPrice: MoneyAmountSchema,
   taxRate: z.number().min(0).max(100).default(19.0),
   marginTaxed: z.boolean().default(false),
   isPrivate: z.boolean().default(false),
   status: z.enum(["available", "reserved", "sold"]).default("available"),
-  notes: z.string().optional(),
-  internalNotes: z.string().optional(),
+  notes: LimitedTextSchema(10_000).optional(),
+  internalNotes: LimitedTextSchema(10_000).optional(),
   customerId: z.string().nullable().optional(),
   // Technical details
   co2Emission: z.number().optional(),
@@ -323,7 +333,7 @@ export const VehicleCreateSchema = z.object({
   // Damage
   hasDamage: z.boolean().default(false),
   damageDescription: z.string().optional(),
-  damageAmount: z.number().optional(),
+  damageAmount: MoneyAmountSchema.optional(),
   // Hybrid/Elektro
   batteryCapacity: z.number().optional(),
   electricRange: z.number().int().optional(),
@@ -331,30 +341,30 @@ export const VehicleCreateSchema = z.object({
   batteryType: z.string().optional(),
   // Export
   exportEnabled: z.boolean().default(false),
-  transportCostDomestic: z.number().optional(),
-  transportCostAbroad: z.number().optional(),
-  customsDuties: z.number().optional(),
-  registrationFees: z.number().optional(),
-  repairCostsAbroad: z.number().optional(),
+  transportCostDomestic: MoneyAmountSchema.optional(),
+  transportCostAbroad: MoneyAmountSchema.optional(),
+  customsDuties: MoneyAmountSchema.optional(),
+  registrationFees: MoneyAmountSchema.optional(),
+  repairCostsAbroad: MoneyAmountSchema.optional(),
   // Additional
-  firstRegistration: z.string().optional(), // ISO date string (Erstzulassung)
+  firstRegistration: OptionalIsoDateSchema.optional(),
   supplier: z.string().optional(),
   chargingTime: z.number().int().optional(),
   connectorType: z.string().optional(),
   // Supplier relation
   supplierId: z.string().optional().nullable(),
   // Inspection / Service
-  huDue: z.string().optional(),           // ISO date string (month+year)
+  huDue: OptionalIsoDateSchema.optional(),
   previousOwners: z.number().int().min(0).optional(),
   serviceDueKm: z.number().int().optional(),
-  serviceDueDate: z.string().optional(),  // ISO date string
+  serviceDueDate: OptionalIsoDateSchema.optional(),
   // Body / Configuration
   bodyType: z.string().optional(),        // Karosserieform z.B. Limousine, Kombi, SUV
   doors: z.number().int().min(0).optional(),
   seats: z.number().int().min(0).optional(),
   driveType: z.string().optional(),       // Antriebsart z.B. FWD, RWD, AWD, 4x4
   emissionClass: z.string().optional(),   // Schadstoffklasse z.B. Euro 6
-  dealerPrice: z.number().optional(),     // Händlerpreis EUR
+  dealerPrice: MoneyAmountSchema.optional(),     // Händlerpreis EUR
 });
 
 export const VehicleUpdateSchema = z.object({
@@ -372,14 +382,14 @@ export const VehicleUpdateSchema = z.object({
   transmission: z.string().optional(),
   power: z.union([z.number(), z.string()]).optional().transform(v => v !== undefined && v !== "" ? Number(v) : undefined),
   features: z.string().optional(),
-  purchasePrice: z.number().min(0).optional(),
-  sellingPrice: z.number().min(0).optional(),
+  purchasePrice: MoneyAmountSchema.optional(),
+  sellingPrice: MoneyAmountSchema.optional(),
   taxRate: z.number().min(0).max(100).optional(),
   marginTaxed: z.boolean().optional(),
   isPrivate: z.boolean().optional(),
   status: z.enum(["available", "reserved", "sold"]).optional(),
-  notes: z.string().optional(),
-  internalNotes: z.string().optional(),
+  notes: LimitedTextSchema(10_000).optional(),
+  internalNotes: LimitedTextSchema(10_000).optional(),
   customerId: z.string().nullable().optional(),
   // Technical details
   co2Emission: z.number().optional(),
@@ -388,7 +398,7 @@ export const VehicleUpdateSchema = z.object({
   // Damage
   hasDamage: z.boolean().optional(),
   damageDescription: z.string().optional(),
-  damageAmount: z.number().optional(),
+  damageAmount: MoneyAmountSchema.optional(),
   // Hybrid/Elektro
   batteryCapacity: z.number().optional(),
   electricRange: z.number().int().optional(),
@@ -396,30 +406,30 @@ export const VehicleUpdateSchema = z.object({
   batteryType: z.string().optional(),
   // Export
   exportEnabled: z.boolean().optional(),
-  transportCostDomestic: z.number().optional(),
-  transportCostAbroad: z.number().optional(),
-  customsDuties: z.number().optional(),
-  registrationFees: z.number().optional(),
-  repairCostsAbroad: z.number().optional(),
+  transportCostDomestic: MoneyAmountSchema.optional(),
+  transportCostAbroad: MoneyAmountSchema.optional(),
+  customsDuties: MoneyAmountSchema.optional(),
+  registrationFees: MoneyAmountSchema.optional(),
+  repairCostsAbroad: MoneyAmountSchema.optional(),
   // Additional
-  firstRegistration: z.string().optional(), // ISO date string (Erstzulassung)
+  firstRegistration: OptionalIsoDateSchema.optional(),
   supplier: z.string().optional(),
   chargingTime: z.number().int().optional(),
   connectorType: z.string().optional(),
   // Supplier relation
   supplierId: z.string().optional().nullable(),
   // Inspection / Service
-  huDue: z.string().optional(),           // ISO date string (month+year)
+  huDue: OptionalIsoDateSchema.optional(),
   previousOwners: z.number().int().min(0).optional(),
   serviceDueKm: z.number().int().optional(),
-  serviceDueDate: z.string().optional(),  // ISO date string
+  serviceDueDate: OptionalIsoDateSchema.optional(),
   // Body / Configuration
   bodyType: z.string().optional(),        // Karosserieform z.B. Limousine, Kombi, SUV
   doors: z.number().int().min(0).optional(),
   seats: z.number().int().min(0).optional(),
   driveType: z.string().optional(),       // Antriebsart z.B. FWD, RWD, AWD, 4x4
   emissionClass: z.string().optional(),   // Schadstoffklasse z.B. Euro 6
-  dealerPrice: z.number().optional(),     // Händlerpreis EUR
+  dealerPrice: MoneyAmountSchema.optional(),     // Händlerpreis EUR
 });
 
 export type VehicleCreate = z.infer<typeof VehicleCreateSchema>;
@@ -468,8 +478,8 @@ export type VehicleBriefExtractResponse = z.infer<typeof VehicleBriefExtractResp
 // ─── Customer Schemas ────────────────────────────────────────
 
 export const CustomerCreateSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  firstName: z.string().trim().min(1, "First name is required").max(120),
+  lastName: z.string().trim().min(1, "Last name is required").max(120),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   phone2: z.string().optional(),
@@ -481,8 +491,8 @@ export const CustomerCreateSchema = z.object({
   taxId: z.string().optional(),
   idDocumentType: z.string().optional(),
   idDocumentNumber: z.string().optional(),
-  idDocumentValidUntil: z.string().optional(),
-  notes: z.string().optional(),
+  idDocumentValidUntil: OptionalIsoDateSchema.optional(),
+  notes: LimitedTextSchema(10_000).optional(),
   customerType: z.enum(["privat", "gewerblich"]).default("privat").optional(),
 });
 
@@ -500,8 +510,8 @@ export const CustomerUpdateSchema = z.object({
   taxId: z.string().optional(),
   idDocumentType: z.string().optional(),
   idDocumentNumber: z.string().optional(),
-  idDocumentValidUntil: z.string().optional(),
-  notes: z.string().optional(),
+  idDocumentValidUntil: OptionalIsoDateSchema.optional(),
+  notes: LimitedTextSchema(10_000).optional(),
   customerType: z.enum(["privat", "gewerblich"]).optional(),
 });
 
@@ -513,19 +523,119 @@ export type CustomerUpdate = z.infer<typeof CustomerUpdateSchema>;
 export const SaleCreateSchema = z.object({
   vehicleId: z.string().min(1, "Vehicle ID is required"),
   customerId: z.string().min(1, "Customer ID is required"),
-  salePrice: z.number().min(0),
+  // Canonical contract: the amount paid by the customer (gross/final price).
+  salePrice: MoneyAmountSchema,
+  priceMode: z.literal("gross").default("gross"),
   taxRate: z.number().min(0).max(100).default(19.0),
-  saleDate: z.string().optional(), // ISO date string, defaults to now
-  notes: z.string().optional(),
+  saleDate: OptionalIsoDateSchema.optional(),
+  notes: LimitedTextSchema(10_000).optional(),
 });
+export const SaleStatusSchema = z.enum(["completed", "reversed"]);
+export const SaleAccountingStatusSchema = z.enum([
+  "verified",
+  "legacy_snapshot",
+  "legacy_ambiguous",
+]);
 
 export type SaleCreate = z.infer<typeof SaleCreateSchema>;
+
+export const SaleAccountingSnapshotResolveSchema = z.object({
+  historicTaxMode: z.enum(["regular", "margin"]),
+  historicPriceMode: z.enum(["gross", "net"]).optional(),
+  purchasePrice: MoneyAmountSchema.optional(),
+  manualCosts: MoneyAmountSchema.optional(),
+  exportCosts: MoneyAmountSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (value.historicTaxMode === "regular" && !value.historicPriceMode) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["historicPriceMode"],
+      message: "Brutto- oder Nettobasis ist bei Regelbesteuerung erforderlich",
+    });
+  }
+});
+
+export const SaleAccountingSnapshotSchema = z.object({
+  accountingStatus: SaleAccountingStatusSchema,
+  priceMode: z.enum(["gross", "net"]),
+  marginTaxed: z.boolean(),
+  grossCents: z.number().int(),
+  netCents: z.number().int(),
+  taxCents: z.number().int(),
+  marginTaxCents: z.number().int(),
+  purchasePriceCents: z.number().int(),
+  manualCostsCents: z.number().int(),
+  exportCostsCents: z.number().int(),
+  totalCostCents: z.number().int(),
+  grossAmount: z.number(),
+  netAmount: z.number(),
+  taxAmount: z.number(),
+  marginTaxAmount: z.number(),
+  purchasePrice: z.number(),
+  manualCosts: z.number(),
+  exportCosts: z.number(),
+  totalCost: z.number(),
+});
+
+export type SaleAccountingSnapshotResolve = z.infer<
+  typeof SaleAccountingSnapshotResolveSchema
+>;
+
+export const InvoiceCreateSchema = z.object({
+  saleId: z.string().min(1),
+  deliveryDate: OptionalIsoDateSchema,
+  dueDate: OptionalIsoDateSchema.optional(),
+  notes: LimitedTextSchema(10_000).optional(),
+});
+export const InvoiceCancelSchema = z.object({
+  reason: LimitedTextSchema(1_000).refine(
+    (value) => value.length >= 3,
+    "Stornogrund muss mindestens 3 Zeichen haben"
+  ),
+});
+
+export const InvoiceStatusSchema = z.enum(["issued", "canceled"]);
+export const BusinessDocumentTypeSchema = z.literal("INVOICE");
+
+export const InvoiceSchema = z.object({
+  id: z.string(),
+  dealerId: z.string(),
+  saleId: z.string(),
+  documentType: BusinessDocumentTypeSchema,
+  invoiceNumber: z.string(),
+  status: InvoiceStatusSchema,
+  issuedAt: z.string(),
+  dueAt: z.string().nullable(),
+  grossCents: z.number().int(),
+  netCents: z.number().int(),
+  taxCents: z.number().int(),
+  marginTaxCents: z.number().int(),
+  grossAmount: z.number(),
+  netAmount: z.number(),
+  taxAmount: z.number(),
+  marginTaxAmount: z.number(),
+  taxRate: z.number(),
+  marginTaxed: z.boolean(),
+  artifactSha256: z.string(),
+  templateVersion: z.string(),
+  canceledAt: z.string().nullable(),
+  canceledById: z.string().nullable(),
+  cancelReason: z.string().nullable(),
+  cancellationArtifactSha256: z.string().nullable(),
+  notes: z.string().nullable(),
+  snapshot: z.record(z.string(), z.unknown()),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type InvoiceCreate = z.infer<typeof InvoiceCreateSchema>;
+export type Invoice = z.infer<typeof InvoiceSchema>;
 
 // ─── Vehicle Cost Schemas ─────────────────────────────────────
 
 export const VehicleCostCreateSchema = z.object({
   costType: z.string().min(1, "Cost type is required"),
-  amount: z.number().positive("Amount must be positive"),
+  amount: MoneyAmountSchema.refine((value) => value > 0, "Amount must be positive"),
   notes: z.string().optional(),
 });
 
@@ -834,6 +944,11 @@ export type SupplierUpdate = z.infer<typeof SupplierUpdateSchema>;
 
 // ─── Finances Schemas ─────────────────────────────────────────
 
+export const FinancesDateRangeSchema = z.object({
+  from: IsoDateSchema.optional(),
+  to: IsoDateSchema.optional(),
+});
+
 export const FinancesCostBreakdownItemSchema = z.object({
   label: z.string(),
   amount: z.number(),
@@ -846,13 +961,19 @@ export const FinancesSaleRowSchema = z.object({
   vehicleNumber: z.string(),
   brand: z.string(),
   model: z.string(),
-  purchasePrice: z.number(),
-  manualAdditionalCosts: z.number(),
-  exportAdditionalCosts: z.number(),
-  additionalCosts: z.number(),
+  accountingStatus: z.enum(["verified", "legacy_snapshot", "legacy_ambiguous"]),
+  purchasePrice: z.number().nullable(),
+  manualAdditionalCosts: z.number().nullable(),
+  exportAdditionalCosts: z.number().nullable(),
+  additionalCosts: z.number().nullable(),
   costBreakdown: z.array(FinancesCostBreakdownItemSchema),
-  salePrice: z.number(),
-  profit: z.number(),
+  salePrice: z.number().nullable(),
+  grossSalePrice: z.number().nullable(),
+  netSalePrice: z.number().nullable(),
+  saleTaxAmount: z.number().nullable(),
+  disclosedTaxAmount: z.number().nullable(),
+  marginTaxAmount: z.number().nullable(),
+  profit: z.number().nullable(),
   customerName: z.string(),
 });
 
@@ -863,7 +984,16 @@ export const FinancesDataSchema = z.object({
   totalExportCosts: z.number(),
   totalAdditionalCosts: z.number(),
   vehiclesSold: z.number(),
+  accountedSales: z.number(),
+  ambiguousSales: z.number(),
+  legacySnapshotSales: z.number(),
+  hasAccountingWarnings: z.boolean(),
   totalRevenue: z.number(),
+  totalGrossRevenue: z.number(),
+  totalNetRevenue: z.number(),
+  totalSalesTax: z.number(),
+  totalDisclosedSalesTax: z.number(),
+  totalMarginTax: z.number(),
   totalProfit: z.number(),
   profitableSales: z.number(),
   lossSales: z.number(),

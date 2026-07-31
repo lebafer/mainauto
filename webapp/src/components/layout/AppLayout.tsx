@@ -76,23 +76,23 @@ export function AppLayout({ children }: AppLayoutProps) {
             className="pointer-events-none absolute inset-x-0 top-0 h-px"
             style={{ background: "linear-gradient(90deg, transparent, rgb(var(--tenant-primary-rgb) / 0.85), transparent)" }}
           />
-          <SidebarTrigger className="-ml-1" />
+          <SidebarTrigger className="-ml-1 min-h-11 min-w-11" aria-label="Navigation öffnen" />
           <Separator orientation="vertical" className="mr-2 h-4" />
-          <Breadcrumb>
-            <BreadcrumbList>
+          <Breadcrumb className="min-w-0 overflow-hidden">
+            <BreadcrumbList className="min-w-0 flex-nowrap overflow-hidden">
               {parent ? (
                 <>
                   <BreadcrumbItem>
-                    <span className="text-muted-foreground">{parent}</span>
+                    <span className="max-w-28 truncate text-muted-foreground sm:max-w-none">{parent}</span>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbPage>{current}</BreadcrumbPage>
+                    <BreadcrumbPage className="max-w-36 truncate sm:max-w-none">{current}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </>
               ) : (
                 <BreadcrumbItem>
-                  <BreadcrumbPage>{current}</BreadcrumbPage>
+                  <BreadcrumbPage className="max-w-52 truncate sm:max-w-none">{current}</BreadcrumbPage>
                 </BreadcrumbItem>
               )}
             </BreadcrumbList>

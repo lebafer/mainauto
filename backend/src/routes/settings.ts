@@ -14,10 +14,14 @@ import {
 import {
   getCurrentDealer,
   getCurrentDealerId,
+  getCurrentDealerRole,
+  getCurrentUser,
   requireDealerRole,
   requireEntitlement,
 } from "../lib/request-context";
 import { createCredentialUser } from "../lib/auth-users";
+import { UploadValidationError, validateUpload } from "../lib/uploads";
+import { writeAuditLog } from "../lib/audit";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -69,6 +73,9 @@ function hasBrandingChanges(data: Record<string, unknown>) {
 }
 
 settingsRouter.get("/dealer", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const dealer = getCurrentDealer(c);
   const settings = await prisma.dealerSettings.findUnique({
     where: { dealerId: dealer.id },
@@ -100,7 +107,6 @@ settingsRouter.put(
 
     const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
-
     if (hasBrandingChanges(data)) {
       const entitlementError = requireEntitlement(c, "document_branding");
       if (entitlementError) {
@@ -108,13 +114,26 @@ settingsRouter.put(
       }
     }
 
-    const settings = await prisma.dealerSettings.upsert({
-      where: { dealerId },
-      update: data,
-      create: {
-        dealerId,
-        ...data,
-      },
+    const settings = await prisma.$transaction(async (tx) => {
+      const updated = await tx.dealerSettings.upsert({
+        where: { dealerId },
+        update: data,
+        create: {
+          dealerId,
+          ...data,
+        },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "dealer.settings_updated",
+          entityType: "DealerSettings",
+          entityId: updated.id,
+          metadata: { changedFields: Object.keys(data).sort() },
+        },
+        tx
+      );
+      return updated;
     });
 
     return c.json({ data: settings });
@@ -140,12 +159,20 @@ settingsRouter.post("/dealer/logo", async (c) => {
     return c.json({ error: { code: "BAD_REQUEST", message: "Kein Logo hochgeladen" } }, 400);
   }
 
-  if (!file.type.startsWith("image/")) {
-    return c.json({ error: { code: "BAD_REQUEST", message: "Logo muss eine Bilddatei sein" } }, 400);
+  let validated;
+  try {
+    validated = await validateUpload(file, {
+      kind: "image",
+      maxBytes: 5 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: { code: error.code, message: error.message } }, 400);
+    }
+    throw error;
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-  const fileName = `dealer-logo-${dealerId}-${randomUUID()}.${ext}`;
+  const fileName = `dealer-logo-${dealerId}-${randomUUID()}.${validated.extension}`;
   const filePath = join(UPLOADS_DIR, fileName);
   const arrayBuffer = await file.arrayBuffer();
   await Bun.write(filePath, arrayBuffer);
@@ -155,16 +182,34 @@ settingsRouter.post("/dealer/logo", async (c) => {
     select: { logoUrl: true },
   });
 
-  const settings = await prisma.dealerSettings.upsert({
-    where: { dealerId },
-    update: {
-      logoUrl: `/api/uploads/${fileName}`,
-    },
-    create: {
-      dealerId,
-      logoUrl: `/api/uploads/${fileName}`,
-    },
-  });
+  let settings;
+  try {
+    settings = await prisma.$transaction(async (tx) => {
+      const updated = await tx.dealerSettings.upsert({
+        where: { dealerId },
+        update: {
+          logoUrl: `/api/uploads/${fileName}`,
+        },
+        create: {
+          dealerId,
+          logoUrl: `/api/uploads/${fileName}`,
+        },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "dealer.logo_updated",
+          entityType: "DealerSettings",
+          entityId: updated.id,
+        },
+        tx
+      );
+      return updated;
+    });
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined);
+    throw error;
+  }
 
   await deleteDealerLogoFile(existingSettings?.logoUrl);
 
@@ -192,13 +237,24 @@ settingsRouter.delete("/dealer/logo", async (c) => {
     select: { logoUrl: true },
   });
 
-  await prisma.dealerSettings.upsert({
-    where: { dealerId },
-    update: { logoUrl: null },
-    create: {
-      dealerId,
-      logoUrl: null,
-    },
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.dealerSettings.upsert({
+      where: { dealerId },
+      update: { logoUrl: null },
+      create: {
+        dealerId,
+        logoUrl: null,
+      },
+    });
+    await writeAuditLog(
+      c,
+      {
+        action: "dealer.logo_removed",
+        entityType: "DealerSettings",
+        entityId: updated.id,
+      },
+      tx
+    );
   });
 
   await deleteDealerLogoFile(existingSettings?.logoUrl);
@@ -211,6 +267,9 @@ settingsRouter.delete("/dealer/logo", async (c) => {
 });
 
 settingsRouter.get("/team", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const featureError = requireEntitlement(c, "team_management");
   if (featureError) {
     return featureError;
@@ -254,6 +313,12 @@ settingsRouter.post(
 
     const dealerId = getCurrentDealerId(c);
     const data = c.req.valid("json");
+    if (data.role === "dealer_owner" && getCurrentDealerRole(c) !== "dealer_owner") {
+      return c.json(
+        { error: { code: "OWNER_REQUIRED", message: "Nur Owner dürfen weitere Owner ernennen" } },
+        403
+      );
+    }
 
     const existingUser = await prisma.user.findFirst({
       where: {
@@ -273,32 +338,48 @@ settingsRouter.post(
       );
     }
 
-    const user = await createCredentialUser({
-      name: data.name,
-      email: data.email,
-      password: data.password,
-      username: data.username,
-    });
+    const membership = await prisma.$transaction(async (tx) => {
+      const user = await createCredentialUser(
+        {
+          name: data.name,
+          email: data.email,
+          password: data.password,
+          username: data.username,
+        },
+        tx
+      );
 
-    const membership = await prisma.dealerMembership.create({
-      data: {
-        dealerId,
-        userId: user.id,
-        role: data.role,
-        isActive: true,
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            username: true,
-            platformRole: true,
-            createdAt: true,
+      const created = await tx.dealerMembership.create({
+        data: {
+          dealerId,
+          userId: user.id,
+          role: data.role,
+          isActive: true,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              username: true,
+              platformRole: true,
+              createdAt: true,
+            },
           },
         },
-      },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "team.member_created",
+          entityType: "DealerMembership",
+          entityId: created.id,
+          metadata: { role: created.role },
+        },
+        tx
+      );
+      return created;
     });
 
     return c.json({ data: membership }, 201);
@@ -332,6 +413,46 @@ settingsRouter.put(
 
     if (!existing) {
       return c.json({ error: { code: "NOT_FOUND", message: "Teammitglied nicht gefunden" } }, 404);
+    }
+    const changesGlobalUserProfile =
+      data.name !== undefined ||
+      data.email !== undefined ||
+      data.username !== undefined ||
+      data.password !== undefined;
+    if (changesGlobalUserProfile && existing.userId !== getCurrentUser(c).id) {
+      const membershipCount = await prisma.dealerMembership.count({
+        where: { userId: existing.userId },
+      });
+      return c.json(
+        {
+          error: {
+            code:
+              membershipCount > 1
+                ? "MULTI_DEALER_GLOBAL_PROFILE"
+                : "GLOBAL_PROFILE_SELF_SERVICE_REQUIRED",
+            message:
+              "Globale Profil- und Zugangsdaten dürfen nur vom Benutzer selbst geändert werden",
+          },
+        },
+        403
+      );
+    }
+    const currentRole = getCurrentDealerRole(c);
+    if (
+      currentRole !== "dealer_owner" &&
+      (existing.role === "dealer_owner" ||
+        data.role === "dealer_owner" ||
+        data.password !== undefined)
+    ) {
+      return c.json(
+        {
+          error: {
+            code: "OWNER_REQUIRED",
+            message: "Nur Owner dürfen Owner oder Zugangsdaten verwalten",
+          },
+        },
+        403
+      );
     }
 
     const nextRole = data.role ?? existing.role;
@@ -424,9 +545,12 @@ settingsRouter.put(
             },
           });
         }
+        await tx.session.deleteMany({
+          where: { userId: existing.userId },
+        });
       }
 
-      return tx.dealerMembership.update({
+      const updated = await tx.dealerMembership.update({
         where: { id: membershipId },
         data: {
           ...(data.role !== undefined ? { role: data.role } : {}),
@@ -445,6 +569,21 @@ settingsRouter.put(
           },
         },
       });
+      await writeAuditLog(
+        c,
+        {
+          action: "team.member_updated",
+          entityType: "DealerMembership",
+          entityId: updated.id,
+          metadata: {
+            changedFields: Object.keys(data).sort(),
+            role: updated.role,
+            isActive: updated.isActive,
+          },
+        },
+        tx
+      );
+      return updated;
     });
 
     return c.json({ data: membership });
@@ -471,6 +610,12 @@ settingsRouter.delete("/team/:membershipId", async (c) => {
 
   if (!membership) {
     return c.json({ error: { code: "NOT_FOUND", message: "Teammitglied nicht gefunden" } }, 404);
+  }
+  if (membership.role === "dealer_owner" && getCurrentDealerRole(c) !== "dealer_owner") {
+    return c.json(
+      { error: { code: "OWNER_REQUIRED", message: "Nur Owner dürfen Owner entfernen" } },
+      403
+    );
   }
 
   if (
@@ -503,6 +648,16 @@ settingsRouter.delete("/team/:membershipId", async (c) => {
         where: { id: membership.userId },
       });
     }
+    await writeAuditLog(
+      c,
+      {
+        action: "team.member_removed",
+        entityType: "DealerMembership",
+        entityId: membershipId,
+        metadata: { role: membership.role },
+      },
+      tx
+    );
   });
 
   return c.json({ data: { success: true } });

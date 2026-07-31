@@ -1,14 +1,47 @@
 .git
+.github
 .gitignore
+.gitattributes
+
+# Secrets and local configuration never belong in an image layer.
+.env
+.env.*
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/*.agekey
+**/.pgpass
+credentials
+secrets
+
+# Dependencies, build output and local caches.
 node_modules
 **/node_modules
+.pnpm-store
+**/.pnpm-store
+coverage
+**/coverage
+dist
+**/dist
+webapp/dist-ssr
+*.tsbuildinfo
+*.log
+
+# Runtime/customer data must not be sent to the Docker daemon.
 backups
 backups-staging
 data
 data-staging
 uploads
 backend/uploads
-backend/prisma/dev.db*
-webapp/dist
-webapp/dist-ssr
-*.log
+backend/prisma/dev.db
+backend/prisma/dev.db-*
+backend/prisma/dev.db-shm
+backend/prisma/dev.db-wal
+
+# Files not required by either runtime image.
+.DS_Store
+changelog.txt

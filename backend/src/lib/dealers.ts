@@ -25,7 +25,7 @@ export const DEFAULT_PLATFORM_NAME = "CarOps";
 export const DEFAULT_PLATFORM_SLOGAN = "Das Betriebssystem für dein Autohaus";
 export const DEFAULT_DEALER_NAME = "Referenz Autohaus";
 export const DEFAULT_DEALER_SLUG = "mainauto";
-export const DEFAULT_SUPPORT_EMAIL = "support@carops.local";
+export const DEFAULT_SUPPORT_EMAIL = env.PLATFORM_SUPPORT_EMAIL;
 
 export const DEFAULT_DEALER_SETTINGS = {
   displayName: "Referenz Autohaus",
@@ -253,7 +253,12 @@ export function pickActiveMembership(
     return null;
   }
 
-  return memberships[0] ?? null;
+  return (
+    memberships.find((membership) => membership.isDefault) ??
+    memberships.find((membership) => membership.dealer.isDefault) ??
+    memberships[0] ??
+    null
+  );
 }
 
 export function getMembershipEntitlements(membership: ActiveDealerMembership | null): FeatureEntitlements {

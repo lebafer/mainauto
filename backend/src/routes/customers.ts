@@ -6,7 +6,15 @@ import { join } from "path";
 import { mkdir, unlink } from "fs/promises";
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
-import { getCurrentDealerId } from "../lib/request-context";
+import { getCurrentDealerId, requireDealerRole } from "../lib/request-context";
+import {
+  UploadValidationError,
+  isRetentionDocumentType,
+  parseStoredDocumentType,
+  validateUpload,
+} from "../lib/uploads";
+import { Prisma } from "@prisma/client";
+import { writeAuditLog } from "../lib/audit";
 
 const UPLOADS_DIR = join(import.meta.dir, "../../uploads");
 
@@ -38,7 +46,11 @@ customersRouter.get("/", async (c) => {
     where,
     include: {
       _count: {
-        select: { vehicles: true, sales: true, documents: true },
+        select: {
+          vehicles: true,
+          sales: true,
+          documents: { where: { softDeletedAt: null } },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -59,7 +71,10 @@ customersRouter.get("/:id", async (c) => {
         include: { images: true },
         orderBy: { createdAt: "desc" },
       },
-      documents: { orderBy: { createdAt: "desc" } },
+      documents: {
+        where: { softDeletedAt: null },
+        orderBy: { createdAt: "desc" },
+      },
       sales: {
         include: { vehicle: true },
         orderBy: { saleDate: "desc" },
@@ -138,19 +153,84 @@ customersRouter.put(
 
 // DELETE /api/customers/:id - delete customer
 customersRouter.delete("/:id", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const id = c.req.param("id");
   const dealerId = getCurrentDealerId(c);
 
   const existing = await prisma.customer.findFirst({
     where: { id, dealerId },
-    include: { documents: true },
+    include: {
+      documents: true,
+      _count: { select: { sales: true } },
+    },
   });
 
   if (!existing) {
     return c.json({ error: { message: "Customer not found", code: "NOT_FOUND" } }, 404);
   }
+  if (existing._count.sales > 0) {
+    return c.json(
+      {
+        error: {
+          message: "Kunden mit Verkaufshistorie können nicht gelöscht werden",
+          code: "CUSTOMER_HAS_SALES",
+        },
+      },
+      409
+    );
+  }
+  if (existing.documents.some((document) => document.retentionLocked)) {
+    await writeAuditLog(c, {
+      action: "customer.deletion_blocked_retention",
+      entityType: "Customer",
+      entityId: id,
+    });
+    return c.json(
+      {
+        error: {
+          message:
+            "Kunden mit aufbewahrungspflichtigen Dokumenten können nicht gelöscht werden",
+          code: "CUSTOMER_HAS_RETAINED_DOCUMENTS",
+        },
+      },
+      409
+    );
+  }
 
-  // Delete associated files from disk
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.customer.delete({ where: { id } });
+      await writeAuditLog(
+        c,
+        {
+          action: "customer.deleted",
+          entityType: "Customer",
+          entityId: id,
+        },
+        tx
+      );
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2003"
+    ) {
+      return c.json(
+        {
+          error: {
+            message: "Kunden mit Verkaufshistorie können nicht gelöscht werden",
+            code: "CUSTOMER_HAS_SALES",
+          },
+        },
+        409
+      );
+    }
+    throw error;
+  }
+
+  // Remove physical files only after the database deletion has committed.
   for (const doc of existing.documents) {
     const filePath = join(UPLOADS_DIR, doc.fileName);
     try {
@@ -159,8 +239,6 @@ customersRouter.delete("/:id", async (c) => {
       // File may already be deleted
     }
   }
-
-  await prisma.customer.delete({ where: { id } });
 
   return c.body(null, 204);
 });
@@ -177,53 +255,110 @@ customersRouter.post("/:id/documents", async (c) => {
 
   const formData = await c.req.formData();
   const file = formData.get("file") as File | null;
-  const name = (formData.get("name") as string) || file?.name || "Untitled";
+  const name = String(formData.get("name") || file?.name || "Untitled").slice(0, 240);
+  const documentType = parseStoredDocumentType(formData.get("documentType"));
 
   if (!file) {
     return c.json({ error: { message: "No file provided", code: "BAD_REQUEST" } }, 400);
   }
 
-  const ext = file.name.split(".").pop() || "pdf";
-  const fileName = `${randomUUID()}.${ext}`;
+  let validated;
+  try {
+    validated = await validateUpload(file, {
+      kind: "document",
+      maxBytes: 20 * 1024 * 1024,
+    });
+  } catch (error) {
+    if (error instanceof UploadValidationError) {
+      return c.json({ error: { message: error.message, code: error.code } }, 400);
+    }
+    throw error;
+  }
+  const fileName = `${randomUUID()}.${validated.extension}`;
   const filePath = join(UPLOADS_DIR, fileName);
 
   const arrayBuffer = await file.arrayBuffer();
   await Bun.write(filePath, arrayBuffer);
   console.info(`[uploads] customer_document_saved customerId=${id} file=${fileName}`);
 
-  const doc = await prisma.customerDocument.create({
-    data: {
-      dealerId,
-      name,
-      url: `/api/uploads/${fileName}`,
-      fileName,
-      fileType: file.type || null,
-      customerId: id,
-    },
-  });
+  let doc;
+  try {
+    doc = await prisma.customerDocument.create({
+      data: {
+        dealerId,
+        name,
+        url: `/api/uploads/${fileName}`,
+        fileName,
+        fileType: validated.contentType,
+        documentType,
+        retentionLocked: isRetentionDocumentType(documentType),
+        customerId: id,
+      },
+    });
+  } catch (error) {
+    await unlink(filePath).catch(() => undefined);
+    throw error;
+  }
 
   return c.json({ data: doc }, 201);
 });
 
 // DELETE /api/customers/:id/documents/:docId - delete document
 customersRouter.delete("/:id/documents/:docId", async (c) => {
+  const forbidden = requireDealerRole(c, ["dealer_owner", "dealer_admin"]);
+  if (forbidden) return forbidden;
+
   const docId = c.req.param("docId");
   const dealerId = getCurrentDealerId(c);
 
-  const doc = await prisma.customerDocument.findFirst({ where: { id: docId, dealerId } });
+  const customerId = c.req.param("id");
+  const doc = await prisma.customerDocument.findFirst({
+    where: { id: docId, customerId, dealerId, softDeletedAt: null },
+  });
   if (!doc) {
     return c.json({ error: { message: "Document not found", code: "NOT_FOUND" } }, 404);
   }
 
-  // Delete file from disk
+  if (doc.retentionLocked) {
+    await prisma.$transaction(async (tx) => {
+      await tx.customerDocument.update({
+        where: { id: docId },
+        data: { softDeletedAt: new Date() },
+      });
+      await writeAuditLog(
+        c,
+        {
+          action: "customer_document.soft_deleted",
+          entityType: "CustomerDocument",
+          entityId: docId,
+          metadata: { documentType: doc.documentType },
+        },
+        tx
+      );
+    });
+    return c.body(null, 204);
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.customerDocument.delete({ where: { id: docId } });
+    await writeAuditLog(
+      c,
+      {
+        action: "customer_document.deleted",
+        entityType: "CustomerDocument",
+        entityId: docId,
+        metadata: { documentType: doc.documentType },
+      },
+      tx
+    );
+  });
+
   const filePath = join(UPLOADS_DIR, doc.fileName);
   try {
     await unlink(filePath);
   } catch {
     // File may already be deleted
   }
-
-  await prisma.customerDocument.delete({ where: { id: docId } });
 
   return c.body(null, 204);
 });

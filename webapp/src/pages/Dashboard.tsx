@@ -6,14 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { getResolvedSaleAmounts } from "@/lib/vehicles";
 import { useAuth } from "@/lib/auth-client";
+import { calculateGrossPrice } from "@/lib/vehicles";
 
 // Types
 interface Vehicle {
   id: string;
   brand: string;
   model: string;
-  year: number;
+  year?: number | null;
   mileage: number;
   color?: string;
   fuelType?: string;
@@ -39,13 +41,17 @@ interface Sale {
   vehicleId: string;
   customerId: string;
   salePrice: number;
+  accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
+  grossSalePrice: number | null;
+  netSalePrice: number | null;
+  status?: "completed" | "reversed";
   taxRate: number;
   saleDate: string;
   notes?: string;
   vehicle: {
     brand: string;
     model: string;
-    year: number;
+    year?: number | null;
     sellingPrice: number;
     taxRate: number;
     marginTaxed: boolean;
@@ -245,8 +251,7 @@ export default function Dashboard() {
   const totalVehicles = businessVehicles.length;
   const availableVehicles = businessVehicles.filter((v) => v.status === "available").length;
   const totalCustomers = customers?.length ?? 0;
-  const totalSales = sales?.length ?? 0;
-  const totalRevenue = sales?.reduce((sum, s) => sum + s.salePrice, 0) ?? 0;
+  const activeSales = sales?.filter((sale) => sale.status !== "reversed") ?? [];
   const privateVehicles = privateVehiclesEnabled
     ? vehicles?.filter((v) => v.isPrivate).length ?? 0
     : 0;
@@ -263,8 +268,8 @@ export default function Dashboard() {
         .slice(0, 5)
     : [];
 
-  const recentSales = sales
-    ? [...sales]
+  const recentSales = activeSales.length
+    ? [...activeSales]
         .sort(
           (a, b) =>
             new Date(b.saleDate).getTime() - new Date(a.saleDate).getTime()
@@ -356,8 +361,8 @@ export default function Dashboard() {
                         {vehicle.brand} {vehicle.model}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {vehicle.year} &middot;{" "}
-                        {formatCurrency(vehicle.sellingPrice)}
+                        {vehicle.year ? `Baujahr ${vehicle.year}` : "Baujahr unbekannt"} &middot;{" "}
+                        {formatCurrency(calculateGrossPrice(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed))}
                       </p>
                     </div>
                     <Badge
@@ -380,7 +385,7 @@ export default function Dashboard() {
         >
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="text-base font-semibold">
-              Neueste Verkaufe
+              Neueste Verkäufe
             </CardTitle>
             <Button
               variant="ghost"
@@ -401,7 +406,7 @@ export default function Dashboard() {
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <TrendingUp className="h-8 w-8 text-muted-foreground/40 mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  Noch keine Verkaufe vorhanden
+                  Noch keine Verkäufe vorhanden
                 </p>
               </div>
             ) : (
@@ -425,7 +430,9 @@ export default function Dashboard() {
                     </div>
                     <div className="text-right shrink-0 ml-3">
                       <p className="text-sm font-semibold tabular-nums">
-                        {formatCurrency(sale.salePrice)}
+                        {getResolvedSaleAmounts(sale)
+                          ? formatCurrency(sale.grossSalePrice!)
+                          : "Preisprüfung nötig"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatDate(sale.saleDate)}

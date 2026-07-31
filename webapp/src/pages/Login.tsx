@@ -12,22 +12,23 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { authClient, TOKEN_KEY, useAuth } from "@/lib/auth-client";
+import { authClient, useAuth } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
 import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
+import { DealerLogo } from "@/components/branding/DealerLogo";
 
 export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const { toast } = useToast();
-  const { session } = useAuth();
+  const { session, tenant } = useAuth();
   const isTenantBlocked = session?.tenantStatus === "suspended" || session?.tenantStatus === "inactive";
 
   const signInMutation = useMutation({
     mutationFn: async () => {
       const result = await authClient.signIn.username({
         username: username.trim(),
-        password: password.trim(),
+        password,
       });
 
       if (result.error) {
@@ -41,10 +42,6 @@ export default function Login() {
         throw new Error(authErrorMessage || "Benutzername oder Passwort ist falsch.");
       }
 
-      const token = (result.data as { token?: string } | null)?.token;
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-      }
     },
     onSuccess: () => {
       window.location.replace("/dashboard");
@@ -60,7 +57,7 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) return;
+    if (!username.trim() || password.length === 0) return;
     signInMutation.mutate();
   };
 
@@ -71,12 +68,21 @@ export default function Login() {
       <Card className="relative z-10 w-full max-w-md border-border/60 bg-card/90 shadow-2xl backdrop-blur">
         <CardHeader className="space-y-6 text-center">
           <div className="flex justify-center">
-            <CarOpsLogo className="max-h-40 max-w-[26rem]" />
+            {tenant?.logoUrl ? (
+              <DealerLogo
+                src={tenant.logoUrl}
+                alt={`${tenant.displayName} Logo`}
+                className="h-24 w-full max-w-xs"
+                showPlaceholder={false}
+              />
+            ) : (
+              <CarOpsLogo className="max-h-40 max-w-[26rem]" />
+            )}
           </div>
           <div className="space-y-2">
-            <CardTitle className="text-2xl">Willkommen zurueck</CardTitle>
+            <CardTitle className="text-2xl">Willkommen zurück</CardTitle>
             <CardDescription className="text-base">
-              Melde dich an und steuere dein Autohaus in CarOps.
+              {tenant?.loginHeadline ?? `Melde dich an und steuere ${tenant?.displayName ?? "dein Autohaus"} in CarOps.`}
             </CardDescription>
           </div>
         </CardHeader>
@@ -134,7 +140,7 @@ export default function Login() {
               type="submit"
               className="w-full"
               size="lg"
-              disabled={isTenantBlocked || signInMutation.isPending || !username.trim() || !password.trim()}
+              disabled={isTenantBlocked || signInMutation.isPending || !username.trim() || password.length === 0}
             >
               {signInMutation.isPending ? (
                 <>

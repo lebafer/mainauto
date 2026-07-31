@@ -5,6 +5,7 @@ import {
   getCurrentMembership,
   getCurrentUser,
   getResolvedHost,
+  getResolvedDomain,
   getTenantStatus,
 } from "../lib/request-context";
 import { getCurrentSubscription } from "../lib/billing";
@@ -16,9 +17,12 @@ sessionRouter.get("/me", async (c) => {
   const membership = getCurrentMembership(c);
   const entitlements = getCurrentEntitlements(c);
   const resolvedHost = getResolvedHost(c);
+  const activeDomain = getResolvedDomain(c);
   const tenantStatus = getTenantStatus(c);
   const billing = getBillingState(c);
   const subscription = getCurrentSubscription(membership?.dealer.subscriptions);
+  const canViewSensitiveDealerSettings =
+    membership?.role === "dealer_owner" || membership?.role === "dealer_admin";
 
   return c.json({
     data: {
@@ -58,9 +62,9 @@ sessionRouter.get("/me", async (c) => {
             website: membership.dealer.settings.website,
             taxId: membership.dealer.settings.taxId,
             legalRepresentative: membership.dealer.settings.legalRepresentative,
-            bankName: membership.dealer.settings.bankName,
-            iban: membership.dealer.settings.iban,
-            bic: membership.dealer.settings.bic,
+            bankName: canViewSensitiveDealerSettings ? membership.dealer.settings.bankName : null,
+            iban: canViewSensitiveDealerSettings ? membership.dealer.settings.iban : null,
+            bic: canViewSensitiveDealerSettings ? membership.dealer.settings.bic : null,
             logoUrl: membership.dealer.settings.logoUrl,
             faviconUrl: membership.dealer.settings.faviconUrl,
             primaryColor: membership.dealer.settings.primaryColor,
@@ -74,7 +78,18 @@ sessionRouter.get("/me", async (c) => {
             updatedAt: membership.dealer.settings.updatedAt.toISOString(),
           }
         : null,
-      activeDomain: null,
+      activeDomain: activeDomain
+        ? {
+            id: activeDomain.id,
+            dealerId: activeDomain.dealerId,
+            host: activeDomain.host,
+            status: activeDomain.status,
+            isPrimary: activeDomain.isPrimary,
+            verifiedAt: activeDomain.verifiedAt?.toISOString() ?? null,
+            createdAt: activeDomain.createdAt.toISOString(),
+            updatedAt: activeDomain.updatedAt.toISOString(),
+          }
+        : null,
       tenantStatus,
       resolvedHost,
       entitlements,
@@ -92,13 +107,17 @@ sessionRouter.get("/me", async (c) => {
             dealerId: subscription.dealerId,
             planId: subscription.planId,
             status: subscription.status,
-            stripeCustomerId: subscription.stripeCustomerId,
-            stripeSubscriptionId: subscription.stripeSubscriptionId,
-            stripeCheckoutSessionId: subscription.stripeCheckoutSessionId,
-            stripePriceId: subscription.stripePriceId,
             complimentaryAccess: subscription.complimentaryAccess,
-            featureOverrides: subscription.featureOverrides ?? {},
-            billingNotes: subscription.billingNotes,
+            ...(canViewSensitiveDealerSettings
+              ? {
+                  stripeCustomerId: subscription.stripeCustomerId,
+                  stripeSubscriptionId: subscription.stripeSubscriptionId,
+                  stripeCheckoutSessionId: subscription.stripeCheckoutSessionId,
+                  stripePriceId: subscription.stripePriceId,
+                  featureOverrides: subscription.featureOverrides ?? {},
+                  billingNotes: subscription.billingNotes,
+                }
+              : {}),
             trialEndsAt: subscription.trialEndsAt?.toISOString() ?? null,
             currentPeriodEndsAt: subscription.currentPeriodEndsAt?.toISOString() ?? null,
             startsAt: subscription.startsAt.toISOString(),
@@ -111,7 +130,9 @@ sessionRouter.get("/me", async (c) => {
               name: subscription.plan.name,
               description: subscription.plan.description,
               monthlyPriceCents: subscription.plan.monthlyPriceCents,
-              stripePriceMonthlyId: subscription.plan.stripePriceMonthlyId,
+              ...(canViewSensitiveDealerSettings
+                ? { stripePriceMonthlyId: subscription.plan.stripePriceMonthlyId }
+                : {}),
               featureEntitlements: subscription.plan.featureEntitlements,
               isActive: subscription.plan.isActive,
               createdAt: subscription.plan.createdAt.toISOString(),

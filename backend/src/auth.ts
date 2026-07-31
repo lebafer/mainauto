@@ -1,21 +1,32 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { username, bearer } from "better-auth/plugins";
+import { username } from "better-auth/plugins";
 import { prisma } from "./prisma";
 import { env } from "./env";
-import { normalizeHost } from "./lib/dealers";
+import { parseExactTenantOrigin } from "./lib/trustedOrigins";
 
-function getCookieDomain(configuredDomain?: string): string | undefined {
+export function getCookieDomain(
+  backendUrl: string,
+  configuredDomain?: string
+): string | undefined {
   if (configuredDomain && configuredDomain.trim().length > 0) {
     return configuredDomain.startsWith(".") ? configuredDomain : `.${configuredDomain}`;
+  }
+
+  const hostname = new URL(backendUrl).hostname.toLowerCase();
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") {
+    return undefined;
+  }
+  if (hostname === "dev.vibecode.run" || hostname.endsWith(".dev.vibecode.run")) {
+    return ".dev.vibecode.run";
   }
   return undefined;
 }
 
-const cookieDomain = getCookieDomain(env.COOKIE_DOMAIN);
+const cookieDomain = getCookieDomain(env.BACKEND_URL, env.COOKIE_DOMAIN);
 const isProduction = env.NODE_ENV === "production";
 
-async function resolveTrustedOrigins(request?: Request): Promise<string[]> {
+function staticTrustedOrigins(): string[] {
   const trustedOriginsSet = new Set<string>([
     new URL(env.BACKEND_URL).origin,
     "http://localhost:8000",
@@ -29,21 +40,30 @@ async function resolveTrustedOrigins(request?: Request): Promise<string[]> {
     trustedOriginsSet.add(origin);
   }
 
-  const requestOrigin = request?.headers.get("origin")?.trim();
-  if (requestOrigin) {
-    trustedOriginsSet.add(requestOrigin);
-  }
-
-  const requestHost = normalizeHost(request?.headers.get("host"));
-  if (requestHost) {
-    const protocol =
-      request?.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ||
-      new URL(env.BACKEND_URL).protocol.replace(":", "") ||
-      "https";
-    trustedOriginsSet.add(`${protocol}://${requestHost}`);
-  }
-
   return Array.from(trustedOriginsSet);
+}
+
+async function resolveTrustedOrigins(request?: Request): Promise<string[]> {
+  const trusted = staticTrustedOrigins();
+  const candidate = parseExactTenantOrigin(request?.headers.get("origin"));
+  if (!candidate || trusted.includes(candidate.origin)) {
+    return trusted;
+  }
+
+  const verifiedDomain = await prisma.dealerDomain.findFirst({
+    where: {
+      host: candidate.host,
+      status: "active",
+      verifiedAt: { not: null },
+    },
+    select: { id: true },
+  });
+  if (verifiedDomain) trusted.push(candidate.origin);
+  return trusted;
+}
+
+if (isProduction && env.AUTH_DISABLE_CSRF_CHECK) {
+  throw new Error("AUTH_DISABLE_CSRF_CHECK must not be enabled in production");
 }
 
 export const auth = betterAuth({
@@ -69,12 +89,12 @@ export const auth = betterAuth({
       : {}),
     defaultCookieAttributes: {
       sameSite: cookieDomain ? "none" : "lax",
-      secure: isProduction,
+      secure: cookieDomain ? true : isProduction,
       httpOnly: true,
     },
     useSecureCookies: isProduction,
     disableCSRFCheck: env.AUTH_DISABLE_CSRF_CHECK,
   },
   trustedProxyHeaders: true,
-  plugins: [username(), bearer()],
+  plugins: [username()],
 });

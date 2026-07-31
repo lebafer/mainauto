@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, Navigate } from "react-router-dom";
 import { ArrowRight, CheckCircle2, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
-import { authClient, TOKEN_KEY, useAuth } from "@/lib/auth-client";
+import { authClient, useAuth } from "@/lib/auth-client";
 import { useToast } from "@/hooks/use-toast";
 import { CarOpsLogo } from "@/components/branding/CarOpsLogo";
 import { Badge } from "@/components/ui/badge";
@@ -78,7 +78,7 @@ export default function Signup() {
 
       const result = await authClient.signIn.username({
         username: form.username.trim(),
-        password: form.password.trim(),
+        password: form.password,
       });
 
       if (result.error) {
@@ -92,10 +92,6 @@ export default function Signup() {
         throw new Error(message);
       }
 
-      const token = (result.data as { token?: string } | null)?.token;
-      if (token) {
-        localStorage.setItem(TOKEN_KEY, token);
-      }
     },
     onSuccess: () => {
       window.location.replace("/dashboard");
@@ -103,7 +99,7 @@ export default function Signup() {
     onError: (error) => {
       toast({
         title: "Registrierung fehlgeschlagen",
-        description: error instanceof Error ? error.message : "Bitte pruefe deine Angaben.",
+        description: error instanceof Error ? error.message : "Bitte prüfe deine Angaben.",
         variant: "destructive",
       });
     },
@@ -182,7 +178,7 @@ export default function Signup() {
             <CardDescription>
               {selectedPlanData
                 ? `${selectedPlanData.name} mit ${selectedPlanData.trialDays} Tagen Testphase.`
-                : "Waehl einen Tarif und lege dein Autohaus an."}
+                : "Wähle einen Tarif und lege dein Autohaus an."}
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5">
@@ -225,9 +221,14 @@ export default function Signup() {
                 <Input
                   id="password"
                   type="password"
+                  minLength={12}
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Mindestens 12 Zeichen. Leerzeichen am Anfang oder Ende gehören zum Passwort.
+                </p>
               </div>
             </div>
 
@@ -241,7 +242,7 @@ export default function Signup() {
                 !form.ownerName.trim() ||
                 !form.email.trim() ||
                 !form.username.trim() ||
-                !form.password.trim()
+                form.password.length < 12
               }
               className="h-12"
             >
