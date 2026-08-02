@@ -13,6 +13,7 @@ import chromium from "@sparticuz/chromium";
 import { generateHandoverProtocolHtml } from "../lib/handoverProtocol";
 import { DEFAULT_DEALER_SETTINGS } from "../lib/dealers";
 import { getCurrentDealer, getCurrentDealerId, getCurrentEntitlements } from "../lib/request-context";
+import { ensureCustomerForManualParty } from "../lib/manualCustomer";
 import { getDocumentPriceSummary } from "../lib/documentPrices";
 import { getPurchaseContractPriceSummary } from "../lib/purchaseContractPrices";
 import {
@@ -440,22 +441,12 @@ async function resolveParty(
   manualParty?: Partial<DocumentParty>
 ): Promise<DocumentParty | null> {
   if (source === "manual") {
-    if (!manualParty?.firstName || !manualParty?.lastName) {
-      return null;
-    }
-
-    return {
-      firstName: manualParty.firstName,
-      lastName: manualParty.lastName,
-      company: manualParty.company ?? null,
-      address: manualParty.address ?? null,
-      city: manualParty.city ?? null,
-      zip: manualParty.zip ?? null,
-      country: manualParty.country ?? null,
-      email: manualParty.email ?? null,
-      phone: manualParty.phone ?? null,
-      taxId: manualParty.taxId ?? null,
-    };
+    const customer = await ensureCustomerForManualParty<Parameters<typeof normalizePartyFromCustomer>[0]>(
+      prisma.customer,
+      dealerId,
+      manualParty ?? {}
+    );
+    return customer ? normalizePartyFromCustomer(customer) : null;
   }
 
   if (!id) {
