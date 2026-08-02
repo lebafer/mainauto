@@ -72,6 +72,8 @@ services:
       STRIPE_STANDARD_PRICE_ID: ${STRIPE_STANDARD_PRICE_ID:-}
       STRIPE_PRO_PRICE_ID: ${STRIPE_PRO_PRICE_ID:-}
       BUN_INSTALL_CACHE_DIR: /tmp/bun-cache
+      HOME: /tmp
+      XDG_CONFIG_HOME: /tmp/.config
       XDG_CACHE_HOME: /tmp/.cache
     volumes:
       - ${UPLOADS_PATH:-./data/uploads}:/app/uploads
