@@ -39,6 +39,38 @@ export function escapeTemplateData<T>(value: T, key?: string): T {
   return value;
 }
 
+
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([\da-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&amp;", "&");
+}
+
+export function richTextToDocumentText(value: string | null | undefined): string {
+  if (!value) return "";
+
+  const decoded = decodeBasicHtmlEntities(value);
+  return decoded
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\s*\/\s*(?:p|div|li|h[1-6]|tr)\s*>/gi, "\n")
+    .replace(/<\s*(?:p|div|li|h[1-6]|tr)\b[^>]*>/gi, "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+export function richTextToDocumentHtml(value: string | null | undefined): string {
+  return escapeHtml(richTextToDocumentText(value)).replace(/\n/g, "<br>");
+}
+
 export function sanitizeGeneratedHtml(html: string): string {
   const blockedElements =
     /<(script|iframe|object|embed|link|meta|base|form|input|button|textarea|select|video|audio|source)\b[^>]*>[\s\S]*?<\/\1\s*>|<(script|iframe|object|embed|link|meta|base|form|input|button|textarea|select|video|audio|source)\b[^>]*\/?>/gi;

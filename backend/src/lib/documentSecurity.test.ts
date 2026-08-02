@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { escapeTemplateData, sanitizeGeneratedHtml } from "./documentSecurity";
+import { escapeTemplateData, richTextToDocumentText, sanitizeGeneratedHtml } from "./documentSecurity";
 
 describe("sanitizeGeneratedHtml", () => {
   test("removes active content and remote resource loads", () => {
@@ -28,5 +28,16 @@ describe("sanitizeGeneratedHtml", () => {
     expect(escaped.name).not.toContain("<img");
     expect(JSON.parse(escaped.features)[0]).not.toContain("<style>");
     expect(escaped.name).toContain("&lt;form");
+  });
+});
+
+
+describe("plain text for generated documents", () => {
+  test("strips raw and escaped rich-text tags before template insertion", () => {
+    const text = richTextToDocumentText("&lt;p&gt;Kaufpreis wird überwiesen&lt;/p&gt;<p>Unfallfrei</p><br>Danke");
+
+    expect(text).toBe("Kaufpreis wird überwiesen\nUnfallfrei\nDanke");
+    expect(text).not.toContain("<p>");
+    expect(text).not.toContain("&lt;p&gt;");
   });
 });

@@ -17,6 +17,8 @@ import { getDocumentPriceSummary } from "../lib/documentPrices";
 import { getPurchaseContractPriceSummary } from "../lib/purchaseContractPrices";
 import {
   escapeTemplateData,
+  richTextToDocumentHtml,
+  richTextToDocumentText,
   sanitizeGeneratedHtml,
 } from "../lib/documentSecurity";
 
@@ -489,7 +491,7 @@ function plainTextFromHtml(value: string | null | undefined): string {
     return "";
   }
 
-  return value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return richTextToDocumentText(value);
 }
 
 /**
@@ -975,7 +977,7 @@ function generateContract(
 
   const besondereInfoHtml = vehicle.notes
     ? `<div class="features-block">
-        <div class="features-text">${vehicle.notes}</div>
+        <div class="features-text">${richTextToDocumentHtml(vehicle.notes)}</div>
       </div>`
     : "";
 
@@ -2046,7 +2048,7 @@ function generateVermittlungsvertrag(
   const besondereInfoHtml = vehicle.notes
     ? `<div class="features-block">
         <p class="features-title">Besondere Informationen</p>
-        <div class="features-text">${vehicle.notes}</div>
+        <div class="features-text">${richTextToDocumentHtml(vehicle.notes)}</div>
       </div>`
     : "";
 
