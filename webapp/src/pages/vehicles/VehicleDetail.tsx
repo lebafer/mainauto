@@ -31,6 +31,7 @@ import {
   formatMileage,
   calculateGrossPrice,
   calculateTaxAmount,
+  calculateVehicleStockDays,
   convertSalePriceInput,
   getDefaultSalePriceMode,
   parseFeatures,
@@ -571,6 +572,8 @@ export default function VehicleDetail() {
   const totalInvested = vehicle.purchasePrice + totalAdditionalCosts;
   const margin = getVehicleMargin(vehicle);
   const costBreakdown = getVehicleCostBreakdown(vehicle);
+  const completedSale = vehicle.sales.find((sale) => sale.status === "completed");
+  const stockDays = calculateVehicleStockDays(vehicle, completedSale?.saleDate ?? new Date());
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -609,6 +612,12 @@ export default function VehicleDetail() {
                   {vehicle.vehicleNumber}
                 </span>
               ) : null}
+              <span
+                className="ml-2 inline-flex rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground"
+                title={completedSale ? "Standtage bis Verkauf" : "Aktuelle Standtage im Bestand"}
+              >
+                {stockDays} Standtage
+              </span>
             </p>
           </div>
         </div>
