@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   calculateGrossPrice,
+  calculateVehicleStockDays,
   calculateNetPrice,
   convertSalePriceInput,
   formatDateOnly,
@@ -81,6 +82,21 @@ describe("date-only vehicle fields", () => {
   test("returns an empty input value for missing or invalid dates", () => {
     expect(toDateInputValue(null)).toBe("");
     expect(toDateInputValue("kein-datum")).toBe("");
+  });
+
+  test("calculates vehicle stock days from purchase date with created-at fallback", () => {
+    expect(
+      calculateVehicleStockDays(
+        { purchaseDate: "2026-08-01", createdAt: "2026-07-01" },
+        "2026-08-04"
+      )
+    ).toBe(3);
+    expect(
+      calculateVehicleStockDays(
+        { purchaseDate: null, createdAt: "2026-07-01" },
+        "2026-07-11"
+      )
+    ).toBe(10);
   });
 });
 

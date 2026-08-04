@@ -1081,6 +1081,7 @@ vehiclesRouter.post(
       fuelType: data.fuelType || null,
       transmission: data.transmission || null,
       purchasePrice: roundRequiredMoney(data.purchasePrice),
+      purchaseDate: data.purchaseDate ? new Date(data.purchaseDate) : new Date(),
       sellingPrice: isPrivateVehicle ? 0 : roundRequiredMoney(data.sellingPrice),
       taxRate: isPrivateVehicle ? 19 : data.taxRate,
       marginTaxed: isPrivateVehicle ? false : data.marginTaxed,
@@ -1198,6 +1199,7 @@ vehiclesRouter.put(
       fuelType: data.fuelType !== undefined ? (data.fuelType || null) : undefined,
       transmission: data.transmission !== undefined ? (data.transmission || null) : undefined,
       purchasePrice: data.purchasePrice !== undefined ? roundMoney(data.purchasePrice) : undefined,
+      purchaseDate: data.purchaseDate !== undefined ? (data.purchaseDate ? new Date(data.purchaseDate) : null) : undefined,
       sellingPrice: isPrivateVehicle
         ? 0
         : data.sellingPrice !== undefined

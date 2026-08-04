@@ -322,6 +322,7 @@ export const VehicleCreateSchema = z.object({
   power: z.union([z.number(), z.string()]).optional().transform(v => v !== undefined && v !== "" ? Number(v) : undefined),
   features: z.string().optional(), // JSON string of features array
   purchasePrice: MoneyAmountSchema,
+  purchaseDate: EmptyStringToUndefinedOptionalIsoDateSchema,
   sellingPrice: MoneyAmountSchema,
   taxRate: z.number().min(0).max(100).default(19.0),
   marginTaxed: z.boolean().default(false),
@@ -387,6 +388,7 @@ export const VehicleUpdateSchema = z.object({
   power: z.union([z.number(), z.string()]).optional().transform(v => v !== undefined && v !== "" ? Number(v) : undefined),
   features: z.string().optional(),
   purchasePrice: MoneyAmountSchema.optional(),
+  purchaseDate: EmptyStringToUndefinedOptionalIsoDateSchema,
   sellingPrice: MoneyAmountSchema.optional(),
   taxRate: z.number().min(0).max(100).optional(),
   marginTaxed: z.boolean().optional(),
@@ -1033,6 +1035,7 @@ export const FinancesSaleRowSchema = z.object({
   marginTaxAmount: z.number().nullable(),
   profit: z.number().nullable(),
   customerName: z.string(),
+  stockDays: z.number().nullable(),
 });
 
 export const FinancesDataSchema = z.object({
@@ -1057,6 +1060,17 @@ export const FinancesDataSchema = z.object({
   lossSales: z.number(),
   vehiclesInStock: z.number(),
   stockValue: z.number(),
+  averageStockDays: z.number(),
+  maxStockDays: z.number(),
+  longestStockVehicle: z
+    .object({
+      vehicleNumber: z.string(),
+      brand: z.string(),
+      model: z.string(),
+      stockDays: z.number(),
+    })
+    .nullable(),
+  averageSoldStockDays: z.number(),
   bestSale: z
     .object({
       vehicleNumber: z.string(),

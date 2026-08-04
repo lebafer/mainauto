@@ -10,6 +10,7 @@ import {
   formatPrice,
   formatMileage,
   calculateGrossPrice,
+  calculateVehicleStockDays,
   STATUS_CONFIG,
   getFileUrl,
   toDateInputValue,
@@ -137,6 +138,7 @@ export default function VehicleList() {
             <TableBody>
               {vehicles.map((vehicle) => {
                 const primaryImage = getPrimaryImage(vehicle);
+                const stockDays = calculateVehicleStockDays(vehicle);
 
                 return (
                   <TableRow
@@ -187,7 +189,7 @@ export default function VehicleList() {
                             {vehicle.firstRegistration
                               ? toDateInputValue(vehicle.firstRegistration).slice(0, 4)
                               : vehicle.year ?? "Baujahr unbekannt"} &middot;{" "}
-                            {formatMileage(vehicle.mileage)}
+                            {formatMileage(vehicle.mileage)} · {stockDays} Standtage
                           </p>
                         </div>
                       </div>

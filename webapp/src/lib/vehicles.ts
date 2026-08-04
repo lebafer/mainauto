@@ -89,6 +89,7 @@ export interface Vehicle {
   power: number;
   features: string;
   purchasePrice: number;
+  purchaseDate?: string | null;
   sellingPrice: number;
   taxRate: number;
   marginTaxed: boolean;
@@ -298,6 +299,20 @@ export function getVehicleMargin(
   >
 ): number {
   return vehicle.sellingPrice - vehicle.purchasePrice - getVehicleAdditionalCostsTotal(vehicle);
+}
+
+
+export function calculateVehicleStockDays(
+  vehicle: Pick<Vehicle, "purchaseDate" | "createdAt">,
+  endDate: Date | string = new Date()
+): number {
+  const startValue = vehicle.purchaseDate ?? vehicle.createdAt;
+  const start = new Date(startValue);
+  const end = new Date(endDate);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
+  const startDay = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const endDay = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+  return Math.max(0, Math.floor((endDay - startDay) / (24 * 60 * 60 * 1000)));
 }
 
 // Format price as EUR

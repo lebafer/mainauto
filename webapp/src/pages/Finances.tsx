@@ -9,6 +9,7 @@ import {
   Star,
   Loader2,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -408,9 +409,49 @@ export default function Finances() {
           }
         />
 
-        {/* 5. Ø Marge */}
+        {/* 5. Ø Standtage Bestand */}
         <KpiCard
           index={4}
+          icon={Clock}
+          iconBg="bg-indigo-500/10"
+          iconColor="text-indigo-500"
+          gradient="from-indigo-500/5 via-transparent to-transparent"
+          label="Ø Standtage Bestand"
+          value={
+            <span>
+              {finances.averageStockDays}{" "}
+              <span className="text-base font-normal text-muted-foreground">Tg.</span>
+            </span>
+          }
+          subtext={
+            finances.longestStockVehicle ? (
+              <span>
+                Längstes: {finances.longestStockVehicle.brand} {finances.longestStockVehicle.model} · {finances.maxStockDays} Tg.
+              </span>
+            ) : undefined
+          }
+        />
+
+        {/* 6. Ø Standtage Verkäufe */}
+        <KpiCard
+          index={5}
+          icon={Clock}
+          iconBg="bg-violet-500/10"
+          iconColor="text-violet-500"
+          gradient="from-violet-500/5 via-transparent to-transparent"
+          label="Ø Standtage verkauft"
+          value={
+            <span>
+              {finances.averageSoldStockDays}{" "}
+              <span className="text-base font-normal text-muted-foreground">Tg.</span>
+            </span>
+          }
+          subtext="Durchschnitt vor Verkauf im Zeitraum"
+        />
+
+        {/* 7. Ø Marge */}
+        <KpiCard
+          index={6}
           icon={BarChart2}
           iconBg="bg-sky-500/10"
           iconColor="text-sky-500"
@@ -432,9 +473,9 @@ export default function Finances() {
           subtext="Durchschnitt pro Verkauf"
         />
 
-        {/* 6. Bestes Geschäft */}
+        {/* 8. Bestes Geschäft */}
         <KpiCard
-          index={5}
+          index={7}
           icon={Star}
           iconBg="bg-rose-500/10"
           iconColor="text-rose-500"
@@ -499,6 +540,9 @@ export default function Finances() {
                         Kunde
                       </th>
                       <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
+                        Standtage
+                      </th>
+                      <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
                         Einkauf
                       </th>
                       <th className="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-muted-foreground whitespace-nowrap">
@@ -544,6 +588,9 @@ export default function Finances() {
                         </td>
                         <td className="px-5 py-3.5 text-muted-foreground whitespace-nowrap">
                           {sale.customerName}
+                        </td>
+                        <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
+                          {sale.stockDays !== null ? `${sale.stockDays} Tg.` : "—"}
                         </td>
                         <td className="px-5 py-3.5 text-right tabular-nums whitespace-nowrap">
                           {accountingReady ? formatPrice(sale.purchasePrice!) : "—"}

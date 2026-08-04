@@ -1642,6 +1642,12 @@ export default function VehicleDetail() {
                 <span className="text-muted-foreground">Einkauf</span>
                 <span>{formatPrice(vehicle.purchasePrice)}</span>
               </div>
+              {vehicle.purchaseDate ? (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Ankaufdatum</span>
+                  <span>{formatDateOnly(vehicle.purchaseDate)}</span>
+                </div>
+              ) : null}
               {exportAdditionalCosts > 0 ? (
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Exportkosten</span>

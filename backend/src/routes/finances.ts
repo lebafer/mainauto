@@ -8,6 +8,7 @@ import {
 import { fromCents, toCents } from "../lib/money";
 import { FinancesDateRangeSchema } from "../types";
 import { getBerlinDateRange } from "../lib/financeDates";
+import { calculateStockDays } from "../lib/stockDays";
 
 const financesRouter = new Hono();
 
@@ -120,6 +121,8 @@ financesRouter.get("/", async (c) => {
           vehicleNumber: true,
           brand: true,
           model: true,
+          purchaseDate: true,
+          createdAt: true,
         },
       },
       customer: true,
@@ -132,7 +135,14 @@ financesRouter.get("/", async (c) => {
     where: {
       dealerId,
       ...(privateVehiclesEnabled ? { isPrivate: false } : {}),
-      ...(createdAtFilter ? { createdAt: createdAtFilter } : {}),
+      ...(createdAtFilter
+        ? {
+            OR: [
+              { purchaseDate: createdAtFilter },
+              { purchaseDate: null, createdAt: createdAtFilter },
+            ],
+          }
+        : {}),
     },
     include: { costs: true },
   });
@@ -144,7 +154,14 @@ financesRouter.get("/", async (c) => {
       ...(privateVehiclesEnabled ? { isPrivate: false } : {}),
       status: { not: "sold" },
     },
-    select: { purchasePrice: true },
+    select: {
+      vehicleNumber: true,
+      brand: true,
+      model: true,
+      purchasePrice: true,
+      purchaseDate: true,
+      createdAt: true,
+    },
   });
 
   // --- Compute purchases aggregates ---
@@ -194,6 +211,7 @@ financesRouter.get("/", async (c) => {
     marginTaxAmount: number | null;
     profit: number | null;
     customerName: string;
+    stockDays: number | null;
   };
 
   const saleRows: SaleRow[] = salesInPeriod.map((sale) => {
@@ -255,6 +273,10 @@ financesRouter.get("/", async (c) => {
       marginTaxAmount,
       profit,
       customerName,
+      stockDays: calculateStockDays(
+        sale.vehicle.purchaseDate ?? sale.vehicle.createdAt,
+        sale.saleDate
+      ),
     };
   });
 
@@ -321,6 +343,28 @@ financesRouter.get("/", async (c) => {
   const stockValue = fromCents(
     vehiclesInStock.reduce((sum, v) => sum + amountCents(v.purchasePrice), 0)
   );
+  const stockAgeRows = vehiclesInStock.map((vehicle) => ({
+    vehicleNumber: vehicle.vehicleNumber,
+    brand: vehicle.brand,
+    model: vehicle.model,
+    stockDays: calculateStockDays(vehicle.purchaseDate ?? vehicle.createdAt) ?? 0,
+  }));
+  const averageStockDays =
+    stockAgeRows.length > 0
+      ? Math.round(stockAgeRows.reduce((sum, v) => sum + v.stockDays, 0) / stockAgeRows.length)
+      : 0;
+  const longestStockVehicle =
+    stockAgeRows.length > 0
+      ? stockAgeRows.reduce((prev, curr) => (curr.stockDays > prev.stockDays ? curr : prev))
+      : null;
+  const maxStockDays = longestStockVehicle?.stockDays ?? 0;
+  const soldStockDays = saleRows
+    .map((sale) => sale.stockDays)
+    .filter((days): days is number => days !== null);
+  const averageSoldStockDays =
+    soldStockDays.length > 0
+      ? Math.round(soldStockDays.reduce((sum, days) => sum + days, 0) / soldStockDays.length)
+      : 0;
 
   return c.json({
     data: {
@@ -345,6 +389,10 @@ financesRouter.get("/", async (c) => {
       lossSales,
       vehiclesInStock: vehiclesInStockCount,
       stockValue,
+      averageStockDays,
+      maxStockDays,
+      longestStockVehicle,
+      averageSoldStockDays,
       bestSale,
       sales: saleRows,
     },

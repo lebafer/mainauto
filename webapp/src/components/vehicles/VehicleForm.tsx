@@ -12,6 +12,7 @@ import {
   type VehicleBriefDocumentType,
   type VehicleBriefExtractFields,
 } from "../../../../backend/src/types";
+import { toLocalDateInputValue } from "@/lib/dates";
 import {
   type Vehicle,
   FUEL_TYPES,
@@ -233,6 +234,7 @@ const vehicleFormSchema = z.object({
   power: z.coerce.number().min(0).optional(),
   features: z.string().optional().default(""),
   purchasePrice: requiredNonNegativeNumber("Einkaufspreis"),
+  purchaseDate: z.string().optional().default(""),
   sellingPrice: requiredNonNegativeNumber("Verkaufspreis"),
   taxRate: z.coerce.number().min(0).max(100).default(19),
   marginTaxed: z.boolean().default(false),
@@ -389,6 +391,11 @@ export function VehicleForm({
       ? parseFeatures(vehicle.features).join(", ")
       : defaultValues?.features ?? "",
     purchasePrice: vehicle?.purchasePrice ?? defaultValues?.purchasePrice,
+    purchaseDate: vehicle?.purchaseDate
+      ? toDateInputValue(vehicle.purchaseDate)
+      : defaultValues?.purchaseDate
+        ? toDateInputValue(defaultValues.purchaseDate)
+        : toLocalDateInputValue(new Date()),
     sellingPrice:
       vehicle?.sellingPrice ??
       defaultValues?.sellingPrice ??
@@ -899,6 +906,7 @@ export function VehicleForm({
       transmission: values.transmission || undefined,
       notes: values.notes || undefined,
       internalNotes: values.internalNotes || undefined,
+      purchaseDate: values.purchaseDate,
       // Supplier relation
       supplierId: values.supplierId || null,
       // History & Maintenance
@@ -2185,6 +2193,21 @@ export function VehicleForm({
                         onChange={(e) => handlePurchaseNetChange(e.target.value)}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="purchaseDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ankaufdatum</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} value={field.value ?? ""} />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">Datum, an dem das Fahrzeug angekauft wurde.</p>
                     <FormMessage />
                   </FormItem>
                 )}

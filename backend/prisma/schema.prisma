@@ -343,6 +343,7 @@ model Vehicle {
   power                 String?
   features              String?
   purchasePrice         Float
+  purchaseDate          DateTime?
   sellingPrice          Float
   taxRate               Float                    @default(19.0)
   marginTaxed           Boolean                  @default(false)
