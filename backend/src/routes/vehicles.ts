@@ -444,6 +444,9 @@ function normalizeExtractedFields(raw: unknown, explicitDocumentType?: unknown):
 function modelSupportsPdfInput(model: string): boolean {
   const normalized = model.trim().toLowerCase();
   return (
+    normalized.startsWith("gpt-5") ||
+    normalized === "gpt-4.1" ||
+    normalized.startsWith("gpt-4.1-") ||
     normalized === "gpt-4o" ||
     normalized.startsWith("gpt-4o-") ||
     normalized === "gpt-4o-mini" ||
