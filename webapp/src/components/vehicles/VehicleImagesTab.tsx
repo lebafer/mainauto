@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Upload, X, ImageIcon, Loader2, Star } from "lucide-react";
 import { type VehicleImage, getFileUrl } from "@/lib/vehicles";
+import { optimizeImageForVehicleUpload } from "@/lib/imageCompression";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,8 +38,9 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
+      const optimizedFile = await optimizeImageForVehicleUpload(file).catch(() => file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", optimizedFile);
       const res = await fetch(`${baseUrl}/api/vehicles/${vehicleId}/images`, {
         method: "POST",
         body: formData,
@@ -150,6 +152,7 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
             <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
               Bilder hierher ziehen oder klicken zum Hochladen
+              (werden automatisch verkleinert)
             </p>
           </>
         )}
