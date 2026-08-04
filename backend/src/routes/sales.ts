@@ -125,7 +125,8 @@ salesRouter.post(
           const accounting = buildSaleAccountingSnapshot(
             data.salePrice,
             data.taxRate,
-            vehicle
+            vehicle,
+            data.priceMode
           );
           const createdSale = await tx.sale.create({
             data: {

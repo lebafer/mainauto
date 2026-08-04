@@ -33,6 +33,20 @@ describe("buildSaleAccountingSnapshot", () => {
     });
   });
 
+
+  test("accepts a regular-tax net input and freezes the resulting gross sale", () => {
+    const snapshot = buildSaleAccountingSnapshot(20_000, 19, {
+      marginTaxed: false,
+      purchasePrice: 10_000,
+      costs: [],
+    }, "net");
+
+    expect(snapshot.priceModeSnapshot).toBe("net");
+    expect(snapshot.grossCents).toBe(2_380_000);
+    expect(snapshot.netCents).toBe(2_000_000);
+    expect(snapshot.taxCents).toBe(380_000);
+  });
+
   test("internally removes tax from a positive margin without disclosing it", () => {
     const snapshot = buildSaleAccountingSnapshot(15_000, 19, {
       marginTaxed: true,

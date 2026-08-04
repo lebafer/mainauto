@@ -386,6 +386,46 @@ export function calculateNetPrice(
   return grossPrice / (1 + taxRate / 100);
 }
 
+
+export type SalePriceMode = "gross" | "net";
+
+export function getDefaultSalePriceMode(
+  customer: { customerType?: "privat" | "gewerblich" | null } | null | undefined,
+  marginTaxed: boolean
+): SalePriceMode {
+  if (!marginTaxed && customer?.customerType === "gewerblich") {
+    return "net";
+  }
+  return "gross";
+}
+
+export function getSaleAmountForMode(
+  amount: number,
+  priceMode: SalePriceMode,
+  taxRate: number,
+  marginTaxed: boolean
+): number {
+  if (priceMode === "net" && !marginTaxed) {
+    return calculateGrossPrice(amount, taxRate, false);
+  }
+  return amount;
+}
+
+export function convertSalePriceInput(
+  amount: number,
+  fromMode: SalePriceMode,
+  toMode: SalePriceMode,
+  taxRate: number,
+  marginTaxed: boolean
+): number {
+  if (fromMode === toMode || marginTaxed) {
+    return amount;
+  }
+  return toMode === "net"
+    ? calculateNetPrice(amount, taxRate, false)
+    : calculateGrossPrice(amount, taxRate, false);
+}
+
 export function getResolvedSaleAmounts(sale: {
   accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
   grossSalePrice: number | null;

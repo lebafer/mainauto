@@ -61,6 +61,8 @@ import { useAuth } from "@/lib/auth-client";
 import { ApiError } from "@/lib/api";
 import {
   calculateGrossPrice,
+  convertSalePriceInput,
+  getDefaultSalePriceMode,
   getResolvedSaleAmounts,
   parseTaxRateInput,
 } from "@/lib/vehicles";
@@ -89,6 +91,7 @@ interface Customer {
   firstName: string;
   lastName: string;
   company?: string;
+  customerType?: "privat" | "gewerblich" | null;
 }
 
 interface Sale {
@@ -163,6 +166,7 @@ function CreateSaleDialog() {
   const [vehicleId, setVehicleId] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [salePrice, setSalePrice] = useState("");
+  const [priceMode, setPriceMode] = useState<"gross" | "net">("gross");
   const [taxRate, setTaxRate] = useState("");
   const [saleDate, setSaleDate] = useState(toLocalDateInputValue);
   const [notes, setNotes] = useState("");
@@ -209,24 +213,73 @@ function CreateSaleDialog() {
     setVehicleId("");
     setCustomerId("");
     setSalePrice("");
+    setPriceMode("gross");
     setTaxRate("");
     setSaleDate(toLocalDateInputValue());
     setNotes("");
+  };
+
+  const selectedVehicle = availableVehicles.find((vehicle) => vehicle.id === vehicleId);
+  const selectedCustomer = customers?.find((customer) => customer.id === customerId);
+
+  const applyDefaultSalePrice = (vehicle: Vehicle, nextMode: "gross" | "net") => {
+    const defaultPrice =
+      nextMode === "net" && !vehicle.marginTaxed
+        ? vehicle.sellingPrice
+        : calculateGrossPrice(vehicle.sellingPrice, vehicle.taxRate, vehicle.marginTaxed);
+    setSalePrice(defaultPrice.toFixed(2));
   };
 
   const handleVehicleChange = (id: string) => {
     setVehicleId(id);
     const vehicle = availableVehicles.find((v) => v.id === id);
     if (vehicle) {
-      setSalePrice(
-        calculateGrossPrice(
-          vehicle.sellingPrice,
-          vehicle.taxRate,
-          vehicle.marginTaxed
-        ).toFixed(2)
-      );
+      const nextMode = getDefaultSalePriceMode(selectedCustomer, vehicle.marginTaxed);
+      setPriceMode(nextMode);
+      applyDefaultSalePrice(vehicle, nextMode);
       setTaxRate(String(vehicle.taxRate));
     }
+  };
+
+  const handleCustomerChange = (id: string) => {
+    setCustomerId(id);
+    const nextCustomer = customers?.find((customer) => customer.id === id);
+    const nextMode = getDefaultSalePriceMode(nextCustomer, selectedVehicle?.marginTaxed ?? false);
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount) && selectedVehicle) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            parseTaxRateInput(taxRate, selectedVehicle.taxRate),
+            selectedVehicle.marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
+  };
+
+  const handlePriceModeChange = (nextMode: "gross" | "net") => {
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount) && selectedVehicle) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            parseTaxRateInput(taxRate, selectedVehicle.taxRate),
+            selectedVehicle.marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -237,7 +290,7 @@ function CreateSaleDialog() {
       vehicleId,
       customerId,
       salePrice: parseFloat(salePrice),
-      priceMode: "gross",
+      priceMode,
       taxRate: parseTaxRateInput(taxRate),
       saleDate: saleDate || undefined,
       notes: notes || undefined,
@@ -286,7 +339,7 @@ function CreateSaleDialog() {
           {/* Customer select */}
           <div className="space-y-2">
             <Label htmlFor="customer">Kunde</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
+            <Select value={customerId} onValueChange={handleCustomerChange}>
               <SelectTrigger id="customer">
                 <SelectValue placeholder="Kunde wählen..." />
               </SelectTrigger>
@@ -310,7 +363,22 @@ function CreateSaleDialog() {
           {/* Price and tax */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="salePrice">Endpreis (Brutto)</Label>
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="salePrice">Verkaufspreis</Label>
+                <Select
+                  value={priceMode}
+                  onValueChange={(value) => handlePriceModeChange(value as "gross" | "net")}
+                  disabled={selectedVehicle?.marginTaxed}
+                >
+                  <SelectTrigger className="h-8 w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gross">Brutto</SelectItem>
+                    <SelectItem value="net">Netto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Input
                 id="salePrice"
                 type="number"
@@ -323,7 +391,14 @@ function CreateSaleDialog() {
                 required
               />
               <p className="text-xs text-muted-foreground">
-                Betrag, den der Kunde tatsächlich bezahlt.
+                {selectedVehicle?.marginTaxed
+                  ? "Differenzbesteuerung: Endpreis, keine offene MwSt."
+                  : priceMode === "net"
+                    ? "Netto wird beim Speichern mit MwSt. als Brutto-Verkauf verbucht."
+                    : "Brutto/Endpreis, den der Kunde bezahlt."}
+                {selectedCustomer?.customerType === "gewerblich" && !selectedVehicle?.marginTaxed
+                  ? " Gewerbliche Kunden werden standardmäßig netto erfasst."
+                  : ""}
               </p>
             </div>
             <div className="space-y-2">

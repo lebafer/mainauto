@@ -3,8 +3,11 @@ import { describe, expect, test } from "bun:test";
 import {
   calculateGrossPrice,
   calculateNetPrice,
+  convertSalePriceInput,
   formatDateOnly,
+  getDefaultSalePriceMode,
   getResolvedSaleAmounts,
+  getSaleAmountForMode,
   parseTaxRateInput,
   richTextToPlainText,
   toDateInputValue,
@@ -25,6 +28,22 @@ describe("vehicle price semantics", () => {
 
   test("preserves a valid zero-percent tax rate", () => {
     expect(parseTaxRateInput("0")).toBe(0);
+  });
+
+  test("defaults business customers to net price mode for regular-tax vehicles", () => {
+    expect(getDefaultSalePriceMode({ customerType: "gewerblich" }, false)).toBe("net");
+    expect(getDefaultSalePriceMode({ customerType: "privat" }, false)).toBe("gross");
+    expect(getDefaultSalePriceMode({ customerType: "gewerblich" }, true)).toBe("gross");
+  });
+
+  test("converts a net sale dialog amount to the gross accounting amount", () => {
+    expect(getSaleAmountForMode(10_000, "net", 19, false)).toBe(11_900);
+    expect(getSaleAmountForMode(11_900, "gross", 19, false)).toBe(11_900);
+  });
+
+  test("preserves the commercial value when toggling gross and net input modes", () => {
+    expect(convertSalePriceInput(11_900, "gross", "net", 19, false)).toBe(10_000);
+    expect(convertSalePriceInput(10_000, "net", "gross", 19, false)).toBe(11_900);
   });
 });
 

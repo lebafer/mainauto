@@ -24,11 +24,16 @@ function optionalMoneyCents(value: number | null | undefined): number {
 }
 
 export function buildSaleAccountingSnapshot(
-  grossAmount: number,
+  amount: number,
   taxRate: number,
-  vehicle: SaleVehicleAccountingInput
+  vehicle: SaleVehicleAccountingInput,
+  priceMode: "gross" | "net" = "gross"
 ) {
-  const amounts = grossToTaxedMoney(grossAmount, taxRate, vehicle.marginTaxed);
+  const effectivePriceMode = vehicle.marginTaxed ? "gross" : priceMode;
+  const amounts =
+    effectivePriceMode === "net"
+      ? netToTaxedMoney(amount, taxRate, false)
+      : grossToTaxedMoney(amount, taxRate, vehicle.marginTaxed);
   const purchasePriceCents = optionalMoneyCents(vehicle.purchasePrice);
   const marginTaxCents = vehicle.marginTaxed
     ? calculateMarginTaxCents(amounts.grossCents, purchasePriceCents, taxRate)
@@ -59,7 +64,7 @@ export function buildSaleAccountingSnapshot(
 
   return {
     accountingStatus: "verified" as const,
-    priceModeSnapshot: "gross" as const,
+    priceModeSnapshot: effectivePriceMode,
     marginTaxedSnapshot: vehicle.marginTaxed,
     grossCents: amounts.grossCents,
     netCents: amounts.grossCents - amounts.taxCents - marginTaxCents,

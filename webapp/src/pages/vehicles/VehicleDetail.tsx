@@ -31,6 +31,8 @@ import {
   formatMileage,
   calculateGrossPrice,
   calculateTaxAmount,
+  convertSalePriceInput,
+  getDefaultSalePriceMode,
   parseFeatures,
   PRIVATE_VEHICLE_BADGE_CLASSNAME,
   STATUS_CONFIG,
@@ -2143,6 +2145,7 @@ function SellDialog({
 
   const [customerId, setCustomerId] = useState("");
   const [salePrice, setSalePrice] = useState(gross.toFixed(2));
+  const [priceMode, setPriceMode] = useState<"gross" | "net">("gross");
   const [saleDate, setSaleDate] = useState(toLocalDateInputValue);
   const [notes, setNotes] = useState("");
   const [exportEnabled, setExportEnabled] = useState(vehicle.exportEnabled ?? false);
@@ -2171,6 +2174,49 @@ function SellDialog({
     queryFn: () => api.get<Customer[]>("/api/customers"),
     enabled: open,
   });
+
+  const selectedCustomer = customers?.find((customer) => customer.id === customerId);
+
+  const handleCustomerChange = (id: string) => {
+    setCustomerId(id);
+    const nextCustomer = customers?.find((customer) => customer.id === id);
+    const nextMode = getDefaultSalePriceMode(nextCustomer, vehicle.marginTaxed);
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount)) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            vehicle.taxRate,
+            vehicle.marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
+  };
+
+  const handlePriceModeChange = (nextMode: "gross" | "net") => {
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount)) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            vehicle.taxRate,
+            vehicle.marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
+  };
 
   const createCustomerMutation = useMutation({
     mutationFn: () =>
@@ -2219,6 +2265,7 @@ function SellDialog({
         vehicleId: vehicle.id,
         customerId,
         salePrice: parseFloat(salePrice),
+        priceMode,
         taxRate: vehicle.taxRate,
         saleDate: new Date(saleDate).toISOString(),
         notes: notes || undefined,
@@ -2250,7 +2297,7 @@ function SellDialog({
           {/* Customer */}
           <div className="space-y-2">
             <Label>Käufer</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
+            <Select value={customerId} onValueChange={handleCustomerChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Kunden auswählen..." />
               </SelectTrigger>
@@ -2334,13 +2381,36 @@ function SellDialog({
 
           {/* Sale price */}
           <div className="space-y-2">
-            <Label>Verkaufspreis (Brutto in €)</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Verkaufspreis in €</Label>
+              <Select
+                value={priceMode}
+                onValueChange={(value) => handlePriceModeChange(value as "gross" | "net")}
+                disabled={vehicle.marginTaxed}
+              >
+                <SelectTrigger className="h-8 w-28">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gross">Brutto</SelectItem>
+                  <SelectItem value="net">Netto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <Input
               type="number"
               step="0.01"
               value={salePrice}
               onChange={(e) => setSalePrice(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              {vehicle.marginTaxed
+                ? "Differenzbesteuerung: Endpreis, keine offene MwSt."
+                : priceMode === "net"
+                  ? "Netto wird beim Speichern mit MwSt. als Brutto-Verkauf verbucht."
+                  : "Brutto/Endpreis, den der Kunde bezahlt."}
+              {selectedCustomer?.customerType === "gewerblich" && !vehicle.marginTaxed ? " Gewerbliche Kunden werden standardmäßig netto erfasst." : ""}
+            </p>
           </div>
 
           {/* Sale date */}

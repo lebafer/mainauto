@@ -564,9 +564,9 @@ export type CustomerUpdate = z.infer<typeof CustomerUpdateSchema>;
 export const SaleCreateSchema = z.object({
   vehicleId: z.string().min(1, "Vehicle ID is required"),
   customerId: z.string().min(1, "Customer ID is required"),
-  // Canonical contract: the amount paid by the customer (gross/final price).
+  // Amount entered by the user. Interpreted via priceMode.
   salePrice: MoneyAmountSchema,
-  priceMode: z.literal("gross").default("gross"),
+  priceMode: z.enum(["gross", "net"]).default("gross"),
   taxRate: z.number().min(0).max(100).default(19.0),
   saleDate: OptionalIsoDateSchema.optional(),
   notes: LimitedTextSchema(10_000).optional(),
