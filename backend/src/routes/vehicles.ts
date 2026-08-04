@@ -52,7 +52,6 @@ const vehiclesRouter = new Hono();
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const BRIEF_MAX_FILES = 4;
 const BRIEF_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024;
-const OPENAI_DEFAULT_EXTRACTION_MODEL = "gpt-4o";
 const OPENAI_PDF_FALLBACK_MODEL = "gpt-4o";
 const BRIEF_ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -455,7 +454,7 @@ function modelSupportsPdfInput(model: string): boolean {
 }
 
 function resolveExtractionModel(files: File[]): string {
-  const preferredModel = env.OPENAI_EXTRACTION_MODEL || env.OPENAI_MODEL || OPENAI_DEFAULT_EXTRACTION_MODEL;
+  const preferredModel = env.OPENAI_EXTRACTION_MODEL || env.OPENAI_MODEL;
   const hasPdf = files.some((file) => file.type === "application/pdf");
 
   if (!hasPdf || modelSupportsPdfInput(preferredModel)) {

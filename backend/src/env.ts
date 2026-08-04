@@ -55,8 +55,7 @@ const envSchema = z.object({
   OPENAI_EXTRACTION_MODEL: z
     .string()
     .optional()
-    .default("gpt-4o")
-    .transform((value) => value.trim() || "gpt-4o"),
+    .transform((value) => value?.trim() || undefined),
 
   // Billing
   STRIPE_SECRET_KEY: z.string().optional(),
