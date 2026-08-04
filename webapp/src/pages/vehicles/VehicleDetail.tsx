@@ -393,8 +393,8 @@ export default function VehicleDetail() {
       setContractNewEmail("");
       toast.success("Kunde angelegt");
     },
-    onError: () => {
-      toast.error("Fehler beim Anlegen des Kunden");
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Fehler beim Anlegen des Kunden");
     },
   });
 
@@ -919,7 +919,7 @@ export default function VehicleDetail() {
 
       {/* Kaufvertrag customer dialog */}
       <Dialog open={contractDialogOpen} onOpenChange={setContractDialogOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Kaufvertrag erstellen</DialogTitle>
             <DialogDescription>
@@ -1063,7 +1063,7 @@ export default function VehicleDetail() {
 
       {/* Gelangensbestätigung dialog */}
       <Dialog open={gbDialogOpen} onOpenChange={setGbDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Gelangensbestätigung erstellen</DialogTitle>
             <DialogDescription>
@@ -2190,8 +2190,8 @@ function SellDialog({
       setNewEmail("");
       toast.success("Kunde angelegt");
     },
-    onError: () => {
-      toast.error("Fehler beim Anlegen des Kunden");
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Fehler beim Anlegen des Kunden");
     },
   });
 
@@ -2238,7 +2238,7 @@ function SellDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Fahrzeug verkaufen</DialogTitle>
           <DialogDescription>

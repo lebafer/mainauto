@@ -103,8 +103,8 @@ export default function CustomerNew() {
       toast.success("Kunde erfolgreich angelegt");
       navigate(`/customers/${result.id}`);
     },
-    onError: () => {
-      toast.error("Fehler beim Anlegen des Kunden");
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Fehler beim Anlegen des Kunden");
     },
   });
 

@@ -4,6 +4,10 @@ import { MAX_MONEY_AMOUNT } from "./lib/money";
 const IsoDateSchema = z.iso.date();
 const IsoDateTimeSchema = z.iso.datetime({ offset: true });
 const OptionalIsoDateSchema = z.union([IsoDateSchema, IsoDateTimeSchema]);
+const EmptyStringToUndefinedOptionalIsoDateSchema = z.preprocess(
+  (value) => (value === "" ? undefined : value),
+  OptionalIsoDateSchema.optional()
+);
 const LimitedTextSchema = (max: number) => z.string().trim().max(max);
 const MoneyAmountSchema = z.number().finite().min(0).max(MAX_MONEY_AMOUNT);
 
@@ -478,8 +482,8 @@ export type VehicleBriefExtractResponse = z.infer<typeof VehicleBriefExtractResp
 // ─── Customer Schemas ────────────────────────────────────────
 
 export const CustomerCreateSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required").max(120),
-  lastName: z.string().trim().min(1, "Last name is required").max(120),
+  firstName: z.string().trim().max(120).optional().default(""),
+  lastName: z.string().trim().max(120).optional().default(""),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   phone2: z.string().optional(),
@@ -487,13 +491,50 @@ export const CustomerCreateSchema = z.object({
   city: z.string().optional(),
   zip: z.string().optional(),
   country: z.string().optional(),
-  company: z.string().optional(),
+  company: z.string().trim().optional(),
   taxId: z.string().optional(),
   idDocumentType: z.string().optional(),
   idDocumentNumber: z.string().optional(),
-  idDocumentValidUntil: OptionalIsoDateSchema.optional(),
+  idDocumentValidUntil: EmptyStringToUndefinedOptionalIsoDateSchema,
   notes: LimitedTextSchema(10_000).optional(),
   customerType: z.enum(["privat", "gewerblich"]).default("privat").optional(),
+}).superRefine((value, ctx) => {
+  if (value.customerType === "gewerblich") {
+    if (!value.company?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["company"],
+        message: "Firma ist erforderlich",
+      });
+    }
+    return;
+  }
+
+  if (!value.firstName.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["firstName"],
+      message: "Vorname ist erforderlich",
+    });
+  }
+  if (!value.lastName.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["lastName"],
+      message: "Nachname ist erforderlich",
+    });
+  }
+}).transform((value) => {
+  if (value.customerType === "gewerblich") {
+    return {
+      ...value,
+      firstName: value.firstName.trim(),
+      lastName: value.lastName.trim() || value.company?.trim() || "",
+      company: value.company?.trim(),
+    };
+  }
+
+  return value;
 });
 
 export const CustomerUpdateSchema = z.object({
@@ -510,7 +551,7 @@ export const CustomerUpdateSchema = z.object({
   taxId: z.string().optional(),
   idDocumentType: z.string().optional(),
   idDocumentNumber: z.string().optional(),
-  idDocumentValidUntil: OptionalIsoDateSchema.optional(),
+  idDocumentValidUntil: EmptyStringToUndefinedOptionalIsoDateSchema,
   notes: LimitedTextSchema(10_000).optional(),
   customerType: z.enum(["privat", "gewerblich"]).optional(),
 });
