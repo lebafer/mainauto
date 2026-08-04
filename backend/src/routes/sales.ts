@@ -6,6 +6,7 @@ import {
   SaleAccountingSnapshotResolveSchema,
   SaleAccountingSnapshotSchema,
   SaleCreateSchema,
+  SaleUpdateSchema,
 } from "../types";
 import {
   getCurrentDealerId,
@@ -179,6 +180,125 @@ salesRouter.post(
           409
         );
       }
+      if (error instanceof MoneyOverflowError) {
+        return c.json(
+          {
+            error: {
+              message: "Beträge oder Kostensumme überschreiten den unterstützten Bereich",
+              code: "MONEY_RANGE_EXCEEDED",
+            },
+          },
+          422
+        );
+      }
+      throw error;
+    }
+  }
+);
+
+
+// PUT /api/sales/:id - edit an existing sale
+salesRouter.put(
+  "/:id",
+  zValidator("json", SaleUpdateSchema),
+  async (c) => {
+    const dealerId = getCurrentDealerId(c);
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+
+    const existing = await prisma.sale.findFirst({
+      where: { id, dealerId },
+      include: { vehicle: { include: { costs: true } }, customer: true },
+    });
+    if (!existing) {
+      return c.json({ error: { message: "Verkauf nicht gefunden", code: "NOT_FOUND" } }, 404);
+    }
+    if (existing.status !== "completed") {
+      return c.json(
+        { error: { message: "Stornierte Verkäufe können nicht bearbeitet werden", code: "SALE_REVERSED" } },
+        409
+      );
+    }
+
+    if (data.customerId) {
+      const customer = await prisma.customer.findFirst({
+        where: { id: data.customerId, dealerId },
+        select: { id: true },
+      });
+      if (!customer) {
+        return c.json({ error: { message: "Kunde nicht gefunden", code: "CUSTOMER_NOT_FOUND" } }, 404);
+      }
+    }
+
+    try {
+      const shouldReprice =
+        data.salePrice !== undefined || data.taxRate !== undefined || data.priceMode !== undefined;
+      const amount = data.salePrice ?? existing.salePrice;
+      const taxRate = data.taxRate ?? existing.taxRate;
+      const priceMode = data.priceMode ?? existing.priceModeSnapshot ?? "gross";
+      const accounting = shouldReprice
+        ? buildSaleAccountingSnapshot(
+            amount,
+            taxRate,
+            existing.vehicle,
+            priceMode
+          )
+        : undefined;
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const sale = await tx.sale.update({
+          where: { id },
+          data: {
+            customerId: data.customerId ?? undefined,
+            salePrice: accounting ? fromCents(accounting.grossCents) : undefined,
+            taxRate: shouldReprice ? taxRate : undefined,
+            ...(accounting ?? {}),
+            saleDate: data.saleDate ? new Date(data.saleDate) : undefined,
+            notes: data.notes === null ? null : data.notes ?? undefined,
+          },
+          include: { vehicle: true, customer: true },
+        });
+
+        if (data.customerId && data.customerId !== existing.customerId) {
+          await tx.vehicle.update({
+            where: { id: existing.vehicleId },
+            data: { customerId: data.customerId },
+          });
+        }
+
+        await writeAuditLog(
+          c,
+          {
+            action: "sale.updated",
+            entityType: "Sale",
+            entityId: id,
+            metadata: {
+              before: {
+                customerId: existing.customerId,
+                salePrice: existing.salePrice,
+                taxRate: existing.taxRate,
+                priceMode: existing.priceModeSnapshot,
+                saleDate: existing.saleDate,
+                notes: existing.notes,
+              },
+              after: {
+                customerId: sale.customerId,
+                salePrice: sale.salePrice,
+                taxRate: sale.taxRate,
+                priceMode: sale.priceModeSnapshot,
+                saleDate: sale.saleDate,
+                notes: sale.notes,
+              },
+            },
+          },
+          tx
+        );
+
+        return sale;
+      });
+
+      return c.json({ data: withSaleAmounts(updated) });
+    } catch (error) {
       if (error instanceof MoneyOverflowError) {
         return c.json(
           {

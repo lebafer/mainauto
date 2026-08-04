@@ -578,7 +578,24 @@ export const SaleAccountingStatusSchema = z.enum([
   "legacy_ambiguous",
 ]);
 
+export const SaleUpdateSchema = z.object({
+  customerId: z.string().min(1, "Customer ID is required").optional(),
+  salePrice: MoneyAmountSchema.optional(),
+  priceMode: z.enum(["gross", "net"]).optional(),
+  taxRate: z.number().min(0).max(100).optional(),
+  saleDate: OptionalIsoDateSchema.optional(),
+  notes: LimitedTextSchema(10_000).optional().nullable(),
+}).superRefine((value, ctx) => {
+  if (Object.keys(value).length === 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Mindestens ein Verkaufsfeld muss geändert werden",
+    });
+  }
+});
+
 export type SaleCreate = z.infer<typeof SaleCreateSchema>;
+export type SaleUpdate = z.infer<typeof SaleUpdateSchema>;
 
 export const SaleAccountingSnapshotResolveSchema = z.object({
   historicTaxMode: z.enum(["regular", "margin"]),

@@ -78,6 +78,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -100,6 +101,7 @@ import {
 } from "@/components/ui/carousel";
 import { useAuth } from "@/lib/auth-client";
 import { DOCUMENT_CREATE_ACTIONS, type DocumentCreateActionId } from "@/lib/documentActions";
+import type { SaleUpdate } from "../../../../backend/src/types";
 
 // ─── Shared Customer type ────────────────────────────────────────
 
@@ -1727,7 +1729,7 @@ export default function VehicleDetail() {
         </TabsContent>
 
         <TabsContent value="sales" className="mt-4">
-          <SalesSection sales={vehicle.sales ?? []} />
+          <SalesSection sales={vehicle.sales ?? []} vehicleId={vehicle.id} queryClient={queryClient} />
         </TabsContent>
 
         <TabsContent value="worklog" className="mt-4">
@@ -1903,7 +1905,15 @@ function CustomerSection({
   );
 }
 
-function SalesSection({ sales }: { sales: Vehicle["sales"] }) {
+function SalesSection({
+  sales,
+  vehicleId,
+  queryClient,
+}: {
+  sales: Vehicle["sales"];
+  vehicleId: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
   if (!sales || sales.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -1918,7 +1928,7 @@ function SalesSection({ sales }: { sales: Vehicle["sales"] }) {
     <div className="space-y-3">
       {sales.map((sale) => (
         <Card key={sale.id}>
-          <CardContent className="flex items-center justify-between pt-6">
+          <CardContent className="flex items-center justify-between gap-3 pt-6">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">
@@ -1940,10 +1950,85 @@ function SalesSection({ sales }: { sales: Vehicle["sales"] }) {
                 </p>
               ) : null}
             </div>
+            {sale.status === "completed" ? (
+              <EditVehicleSaleDateDialog sale={sale} vehicleId={vehicleId} queryClient={queryClient} />
+            ) : null}
           </CardContent>
         </Card>
       ))}
     </div>
+  );
+}
+
+
+function EditVehicleSaleDateDialog({
+  sale,
+  vehicleId,
+  queryClient,
+}: {
+  sale: NonNullable<Vehicle["sales"]>[number];
+  vehicleId: string;
+  queryClient: ReturnType<typeof useQueryClient>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saleDate, setSaleDate] = useState(toLocalDateInputValue(new Date(sale.saleDate)));
+
+  useEffect(() => {
+    if (open) setSaleDate(toLocalDateInputValue(new Date(sale.saleDate)));
+  }, [open, sale.saleDate]);
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: SaleUpdate) => api.put(`/api/sales/${sale.id}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vehicle", vehicleId] });
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      toast.success("Verkaufsdatum aktualisiert");
+      setOpen(false);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Verkaufsdatum konnte nicht gespeichert werden");
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          <Pencil className="mr-2 h-4 w-4" />
+          Datum ändern
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Verkaufsdatum ändern</DialogTitle>
+          <DialogDescription>
+            Passe das Datum dieses Verkaufs an.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor={`vehicle-sale-date-${sale.id}`}>Verkaufsdatum</Label>
+          <Input
+            id={`vehicle-sale-date-${sale.id}`}
+            type="date"
+            value={saleDate}
+            onChange={(event) => setSaleDate(event.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Abbrechen
+          </Button>
+          <Button
+            type="button"
+            disabled={!saleDate || updateMutation.isPending}
+            onClick={() => updateMutation.mutate({ saleDate })}
+          >
+            {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Speichern
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

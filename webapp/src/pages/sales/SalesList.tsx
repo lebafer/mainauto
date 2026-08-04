@@ -11,6 +11,7 @@ import {
   RefreshCw,
   Download,
   Ban,
+  Pencil,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +72,7 @@ import type {
   Invoice,
   SaleAccountingSnapshotResolve,
   SaleCreate,
+  SaleUpdate,
 } from "../../../../backend/src/types";
 
 // Types
@@ -99,6 +101,8 @@ interface Sale {
   vehicleId: string;
   customerId: string;
   salePrice: number;
+  priceModeSnapshot?: "gross" | "net" | null;
+  marginTaxedSnapshot?: boolean | null;
   accountingStatus: "verified" | "legacy_snapshot" | "legacy_ambiguous";
   grossSalePrice: number | null;
   netSalePrice: number | null;
@@ -466,6 +470,241 @@ function CreateSaleDialog() {
               ) : (
                 "Verkauf anlegen"
               )}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+
+function EditSaleDialog({ sale }: { sale: Sale }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const initialMode = sale.priceModeSnapshot ?? "gross";
+  const [customerId, setCustomerId] = useState(sale.customerId);
+  const [priceMode, setPriceMode] = useState<"gross" | "net">(initialMode);
+  const [salePrice, setSalePrice] = useState(
+    (initialMode === "net" && sale.netSalePrice !== null
+      ? sale.netSalePrice
+      : (sale.grossSalePrice ?? sale.salePrice)
+    ).toFixed(2)
+  );
+  const [taxRate, setTaxRate] = useState(String(sale.taxRate));
+  const [saleDate, setSaleDate] = useState(toLocalDateInputValue(new Date(sale.saleDate)));
+  const [notes, setNotes] = useState(sale.notes ?? "");
+
+  useEffect(() => {
+    if (!open) return;
+    const nextMode = sale.priceModeSnapshot ?? "gross";
+    setCustomerId(sale.customerId);
+    setPriceMode(nextMode);
+    setSalePrice(
+      (nextMode === "net" && sale.netSalePrice !== null
+        ? sale.netSalePrice
+        : (sale.grossSalePrice ?? sale.salePrice)
+      ).toFixed(2)
+    );
+    setTaxRate(String(sale.taxRate));
+    setSaleDate(toLocalDateInputValue(new Date(sale.saleDate)));
+    setNotes(sale.notes ?? "");
+  }, [open, sale]);
+
+  const { data: customers } = useQuery({
+    queryKey: ["customers"],
+    queryFn: () => api.get<Customer[]>("/api/customers"),
+    enabled: open,
+  });
+
+  const selectedCustomer = customers?.find((customer) => customer.id === customerId);
+  const marginTaxed = sale.vehicle.marginTaxed;
+
+  const handleCustomerChange = (id: string) => {
+    setCustomerId(id);
+    const nextCustomer = customers?.find((customer) => customer.id === id);
+    const nextMode = getDefaultSalePriceMode(nextCustomer, marginTaxed);
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount)) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            parseTaxRateInput(taxRate, sale.taxRate),
+            marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
+  };
+
+  const handlePriceModeChange = (nextMode: "gross" | "net") => {
+    setPriceMode((currentMode) => {
+      if (currentMode === nextMode) return currentMode;
+      const currentAmount = Number(salePrice.replace(",", "."));
+      if (Number.isFinite(currentAmount)) {
+        setSalePrice(
+          convertSalePriceInput(
+            currentAmount,
+            currentMode,
+            nextMode,
+            parseTaxRateInput(taxRate, sale.taxRate),
+            marginTaxed
+          ).toFixed(2)
+        );
+      }
+      return nextMode;
+    });
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: (payload: SaleUpdate) => api.put<Sale>(`/api/sales/${sale.id}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales"] });
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+      queryClient.invalidateQueries({ queryKey: ["vehicle", sale.vehicleId] });
+      toast({ title: "Verkauf aktualisiert" });
+      setOpen(false);
+    },
+    onError: (error) => {
+      toast({
+        title: "Verkauf konnte nicht gespeichert werden",
+        description: error instanceof ApiError ? error.message : "Bitte prüfe die Eingaben und versuche es erneut.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    updateMutation.mutate({
+      customerId,
+      salePrice: parseFloat(salePrice),
+      priceMode,
+      taxRate: parseTaxRateInput(taxRate),
+      saleDate: saleDate || undefined,
+      notes: notes.trim() || null,
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="min-h-9" disabled={sale.status !== "completed"}>
+          <Pencil className="mr-2 h-4 w-4" />
+          Bearbeiten
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Verkauf bearbeiten</DialogTitle>
+          <DialogDescription>
+            Ändere Käufer, Verkaufspreis, Verkaufsdatum oder Notizen für {sale.vehicle.brand} {sale.vehicle.model}.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Käufer</Label>
+            <Select value={customerId} onValueChange={handleCustomerChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Kunden auswählen..." />
+              </SelectTrigger>
+              <SelectContent>
+                {customers?.map((customer) => (
+                  <SelectItem key={customer.id} value={customer.id}>
+                    {customer.firstName} {customer.lastName}
+                    {customer.company ? ` (${customer.company})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor={`edit-sale-price-${sale.id}`}>Verkaufspreis</Label>
+                <Select
+                  value={priceMode}
+                  onValueChange={(value) => handlePriceModeChange(value as "gross" | "net")}
+                  disabled={marginTaxed}
+                >
+                  <SelectTrigger className="h-8 w-28">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gross">Brutto</SelectItem>
+                    <SelectItem value="net">Netto</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Input
+                id={`edit-sale-price-${sale.id}`}
+                type="number"
+                step="0.01"
+                min="0"
+                value={salePrice}
+                onChange={(event) => setSalePrice(event.target.value)}
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {marginTaxed
+                  ? "Differenzbesteuerung: Endpreis, keine offene MwSt."
+                  : priceMode === "net"
+                    ? "Netto wird beim Speichern als Brutto-Verkauf verbucht."
+                    : "Brutto/Endpreis, den der Kunde bezahlt."}
+                {selectedCustomer?.customerType === "gewerblich" && !marginTaxed ? " Gewerbliche Kunden werden standardmäßig netto erfasst." : ""}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-sale-tax-${sale.id}`}>Steuersatz (%)</Label>
+              <Input
+                id={`edit-sale-tax-${sale.id}`}
+                type="number"
+                step="0.1"
+                min="0"
+                max="100"
+                value={taxRate}
+                onChange={(event) => setTaxRate(event.target.value)}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`edit-sale-date-${sale.id}`}>Verkaufsdatum</Label>
+            <Input
+              id={`edit-sale-date-${sale.id}`}
+              type="date"
+              value={saleDate}
+              onChange={(event) => setSaleDate(event.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor={`edit-sale-notes-${sale.id}`}>Notizen</Label>
+            <Textarea
+              id={`edit-sale-notes-${sale.id}`}
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              rows={3}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Abbrechen
+            </Button>
+            <Button type="submit" disabled={!customerId || !salePrice || !saleDate || updateMutation.isPending}>
+              {updateMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Speichern
             </Button>
           </DialogFooter>
         </form>
@@ -1124,10 +1363,13 @@ export default function SalesList() {
                         </TableCell> : null}
                         <TableCell>
                           {sale.status === "completed" ? (
-                            <ReverseSaleButton
-                              saleId={sale.id}
-                              vehicleLabel={`${sale.vehicle.brand} ${sale.vehicle.model} (${sale.vehicle.year ?? "Baujahr unbekannt"})`}
-                            />
+                            <div className="flex flex-wrap gap-2">
+                              <EditSaleDialog sale={sale} />
+                              <ReverseSaleButton
+                                saleId={sale.id}
+                                vehicleLabel={`${sale.vehicle.brand} ${sale.vehicle.model} (${sale.vehicle.year ?? "Baujahr unbekannt"})`}
+                              />
+                            </div>
                           ) : null}
                         </TableCell>
                       </TableRow>
@@ -1160,10 +1402,13 @@ export default function SalesList() {
                         </p>
                       </div>
                       {sale.status === "completed" ? (
-                        <ReverseSaleButton
-                          saleId={sale.id}
-                          vehicleLabel={`${sale.vehicle.brand} ${sale.vehicle.model} (${sale.vehicle.year ?? "Baujahr unbekannt"})`}
-                        />
+                        <div className="flex flex-col gap-2">
+                          <EditSaleDialog sale={sale} />
+                          <ReverseSaleButton
+                            saleId={sale.id}
+                            vehicleLabel={`${sale.vehicle.brand} ${sale.vehicle.model} (${sale.vehicle.year ?? "Baujahr unbekannt"})`}
+                          />
+                        </div>
                       ) : <Badge variant="secondary">Storniert</Badge>}
                     </div>
                     <div className="mt-3 flex items-end justify-between">
