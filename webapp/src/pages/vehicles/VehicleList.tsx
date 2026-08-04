@@ -13,6 +13,7 @@ import {
   calculateVehicleStockDays,
   STATUS_CONFIG,
   getFileUrl,
+  getDisplayImageUrl,
   toDateInputValue,
 } from "@/lib/vehicles";
 import { Input } from "@/components/ui/input";
@@ -160,7 +161,7 @@ export default function VehicleList() {
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/60">
                           {primaryImage ? (
                             <img
-                              src={getFileUrl(primaryImage.url)}
+                              src={getFileUrl(getDisplayImageUrl(primaryImage.url))}
                               alt={`${vehicle.brand} ${vehicle.model}`}
                               className="h-full w-full object-contain p-1"
                             />

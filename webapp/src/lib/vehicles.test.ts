@@ -7,6 +7,7 @@ import {
   convertSalePriceInput,
   formatDateOnly,
   getDefaultSalePriceMode,
+  getDisplayImageUrl,
   getResolvedSaleAmounts,
   getSaleAmountForMode,
   parseTaxRateInput,
@@ -97,6 +98,13 @@ describe("date-only vehicle fields", () => {
         "2026-07-11"
       )
     ).toBe(10);
+  });
+});
+
+describe("vehicle image display urls", () => {
+  test("requests compressed website variants while preserving the original upload url", () => {
+    expect(getDisplayImageUrl("/api/uploads/photo.jpg")).toBe("/api/uploads/photo.jpg?variant=web");
+    expect(getDisplayImageUrl("")).toBe("");
   });
 });
 

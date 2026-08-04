@@ -38,6 +38,7 @@ import {
   PRIVATE_VEHICLE_BADGE_CLASSNAME,
   STATUS_CONFIG,
   getFileUrl,
+  getDisplayImageUrl,
   getVehicleAdditionalCostsTotal,
   getVehicleCostBreakdown,
   getVehicleExportCostsTotal,
@@ -1818,7 +1819,7 @@ function HeroImages({
             >
               <div className="overflow-hidden rounded-xl border bg-muted/60">
                 <img
-                  src={getFileUrl(image.url)}
+                  src={getFileUrl(getDisplayImageUrl(image.url))}
                   alt={`${brand} ${model} Bild ${index + 1}`}
                   className="h-[220px] w-full object-contain bg-black/5 p-2 sm:h-[260px] lg:h-[300px]"
                 />

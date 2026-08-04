@@ -576,3 +576,8 @@ export function getFileUrl(path: string): string {
   if (path.startsWith("http")) return path;
   return `${base}${path}`;
 }
+
+export function getDisplayImageUrl(path: string): string {
+  if (!path) return "";
+  return `${path}${path.includes("?") ? "&" : "?"}variant=web`;
+}

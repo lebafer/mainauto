@@ -2,8 +2,7 @@ import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Upload, X, ImageIcon, Loader2, Star } from "lucide-react";
-import { type VehicleImage, getFileUrl } from "@/lib/vehicles";
-import { optimizeImageForVehicleUpload } from "@/lib/imageCompression";
+import { type VehicleImage, getDisplayImageUrl, getFileUrl } from "@/lib/vehicles";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,9 +37,8 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const baseUrl = import.meta.env.VITE_BACKEND_URL || "";
-      const optimizedFile = await optimizeImageForVehicleUpload(file).catch(() => file);
       const formData = new FormData();
-      formData.append("file", optimizedFile);
+      formData.append("file", file);
       const res = await fetch(`${baseUrl}/api/vehicles/${vehicleId}/images`, {
         method: "POST",
         body: formData,
@@ -152,7 +150,7 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
             <Upload className="mb-2 h-8 w-8 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
               Bilder hierher ziehen oder klicken zum Hochladen
-              (werden automatisch verkleinert)
+              (Originalqualität wird gespeichert)
             </p>
           </>
         )}
@@ -174,7 +172,7 @@ export function VehicleImagesTab({ vehicleId, images }: VehicleImagesTabProps) {
               className="group relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted"
             >
               <img
-                src={getFileUrl(image.url)}
+                src={getFileUrl(getDisplayImageUrl(image.url))}
                 alt="Fahrzeugbild"
                 className="h-full w-full object-contain p-2 transition-transform group-hover:scale-[1.02]"
               />
